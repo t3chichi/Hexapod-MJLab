@@ -1,0 +1,146 @@
+{
+  "task": "Lidarmjlab-Pillar-El4090-LidarHead",
+  "benchmark": "m5_throughput_bench (new stack, mjlab 1.6.0, mujoco-warp)",
+  "methodology": {
+    "warmup_steps": 10,
+    "measure_steps": 60,
+    "actions": "zero (env-only, no PPO update — same as old G5)",
+    "timing": "wall clock bracketed by torch.cuda.synchronize()",
+    "on": "M3b full LiDAR stack (86400-ray Airy tick @10 Hz + wrap_obs per policy step)",
+    "off": "M3a zero-placeholder (zero prox/distal blocks, no tick, no wrap; obs stays 2754-dim)",
+    "old_g5_mapping": "old bench compared low-res(1000-ray) vs full-Airy(86400-ray) tasks; new ON/OFF delta = whole LiDAR stack cost. tick_raw_ms/wrap_ms match the old tick_ms_mean/wrap_obs_ms_mean sub-metrics."
+  },
+  "num_envs_sweep": {
+    "16": {
+      "num_envs": 16,
+      "status": "ok",
+      "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "raw_rays": 86400,
+      "pool_points": 2880,
+      "env_build_s": 1.0,
+      "hit_rate": 0.787,
+      "ticks_during_on_measure": 15,
+      "on": {
+        "step_ms_mean": 41.729,
+        "policy_steps_per_s": 24.0,
+        "env_steps_per_s": 383.4
+      },
+      "off": {
+        "step_ms_mean": 30.31,
+        "policy_steps_per_s": 33.0,
+        "env_steps_per_s": 527.9
+      },
+      "lidar_stack": {
+        "delta_step_ms": 11.419,
+        "cost_share_of_on_step": 0.2736,
+        "tick_raw_ms": 6.777,
+        "tick_amortized_ms_per_policy_step": 1.355,
+        "wrap_obs_ms_mean": 9.518,
+        "step_time_ratio_on_over_off": 1.3767
+      },
+      "vram": {
+        "torch_peak_mb": 145.0,
+        "nvidia_smi_mb": 362.0
+      }
+    },
+    "128": {
+      "num_envs": 128,
+      "status": "ok",
+      "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "raw_rays": 86400,
+      "pool_points": 2880,
+      "env_build_s": 1.2,
+      "hit_rate": 0.7864,
+      "ticks_during_on_measure": 15,
+      "on": {
+        "step_ms_mean": 76.244,
+        "policy_steps_per_s": 13.1,
+        "env_steps_per_s": 1678.8
+      },
+      "off": {
+        "step_ms_mean": 50.336,
+        "policy_steps_per_s": 19.9,
+        "env_steps_per_s": 2542.9
+      },
+      "lidar_stack": {
+        "delta_step_ms": 25.908,
+        "cost_share_of_on_step": 0.3398,
+        "tick_raw_ms": 66.067,
+        "tick_amortized_ms_per_policy_step": 13.213,
+        "wrap_obs_ms_mean": 12.34,
+        "step_time_ratio_on_over_off": 1.5147
+      },
+      "vram": {
+        "torch_peak_mb": 1141.0,
+        "nvidia_smi_mb": 1426.0
+      }
+    },
+    "256": {
+      "num_envs": 256,
+      "status": "ok",
+      "device": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "raw_rays": 86400,
+      "pool_points": 2880,
+      "env_build_s": 1.4,
+      "hit_rate": 0.786,
+      "ticks_during_on_measure": 15,
+      "on": {
+        "step_ms_mean": 114.802,
+        "policy_steps_per_s": 8.7,
+        "env_steps_per_s": 2229.9
+      },
+      "off": {
+        "step_ms_mean": 66.738,
+        "policy_steps_per_s": 15.0,
+        "env_steps_per_s": 3835.9
+      },
+      "lidar_stack": {
+        "delta_step_ms": 48.065,
+        "cost_share_of_on_step": 0.4187,
+        "tick_raw_ms": 138.303,
+        "tick_amortized_ms_per_policy_step": 27.661,
+        "wrap_obs_ms_mean": 19.975,
+        "step_time_ratio_on_over_off": 1.7202
+      },
+      "vram": {
+        "torch_peak_mb": 2287.0,
+        "nvidia_smi_mb": 2592.0
+      }
+    },
+    "512": {
+      "num_envs": 512,
+      "status": "oom",
+      "error": "Failed to allocate 100663296 bytes on device 'cuda:0'"
+    },
+    "1024": {
+      "num_envs": 1024,
+      "status": "oom",
+      "error": "CUDA out of memory. Tried to allocate 1014.00 MiB. GPU 0 has a total capacity of 5.76 GiB of which 656.44 MiB is free. Including non-PyTorch memory, this process has 4.79 GiB memory in use. Of the allocated memory 3.44 GiB is allocated by PyTorch, and 936.44 MiB is reserved by PyTorch but unallocate"
+    }
+  },
+  "old_g5_reference": {
+    "old_tripod2_low": {
+      "task": "el4090_lidar_tripod2_low",
+      "num_envs": 16,
+      "raw_rays": 1000,
+      "pool_points": 1000,
+      "tick_ms_mean": 3.46,
+      "tick_ms_per_control_step": 3.46,
+      "wrap_obs_ms_mean": 9.76,
+      "step_ms_mean": 12.67
+    },
+    "new_lidar_head": {
+      "task": "el4090_lidar_head",
+      "num_envs": 16,
+      "raw_rays": 86400,
+      "pool_points": 2880,
+      "tick_ms_mean": 4.25,
+      "tick_ms_per_control_step": 0.85,
+      "wrap_obs_ms_mean": 9.79,
+      "step_ms_mean": 14.22
+    },
+    "step_time_ratio_new_over_old": 1.122,
+    "gate": "0.4° 全量档仅记录，供分辨率档位决策；正式训练吞吐目标在训练机复核",
+    "verdict": "PASS"
+  }
+}

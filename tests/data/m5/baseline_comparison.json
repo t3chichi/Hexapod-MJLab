@@ -1,0 +1,197 @@
+{
+  "generated": "2026-09-29 19:32:24",
+  "run_dirs": {
+    "new": "logs/m5/baseline_new/20260929_191030",
+    "old": "logs/m5/baseline_old/20260929_182659"
+  },
+  "meta": {
+    "new": {
+      "stack": "new",
+      "task": "Lidarmjlab-Pillar-El4090-LidarHead",
+      "num_envs": 32,
+      "iters": 200,
+      "seed": 1,
+      "num_steps_per_env": 24,
+      "started": "2026-09-29T19:10:30+08:00",
+      "gpu": "RTX 4050 6GB (laptop)",
+      "engine": "mujoco 3.x + mujoco-warp (mjlab 1.6.0)",
+      "cmd": "conda run --no-capture-output -n mjlab python -m mjlab.scripts.train Lidarmjlab-Pillar-El4090-LidarHead --env.scene.num-envs 32 --agent.max-iterations 200 --agent.seed 1 --agent.logger tensorboard --log-root /home/t3chichi/Lidar_mjlab/runs/m5_baseline_new/20260929_191030/mjlab_logs",
+      "wall_time_s": 1311
+    },
+    "old": {
+      "stack": "old",
+      "task": "el4090_lidar_head",
+      "num_envs": 32,
+      "iters": 200,
+      "seed": 1,
+      "num_steps_per_env": 24,
+      "started": "2026-09-29T18:26:59+08:00",
+      "gpu": "RTX 4050 6GB (laptop)",
+      "engine": "isaacgym 1.0rc4 (PhysX) + rsl_rl 2.3.3 (vendored)",
+      "cmd": "conda run -n li_leggym python launch_train.py (inlined below)",
+      "wall_time_s": 852
+    }
+  },
+  "matched_scalars": {
+    "mean_reward": {
+      "new": {
+        "iterations": 199,
+        "final": -260.193115,
+        "mean_last10pct": -260.61726,
+        "first": -4.306738
+      },
+      "old": {
+        "iterations": 199,
+        "final": -74.931519,
+        "mean_last10pct": -74.915407,
+        "first": -2.284853
+      }
+    },
+    "mean_episode_length": {
+      "new": {
+        "iterations": 199,
+        "final": 843.530029,
+        "mean_last10pct": 853.056326,
+        "first": 43.0
+      },
+      "old": {
+        "iterations": 199,
+        "final": 1002.0,
+        "mean_last10pct": 1002.0,
+        "first": 36.0
+      }
+    },
+    "loss_value_function": {
+      "new": {
+        "iterations": 200,
+        "final": 12.618593,
+        "mean_last10pct": 11.779428,
+        "first": 15.530199
+      },
+      "old": {
+        "iterations": 200,
+        "final": 426.77594,
+        "mean_last10pct": 788.423352,
+        "first": 0.322616
+      }
+    },
+    "loss_surrogate": {
+      "new": {
+        "iterations": 200,
+        "final": -0.009559,
+        "mean_last10pct": -0.008511,
+        "first": 0.015388
+      },
+      "old": {
+        "iterations": 200,
+        "final": -0.007806,
+        "mean_last10pct": -0.004012,
+        "first": 0.054632
+      }
+    },
+    "loss_learning_rate": {
+      "new": {
+        "iterations": 200,
+        "final": 1e-05,
+        "mean_last10pct": 2.7e-05,
+        "first": 1e-05
+      },
+      "old": {
+        "iterations": 200,
+        "final": 1e-05,
+        "mean_last10pct": 1.5e-05,
+        "first": 1e-05
+      }
+    },
+    "loss_symmetry": {
+      "new": {
+        "iterations": 200,
+        "final": 0.001075,
+        "mean_last10pct": 0.001646,
+        "first": 0.004963
+      },
+      "old": {
+        "iterations": 200,
+        "final": 0.001871,
+        "mean_last10pct": 0.002109,
+        "first": 0.017765
+      }
+    },
+    "loss_aux": {
+      "new": {
+        "iterations": 200,
+        "final": 0.14512,
+        "mean_last10pct": 0.299228,
+        "first": 0.250835
+      },
+      "old": {
+        "iterations": 200,
+        "final": 0.370723,
+        "mean_last10pct": 0.245031,
+        "first": 0.428443
+      }
+    },
+    "policy_noise_std": {
+      "new": {
+        "iterations": 200,
+        "final": 1.00898,
+        "mean_last10pct": 1.008818,
+        "first": 1.000834
+      },
+      "old": {
+        "iterations": 200,
+        "final": 1.03258,
+        "mean_last10pct": 1.030621,
+        "first": 1.000445
+      }
+    },
+    "perf_total_fps": {
+      "new": {
+        "iterations": 200,
+        "final": 116.0,
+        "mean_last10pct": 113.8,
+        "first": 96.0
+      },
+      "old": {
+        "iterations": 200,
+        "final": 140.0,
+        "mean_last10pct": 138.85,
+        "first": 167.0
+      }
+    },
+    "perf_collection_time": {
+      "new": {
+        "iterations": 200,
+        "final": 1.461153,
+        "mean_last10pct": 1.528526,
+        "first": 1.698434
+      },
+      "old": {
+        "iterations": 200,
+        "final": 1.041273,
+        "mean_last10pct": 1.054643,
+        "first": 0.918126
+      }
+    },
+    "perf_learning_time": {
+      "new": {
+        "iterations": 200,
+        "final": 5.104336,
+        "mean_last10pct": 5.20724,
+        "first": 6.22866
+      },
+      "old": {
+        "iterations": 200,
+        "final": 4.430134,
+        "mean_last10pct": 4.455327,
+        "first": 3.668884
+      }
+    }
+  },
+  "unmatched_scalars": [],
+  "env_steps": {
+    "new": 153600,
+    "old": 153600
+  },
+  "fair_comparison_note": "Fair only if both runs used the SAME num_envs, iterations and seed (see run_meta.json in each dir). Hardware: both launched on this laptop (RTX 4050 6 GB) unless stated otherwise in run_meta. Engine semantics still differ by design (MuJoCo vs PhysX contact/friction combination — see tests/data/m5/friction_semantics.md; new-stack effective foot friction [1.00, 1.25] vs old [0.65, 1.125]); reward scales and obs/action contracts are ported 1:1 (MIGRATION.md M3)."
+}

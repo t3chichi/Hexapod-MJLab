@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+*.egg-info/
+dist/
+build/
+wheels/
+
+# Run artifacts — single logs/ root (mjlab convention: logs/rsl_rl for
+# training output, logs/m5 for the m5 harness; tests/<group>/logs for
+# test-local acceptance artifacts, also matched by this pattern)
+logs/
+MUJOCO_LOG.TXT
+
+# Environments
+.env
+.venv
+/env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp

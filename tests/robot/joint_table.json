@@ -1,0 +1,928 @@
+{
+  "generated_by": "scripts/urdf_to_mjcf.py",
+  "urdf": "src/hexapod_mjlab/assets/robots/el_4090/urdf/el_4090.urdf",
+  "mjcf": "src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090.xml",
+  "stand_keyframe": {
+    "name": "stand",
+    "base_pos": [
+      0.0,
+      0.0,
+      0.48601
+    ],
+    "base_quat_wxyz": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "joint_angles": {
+      "RF_HAA": 0.0,
+      "RF_HFE": 0.0,
+      "RF_KFE": 0.0,
+      "RM_HAA": 0.0,
+      "RM_HFE": 0.0,
+      "RM_KFE": 0.0,
+      "RB_HAA": 0.0,
+      "RB_HFE": 0.0,
+      "RB_KFE": 0.0,
+      "LF_HAA": 0.0,
+      "LF_HFE": 0.0,
+      "LF_KFE": 0.0,
+      "LM_HAA": 0.0,
+      "LM_HFE": 0.0,
+      "LM_KFE": 0.0,
+      "LB_HAA": 0.0,
+      "LB_HFE": 0.0,
+      "LB_KFE": 0.0
+    },
+    "exact_touch_height": 0.48100608154079305,
+    "foot_clearance_m": 0.005
+  },
+  "old_config": {
+    "source_config": "legged_gym/legged_gym/envs/el_4090/spider_nomal/el4090_spider_config.py",
+    "stiffness": {
+      "HAA": 130.0,
+      "HFE": 130.0,
+      "KFE": 130.0
+    },
+    "damping": {
+      "HAA": 2.0,
+      "HFE": 2.0,
+      "KFE": 2.0
+    },
+    "action_scale": 0.25,
+    "decimation": 4,
+    "sim_dt": 0.005,
+    "gravity": [
+      0.0,
+      0.0,
+      -9.81
+    ],
+    "isaac_init_pos": [
+      0.0,
+      0.0,
+      0.45
+    ],
+    "torque_clip": 80.0,
+    "default_dof_pos": {
+      "RF_HAA": 0.0,
+      "RF_HFE": 0.0,
+      "RF_KFE": 0.0,
+      "RM_HAA": 0.0,
+      "RM_HFE": 0.0,
+      "RM_KFE": 0.0,
+      "RB_HAA": 0.0,
+      "RB_HFE": 0.0,
+      "RB_KFE": 0.0,
+      "LF_HAA": 0.0,
+      "LF_HFE": 0.0,
+      "LF_KFE": 0.0,
+      "LM_HAA": 0.0,
+      "LM_HFE": 0.0,
+      "LM_KFE": 0.0,
+      "LB_HAA": 0.0,
+      "LB_HFE": 0.0,
+      "LB_KFE": 0.0
+    }
+  },
+  "joint_order": [
+    "RF_HAA",
+    "RF_HFE",
+    "RF_KFE",
+    "RM_HAA",
+    "RM_HFE",
+    "RM_KFE",
+    "RB_HAA",
+    "RB_HFE",
+    "RB_KFE",
+    "LF_HAA",
+    "LF_HFE",
+    "LF_KFE",
+    "LM_HAA",
+    "LM_HFE",
+    "LM_KFE",
+    "LB_HAA",
+    "LB_HFE",
+    "LB_KFE"
+  ],
+  "joints": [
+    {
+      "index": 0,
+      "name": "RF_HAA",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "BASE",
+      "child_body": "RF_HIP",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        0.45,
+        -0.1,
+        -0.1105
+      ],
+      "origin_rpy_rad": [
+        3.1416,
+        0.0,
+        1.5708
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RF_HAA",
+      "match": true
+    },
+    {
+      "index": 1,
+      "name": "RF_HFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "RF_HIP",
+      "child_body": "RF_THIGH",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.09,
+        0.0795,
+        0.154
+      ],
+      "origin_rpy_rad": [
+        -1.5708,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RF_HFE",
+      "match": true
+    },
+    {
+      "index": 2,
+      "name": "RF_KFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "RF_THIGH",
+      "child_body": "RF_SHANK",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.1782,
+        0.090798,
+        -0.0685
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RF_KFE",
+      "match": true
+    },
+    {
+      "index": 3,
+      "name": "RM_HAA",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "BASE",
+      "child_body": "RM_HIP",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        0.0,
+        -0.2,
+        -0.1105
+      ],
+      "origin_rpy_rad": [
+        3.1416,
+        0.0,
+        1.5708
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RM_HAA",
+      "match": true
+    },
+    {
+      "index": 4,
+      "name": "RM_HFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "RM_HIP",
+      "child_body": "RM_THIGH",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.09,
+        0.0795,
+        0.154
+      ],
+      "origin_rpy_rad": [
+        -1.5708,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RM_HFE",
+      "match": true
+    },
+    {
+      "index": 5,
+      "name": "RM_KFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "RM_THIGH",
+      "child_body": "RM_SHANK",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.1782,
+        0.090798,
+        -0.0685
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RM_KFE",
+      "match": true
+    },
+    {
+      "index": 6,
+      "name": "RB_HAA",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "BASE",
+      "child_body": "RB_HIP",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.45,
+        -0.1,
+        -0.1108
+      ],
+      "origin_rpy_rad": [
+        3.1416,
+        0.0,
+        1.5708
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RB_HAA",
+      "match": true
+    },
+    {
+      "index": 7,
+      "name": "RB_HFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "RB_HIP",
+      "child_body": "RB_THIGH",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.09,
+        0.0945,
+        0.1537
+      ],
+      "origin_rpy_rad": [
+        -1.5708,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RB_HFE",
+      "match": true
+    },
+    {
+      "index": 8,
+      "name": "RB_KFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "RB_THIGH",
+      "child_body": "RB_SHANK",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.1782,
+        0.090798,
+        -0.0835
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "RB_KFE",
+      "match": true
+    },
+    {
+      "index": 9,
+      "name": "LF_HAA",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "BASE",
+      "child_body": "LF_HIP",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        0.45,
+        0.099997,
+        -0.1105
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        -1.5708
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LF_HAA",
+      "match": true
+    },
+    {
+      "index": 10,
+      "name": "LF_HFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "LF_HIP",
+      "child_body": "LF_THIGH",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.09,
+        0.0795,
+        -0.154
+      ],
+      "origin_rpy_rad": [
+        1.5708,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LF_HFE",
+      "match": true
+    },
+    {
+      "index": 11,
+      "name": "LF_KFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "LF_THIGH",
+      "child_body": "LF_SHANK",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.1782,
+        0.090798,
+        0.0685
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LF_KFE",
+      "match": true
+    },
+    {
+      "index": 12,
+      "name": "LM_HAA",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "BASE",
+      "child_body": "LM_HIP",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        0.0,
+        0.2,
+        -0.1105
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        -1.5708
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LM_HAA",
+      "match": true
+    },
+    {
+      "index": 13,
+      "name": "LM_HFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "LM_HIP",
+      "child_body": "LM_THIGH",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.09,
+        0.0795,
+        -0.154
+      ],
+      "origin_rpy_rad": [
+        1.5708,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LM_HFE",
+      "match": true
+    },
+    {
+      "index": 14,
+      "name": "LM_KFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "LM_THIGH",
+      "child_body": "LM_SHANK",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.1782,
+        0.090798,
+        0.0685
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LM_KFE",
+      "match": true
+    },
+    {
+      "index": 15,
+      "name": "LB_HAA",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "BASE",
+      "child_body": "LB_HIP",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.45,
+        0.099997,
+        -0.1105
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        -1.5708
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LB_HAA",
+      "match": true
+    },
+    {
+      "index": 16,
+      "name": "LB_HFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "LB_HIP",
+      "child_body": "LB_THIGH",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.09,
+        0.0945,
+        -0.154
+      ],
+      "origin_rpy_rad": [
+        1.5708,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LB_HFE",
+      "match": true
+    },
+    {
+      "index": 17,
+      "name": "LB_KFE",
+      "urdf_type": "revolute",
+      "mjcf_type": "hinge",
+      "parent_body": "LB_THIGH",
+      "child_body": "LB_SHANK",
+      "axis_xyz": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "origin_xyz": [
+        -0.1782,
+        0.090798,
+        0.0835
+      ],
+      "origin_rpy_rad": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "range_rad": [
+        -3.0,
+        3.0
+      ],
+      "effort_limit_Nm": 80.0,
+      "mjcf_ctrlrange_Nm": [
+        -80.0,
+        80.0
+      ],
+      "velocity_limit_rad_s": 15.8,
+      "mjcf_velocity_limit": null,
+      "motor_name": "LB_KFE",
+      "match": true
+    }
+  ],
+  "collision_audit": {
+    "urdf_geoms_per_link": {
+      "BASE": [
+        "BASE.STL"
+      ],
+      "RF_HIP": [
+        "RF_HIP.STL"
+      ],
+      "RF_THIGH": [
+        "RF_THIGH.STL"
+      ],
+      "RF_SHANK": [
+        "RF_SHANK.STL"
+      ],
+      "RF_FOOT": [
+        "RF_FOOT.STL"
+      ],
+      "RM_HIP": [
+        "RM_HIP.STL"
+      ],
+      "RM_THIGH": [
+        "RM_THIGH.STL"
+      ],
+      "RM_SHANK": [
+        "RM_SHANK.STL"
+      ],
+      "RM_FOOT": [
+        "RM_FOOT.STL"
+      ],
+      "RB_HIP": [
+        "RB_HIP.STL"
+      ],
+      "RB_THIGH": [
+        "RB_THIGH.STL"
+      ],
+      "RB_SHANK": [
+        "RB_SHANK.STL"
+      ],
+      "RB_FOOT": [
+        "RB_FOOT.STL"
+      ],
+      "LF_HIP": [
+        "LF_HIP.STL"
+      ],
+      "LF_THIGH": [
+        "LF_THIGH.STL"
+      ],
+      "LF_SHANK": [
+        "LF_SHANK.STL"
+      ],
+      "LF_FOOT": [
+        "LF_FOOT.STL"
+      ],
+      "LM_HIP": [
+        "LM_HIP.STL"
+      ],
+      "LM_THIGH": [
+        "LM_THIGH.STL"
+      ],
+      "LM_SHANK": [
+        "LM_SHANK.STL"
+      ],
+      "LM_FOOT": [
+        "LM_FOOT.STL"
+      ],
+      "LB_HIP": [
+        "LB_HIP.STL"
+      ],
+      "LB_THIGH": [
+        "LB_THIGH.STL"
+      ],
+      "LB_SHANK": [
+        "LB_SHANK.STL"
+      ],
+      "LB_FOOT": [
+        "LB_FOOT.STL"
+      ]
+    },
+    "mjcf_geoms_per_body": {
+      "world": [],
+      "BASE": [
+        "BASE"
+      ],
+      "RF_HIP": [
+        "RF_HIP"
+      ],
+      "RF_THIGH": [
+        "RF_THIGH"
+      ],
+      "RF_SHANK": [
+        "RF_SHANK"
+      ],
+      "RF_FOOT": [
+        "RF_FOOT"
+      ],
+      "RM_HIP": [
+        "RM_HIP"
+      ],
+      "RM_THIGH": [
+        "RM_THIGH"
+      ],
+      "RM_SHANK": [
+        "RM_SHANK"
+      ],
+      "RM_FOOT": [
+        "RM_FOOT"
+      ],
+      "RB_HIP": [
+        "RB_HIP"
+      ],
+      "RB_THIGH": [
+        "RB_THIGH"
+      ],
+      "RB_SHANK": [
+        "RB_SHANK"
+      ],
+      "RB_FOOT": [
+        "RB_FOOT"
+      ],
+      "LF_HIP": [
+        "LF_HIP"
+      ],
+      "LF_THIGH": [
+        "LF_THIGH"
+      ],
+      "LF_SHANK": [
+        "LF_SHANK"
+      ],
+      "LF_FOOT": [
+        "LF_FOOT"
+      ],
+      "LM_HIP": [
+        "LM_HIP"
+      ],
+      "LM_THIGH": [
+        "LM_THIGH"
+      ],
+      "LM_SHANK": [
+        "LM_SHANK"
+      ],
+      "LM_FOOT": [
+        "LM_FOOT"
+      ],
+      "LB_HIP": [
+        "LB_HIP"
+      ],
+      "LB_THIGH": [
+        "LB_THIGH"
+      ],
+      "LB_SHANK": [
+        "LB_SHANK"
+      ],
+      "LB_FOOT": [
+        "LB_FOOT"
+      ]
+    },
+    "fixed_bodies": {
+      "note": "fusestatic=False keeps all 25 URDF links as bodies (matches old Isaac collapse_fixed_joints=False and works around mujoco 3.11 to_xml() dropping fused-geom transforms)",
+      "BASE": "dynamic body (freejoint 'root')",
+      "FOOT bodies": "retained as joint-less fixed bodies, one FOOT mesh geom each (verified pose-exact across XML round-trip)"
+    },
+    "visual_only_meshes": {},
+    "all_geoms_are_collision_geoms": true,
+    "urdf_collision_mesh_count": 25,
+    "mjcf_mesh_geom_count": 25
+  },
+  "notes": [
+    "MJCF has no native per-joint velocity limit; URDF velocity limits are preserved here (consumed by the env/training stack, as in the old legged_gym setup).",
+    "URDF joint frame == MJCF child body frame at q=0 (MjSpec keeps joint pos=[0,0,0]); position/rotation are compared there."
+  ]
+}

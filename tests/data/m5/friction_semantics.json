@@ -1,0 +1,112 @@
+{
+  "probe": "friction_probe",
+  "engine_rules": {
+    "isaacgym_physx": "pairwise AVERAGE of the two shapes' friction (old repo config comment; terrain friction 1.0)",
+    "mujoco": "element-wise MAX of geom friction vectors at equal priority (verified: engine-combined data.contact.friction matches max within 0.0000; dynamics pull test within 0.0287); higher geom priority wins entirely"
+  },
+  "pairs": [
+    {
+      "robot_mu": 0.3,
+      "terrain_mu": 1.0,
+      "isaac_avg": 0.65,
+      "mujoco_max_rule": 1.0,
+      "mujoco_contact_friction": 1.0,
+      "pull_test_measured": 1.0033,
+      "combined_err_vs_max_rule": 0.0
+    },
+    {
+      "robot_mu": 0.4,
+      "terrain_mu": 1.0,
+      "isaac_avg": 0.7,
+      "mujoco_max_rule": 1.0,
+      "mujoco_contact_friction": 1.0,
+      "pull_test_measured": 1.0033,
+      "combined_err_vs_max_rule": 0.0
+    },
+    {
+      "robot_mu": 0.65,
+      "terrain_mu": 1.0,
+      "isaac_avg": 0.825,
+      "mujoco_max_rule": 1.0,
+      "mujoco_contact_friction": 1.0,
+      "pull_test_measured": 1.0033,
+      "combined_err_vs_max_rule": 0.0
+    },
+    {
+      "robot_mu": 1.0,
+      "terrain_mu": 1.0,
+      "isaac_avg": 1.0,
+      "mujoco_max_rule": 1.0,
+      "mujoco_contact_friction": 1.0,
+      "pull_test_measured": 1.0033,
+      "combined_err_vs_max_rule": 0.0
+    },
+    {
+      "robot_mu": 1.125,
+      "terrain_mu": 1.0,
+      "isaac_avg": 1.0625,
+      "mujoco_max_rule": 1.125,
+      "mujoco_contact_friction": 1.125,
+      "pull_test_measured": 1.1261,
+      "combined_err_vs_max_rule": 0.0
+    },
+    {
+      "robot_mu": 1.25,
+      "terrain_mu": 1.0,
+      "isaac_avg": 1.125,
+      "mujoco_max_rule": 1.25,
+      "mujoco_contact_friction": 1.25,
+      "pull_test_measured": 1.2213,
+      "combined_err_vs_max_rule": 0.0
+    },
+    {
+      "robot_mu": 0.4,
+      "terrain_mu": 0.8,
+      "isaac_avg": 0.6,
+      "mujoco_max_rule": 0.8,
+      "mujoco_contact_friction": 0.8,
+      "pull_test_measured": 0.8057,
+      "combined_err_vs_max_rule": 0.0
+    },
+    {
+      "robot_mu": 1.25,
+      "terrain_mu": 0.8,
+      "isaac_avg": 1.025,
+      "mujoco_max_rule": 1.25,
+      "mujoco_contact_friction": 1.25,
+      "pull_test_measured": 1.2213,
+      "combined_err_vs_max_rule": 0.0
+    },
+    {
+      "robot_mu": 0.6,
+      "terrain_mu": 1.2,
+      "isaac_avg": 0.9,
+      "mujoco_max_rule": 1.2,
+      "mujoco_contact_friction": 1.2,
+      "pull_test_measured": 1.1951,
+      "combined_err_vs_max_rule": 0.0
+    }
+  ],
+  "priority_probe": {
+    "robot_mu": 1.25,
+    "terrain_mu": 0.5,
+    "terrain_priority": 1,
+    "mujoco_contact_friction": 0.5,
+    "pull_test_measured": 0.5074,
+    "note": "higher-priority geom wins entirely (expect ~= terrain_mu 0.5)"
+  },
+  "task_summary": {
+    "old_isaac_avg_range": [
+      0.65,
+      1.125
+    ],
+    "new_mujoco_max_range": [
+      1.0,
+      1.25
+    ],
+    "calibration_options": [
+      "Accept max-mix: new stack trains/tests at higher effective friction [1.00, 1.25] vs old [0.650, 1.125]; note it in baseline comparison (feet grip more, less slip).",
+      "Reproduce old range: give the terrain geom priority=1 and randomize TERRAIN friction over the old effective range [0.650, 1.125] per env (priority makes MuJoCo use the terrain value alone; verified by the priority probe row). Robot DR can then be dropped or kept (max/priority ignores the lower-priority side)."
+    ]
+  }
+}

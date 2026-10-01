@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hexapod-mjlab"
+version = "0.1.0"
+description = "EL_4090 LiDAR locomotion perception modules on mjlab (MuJoCo Warp)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "torch>=2.7",
+    "warp-lang>=1.14",
+    "scipy",
+    "trimesh",
+    "mujoco",
+    "mujoco-warp",
+    "mjlab",
+    "rsl-rl-lib",
+]
+
+[project.entry-points."mjlab.tasks"]
+el_4090_lidar = "hexapod_mjlab.tasks"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"hexapod_mjlab.utils.lidar.sensor_pattern.sensor_lidar.scan_mode" = ["*.npy"]
+"hexapod_mjlab.assets" = ["**/*"]
