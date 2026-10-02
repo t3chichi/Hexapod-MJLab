@@ -13,6 +13,7 @@ def main():
     ap.add_argument("--num-steps",type=int,default=SLConfig().data.num_steps)
     ap.add_argument("--out-dir",type=Path,default=Path(SL_DATA_DIR))
     ap.add_argument("--device",default="cuda:0")
+    ap.add_argument("--oracle", choices=["legacy", "exact"], default="exact")
     ap.add_argument("--attitude",action="store_true")
     args=ap.parse_args()
     seeds=[int(s) for s in args.seeds.split(',')]
@@ -20,8 +21,11 @@ def main():
     if len(counts)==1:counts*=len(seeds)
     if len(counts)!=len(seeds):ap.error("pillar counts must match seeds")
     for seed,count in zip(seeds,counts):
+        path=args.out_dir/f'map_seed{seed}.pt'
+        if path.exists():
+            raise FileExistsError(f"Preserving existing data: {path}; choose a new output directory")
         data=collect_map(seed,args.num_envs,args.num_steps,pillar_count=None if count=='-' else int(count),
-                         device=args.device,attitude=args.attitude)
+                         device=args.device,attitude=args.attitude,oracle_kind=args.oracle)
         path=args.out_dir/f'map_seed{seed}.pt';save_map(data,str(path))
         print(f"COLLECT seed={seed} shape={tuple(data.obs.shape)} -> {path}",flush=True)
 

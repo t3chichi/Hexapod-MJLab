@@ -95,7 +95,8 @@ def main():
     heading=torch.zeros(50,6);pos=torch.zeros(50,6,2)
     a=build_windows(obs,target,done,heading,pos,12,2,3)
     b=ref['sl_dataset'].build_windows(obs,target,done,heading,pos,12,2,3)
-    for key in a:assert torch.equal(a[key],b[key]),key
+    for key in b:assert torch.equal(a[key],b[key]),key
+    assert a["valid"].all()
     cfg=SLConfig();cfg.train.seq_len=12;cfg.train.window_stride=3;cfg.train.epochs=1;cfg.data.warmup_steps=2
     data=MapData(1,obs,target,done,heading,pos,corridor,{})
     dataset=SLDataset(cfg,[data])

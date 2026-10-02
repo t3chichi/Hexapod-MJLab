@@ -19,6 +19,18 @@ def load_checkpoint(path, device="cpu"):
     return net, {k:v for k,v in raw.items() if k != "state_dict"}
 
 
+def checkpoint_teacher(meta):
+    """Missing teacher metadata always means the historical uncertified oracle."""
+    teacher = meta.get('teacher') or (meta.get('provenance') or {}).get('teacher') or {'kind': 'legacy'}
+    if teacher['kind'] == 'exact':
+        from ..teachers.batch import TEACHER_VERSION, TeacherConfig
+        if teacher.get('version') != TEACHER_VERSION or teacher.get('config') != asdict(TeacherConfig()):
+            raise ValueError("Checkpoint teacher version/configuration is not supported")
+    elif teacher['kind'] != 'legacy':
+        raise ValueError("Unknown checkpoint teacher")
+    return teacher
+
+
 def s_to_action(s, device=None):
     return s.new_tensor(ACTION_SIGN) * (s-.5) / env_action_scale()
 
@@ -83,6 +95,14 @@ class RolloutResult:
     legacy_area: float | None
     legacy_oracle_area_last_frame: float | None
     n_steps: int
+    geometric_valid_rate: float
+    supervision_valid_rate: float
+    emergency_rate: float
+    total_frames: int
+    supervision_frames: int
+    paired_area_frames: int
+    area_all_predictions: float | None
+    collision_metric: str = "legacy_distance_field_grid_proxy"
 
     def as_dict(self):
         return asdict(self)
@@ -97,9 +117,11 @@ def closed_loop_rollout(env, net, cfg:SLConfig, mode="stateful", num_steps=700,
     predictor=None if zero_action or constant_s is not None else Predictor(net,mode,cfg.train.seq_len)
     last_action=torch.zeros((env.num_envs,5),device=env.device)
     last_prediction=None
-    rewards=[];collisions=[];legacy_mse=[];same_mse=[];executed_mse=[];preds=[];oracles=[]
+    rewards=[];collisions=[];legacy_mse=[];same_mse=[];executed_mse=[];preds=[];oracles=[];paired_preds=[]
+    geometry_count = supervision_count = emergency_count = total_count = 0
     for t in range(num_steps):
         before_target=state.oracle_s.clone()
+        before_valid=getattr(state, "oracle_supervision_valid", torch.ones(env.num_envs, dtype=torch.bool, device=env.device)).clone()
         if zero_action:
             last_prediction=None
         elif constant_s is not None:
@@ -109,41 +131,59 @@ def closed_loop_rollout(env, net, cfg:SLConfig, mode="stateful", num_steps=700,
             last_prediction=predictor(obs)
             last_action=s_to_action(last_prediction)
         obs,reward,done,info=adapter.step(last_action)
-        frame=info["executed_frame"]
+        frame=dict(info["executed_frame"])
+        for name, default in [('supervision_valid', True), ('geometric_valid', False), ('emergency', False)]:
+            frame.setdefault(name, torch.full((env.num_envs,), default, dtype=torch.bool, device=env.device))
         if predictor is not None:
             predictor.reset(done)
         if t<warmup_steps:
             continue
         rewards.append(float(reward.mean()))
+        total_count += env.num_envs
+        geometry_count += int(frame['geometric_valid'].sum())
+        supervision_count += int(frame['supervision_valid'].sum())
+        emergency_count += int(frame['emergency'].sum())
         collisions.append(float((frame["collision_hard"]>0).float().mean()))
         if last_prediction is not None:
             # Original field compares obs_t prediction with returned post-step target.
-            legacy_mse.append(float(((last_prediction-state.oracle_s)**2).mean()))
-            same_mse.append(float(((last_prediction-before_target)**2).mean()))
-            executed_mse.append(float(((last_prediction-frame["target"])**2).mean()))
+            for values, target, valid in [
+                (legacy_mse, state.oracle_s, getattr(state, "oracle_supervision_valid", before_valid)),
+                (same_mse, before_target, before_valid),
+                (executed_mse, frame['target'], frame['supervision_valid']),
+            ]:
+                if bool(valid.any()):
+                    values.append((float((last_prediction[valid]-target[valid]).square().sum()), int(valid.sum()) * 5))
             preds.append(last_prediction.cpu().clone())
-            oracles.append(frame["target"].cpu().clone())
+            area_mask = frame["geometric_valid"] if getattr(state, "_teacher", None) is not None else frame["supervision_valid"]
+            oracles.append(frame["target"][area_mask].cpu().clone())
+            paired_preds.append(last_prediction[area_mask].cpu().clone())
     p=torch.stack(preds) if preds else None
-    o=torch.stack(oracles) if oracles else None
+    o=torch.cat(oracles) if oracles and any(len(v) for v in oracles) else None
+    paired_p=torch.cat(paired_preds) if o is not None else None
     mean=lambda values:float(np.mean(values)) if values else None
+    mse_mean=lambda values: sum(v[0] for v in values)/sum(v[1] for v in values) if values else None
     return RolloutResult(
-        step_reward=mean(rewards),pred_target_mse=mean(legacy_mse),same_frame_mse=mean(same_mse),
-        executed_frame_mse=mean(executed_mse),collision_rate=mean(collisions),
+        step_reward=mean(rewards),pred_target_mse=mse_mean(legacy_mse),same_frame_mse=mse_mean(same_mse),
+        executed_frame_mse=mse_mean(executed_mse),collision_rate=mean(collisions),
         temporal_std=float(p.std(0).mean()) if p is not None else None,
-        area=float(hex_area(p).mean()) if p is not None else None,
+        area=float(hex_area(paired_p).mean()) if paired_p is not None else None,
         oracle_area=float(hex_area(o).mean()) if o is not None else None,
         legacy_area=float(legacy_area(p).mean()) if p is not None else None,
         legacy_oracle_area_last_frame=float(legacy_area(state.oracle_s).mean()) if p is not None else None,
-        n_steps=len(rewards),
+        n_steps=len(rewards), geometric_valid_rate=geometry_count/total_count,
+        supervision_valid_rate=supervision_count/total_count, emergency_rate=emergency_count/total_count,
+        total_frames=total_count, supervision_frames=supervision_count,
+        paired_area_frames=len(o) if o is not None else 0,
+        area_all_predictions=float(hex_area(p).mean()) if p is not None else None,
     )
 
 
 def evaluate_closed_loop(cfg, net, seed=1, num_envs=64, num_steps=700, device="cuda:0",
-                         env=None, modes=("stateful","window"), oracle_mean=None):
+                         env=None, modes=("stateful","window"), oracle_mean=None, oracle_kind="exact"):
     from .dataset import build_env
     owned=env is None
     if owned:
-        env=build_env(seed,num_envs,sim_device=device)
+        env=build_env(seed,num_envs,sim_device=device,oracle_kind=oracle_kind)
     try:
         if oracle_mean is None:
             oracle_mean=estimate_oracle_mean(env,cfg,device=device)
@@ -163,7 +203,8 @@ def estimate_oracle_mean(env,cfg,num_steps=300,device="cuda:0"):
     adapter=SLAdapter(env);adapter.reset();targets=[]
     for t in range(num_steps):
         adapter.step(torch.zeros((env.num_envs,5),device=env.device))
-        if t>=cfg.data.warmup_steps:targets.append(env.ea2.oracle_s.mean(0).clone())
-    if not targets:
+        if t>=cfg.data.warmup_steps:
+            targets.append(env.ea2.oracle_s[env.ea2.oracle_supervision_valid].clone())
+    if not targets or not sum(len(t) for t in targets):
         raise ValueError("Oracle mean requires steps beyond warmup")
-    return torch.stack(targets).mean(0).to(device)
+    return torch.cat(targets).mean(0).to(device)

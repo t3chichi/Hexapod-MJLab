@@ -99,3 +99,13 @@ with `PYTHONPATH=src OMP_NUM_THREADS=1` in `hp_mjlab`, in this order:
 CPU only; existing SciPy, no new dependencies. Evidence goes to
 `logs/ea2/oracle_static/20261003/`. Correctness PASS is separate from efficacy;
 see [the experiment record](../docs/EA2静态oracle对照实验.md) for results and limits.
+
+The default EA2 teacher is now the whole-polygon causal provider. Historical
+source gates explicitly retain `oracle_kind="legacy"` where they inspect the
+old smoother. New release gates are `teacher_supervision_gate.py` (masks,
+NaN/gradient isolation, public API provenance, paired areas),
+`teacher_environment_gate.py` (real cached reads/partial reset/online parity),
+`teacher_frozen_parity.py --tag <new-tag>` (all selected frozen frames), and
+`teacher_release_pipeline.py` (frozen release corpus, two SL recipes, rollout,
+export and play). The release harness preserves existing evidence and assumes
+its named data has already been collected. New outputs must use a new run name.

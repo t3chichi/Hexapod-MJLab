@@ -30,6 +30,7 @@ def training_provenance(cfg, maps, files, dataset, seed):
             'window_indices': indices.tolist(),
         }
     return {
+        'teacher': dataset.teacher,
         'config': config,
         'seed': seed,
         'seeds': config['data']['seeds'],

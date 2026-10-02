@@ -85,16 +85,28 @@ class EnvelopeState:
             "observation": self.obs_buf.clone(), "target": self.oracle_s.clone(),
             "mapped": self.actions_mapped.clone(), "heading": self.heading.clone(),
             "pos": self.base_pos[:, :2].clone(), "collision_hard": self._collision_hard.clone(),
+            "geometric_valid": self.oracle_geometric_valid.clone(),
+            "supervision_valid": self.oracle_supervision_valid.clone(),
+            "emergency": self.oracle_emergency.clone(),
+            "rate_checked": self.oracle_rate_checked.clone(),
+            "rate_valid": self.oracle_rate_valid.clone(),
+            "teacher_status": self.oracle_status.copy(),
+            "teacher_reason": self.oracle_reason.copy(),
         }
         self.last_actions_raw.copy_(self.actions)
 
     def reset(self, env_ids):
+        if len(env_ids) == 0:
+            return
         self.reset_idx(env_ids)
-        if self._oracle_smoother is not None:
+        if self._teacher is not None:
+            self._update_teacher(env_ids)
+        elif self._oracle_smoother is not None:
             self.oracle_s[env_ids] = self._oracle_smoother.prev_s[env_ids]
         else:
             self.oracle_s[env_ids] = 1.
-        self.oracle_params[env_ids] = self._physical_max
+        if self._teacher is None:
+            self.oracle_params[env_ids] = self._physical_max
         self._compute_observations()
 
     def carrier_pose(self):
@@ -183,7 +195,7 @@ class EnvelopeState:
         self.episode_sums = {name: torch.zeros(n, dtype=torch.float32, device=device) for name in self.reward_scales.keys()}
         self.episode_metrics = {'collision_hard_max': torch.zeros(n, dtype=torch.float32, device=device), 'raw_action_abs_mean': torch.zeros(n, dtype=torch.float32, device=device), 'envelope_limits_active_ratio': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_unsafe_ratio': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_unsafe_before_ratio': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_potential': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_mse_front_width': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_mse_middle_width': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_mse_back_width': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_mse_forward_limit': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_mse_backward_limit': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_snap_ratio': torch.zeros(n, dtype=torch.float32, device=device), 'oracle_floor_pinned_ratio': torch.zeros(n, dtype=torch.float32, device=device)}
         from hexapod_mjlab.tasks.envelope_adaptive_2.target_smoother import RateLimitedOracle
-        if bool(getattr(self.cfg.envelope, 'target_rate_limit', True)):
+        if self.cfg.envelope.oracle_kind == "legacy" and bool(getattr(self.cfg.envelope, 'target_rate_limit', True)):
 
             def _target_safety_check(candidate):
                 viol = _hex_sample_violations(candidate, self.heading, self.base_pos[:, :2], self.distance_field, margin=float(self.cfg.envelope.margin), soft_margin=float(self.cfg.envelope.soft_margin))
@@ -191,6 +203,25 @@ class EnvelopeState:
             self._oracle_smoother = RateLimitedOracle(num_envs=n, dt=float(self.cfg.sim.dt), device=device, low=self._envelope_low_dev, high=self._envelope_high_dev, shrink_rate=float(self.cfg.envelope.target_shrink_rate), grow_rate=float(self.cfg.envelope.target_grow_rate), cooldown_seconds=float(self.cfg.envelope.target_cooldown_seconds), safety_check=_target_safety_check)
         else:
             self._oracle_smoother = None
+        from ..teachers.batch import BatchTeacher, teacher_identity
+        kind = self.cfg.envelope.oracle_kind
+        if kind not in {"legacy", "exact"}:
+            raise ValueError(f"Unknown oracle kind: {kind}")
+        if kind == "exact" and (self.cfg.envelope.soft_dof_pos_limit != .95
+                                or self.cfg.envelope.margin != .1):
+            raise ValueError("Validated exact teacher requires soft limit .95 and margin .10")
+        self._teacher = BatchTeacher(self.map_data.rects) if kind == "exact" else None
+        self.teacher_identity = teacher_identity() if self._teacher else {"kind": "legacy", "version": "migrated_v2", "safety_certified": False}
+        self.oracle_geometric_valid = torch.zeros(n, device=device, dtype=torch.bool)
+        self.oracle_supervision_valid = torch.ones(n, device=device, dtype=torch.bool)
+        self.oracle_emergency = torch.zeros(n, device=device, dtype=torch.bool)
+        self.oracle_rate_checked = torch.zeros(n, device=device, dtype=torch.bool)
+        self.oracle_rate_valid = torch.zeros(n, device=device, dtype=torch.bool)
+        self.oracle_status = ["legacy_uncertified"] * n
+        self.oracle_reason = [""] * n
+        self.teacher_elapsed_s = 0.
+        for name in ["teacher_geometry_valid_ratio", "teacher_supervision_valid_ratio", "teacher_emergency_ratio"]:
+            self.episode_metrics[name] = torch.zeros(n, device=device)
         from hexapod_mjlab.tasks.envelope_adaptive_2.oracle import _physical_min_max
         _min_v, _ = _physical_min_max(self._envelope_low_dev, self._envelope_high_dev)
         self._oracle_floor_pinned_env = _min_v
@@ -405,6 +436,8 @@ class EnvelopeState:
         self.last_actions_raw[env_id] = 0.0
         self.range_image_stale[env_id] = True
         self.range_image[env_id] = self.range_max
+        if self._teacher is not None:
+            self._teacher.reset([env_id])
         if self._oracle_smoother is not None:
             self._oracle_smoother.reset_ids([env_id])
         if getattr(self, '_attitude', None) is not None:
@@ -552,6 +585,20 @@ class EnvelopeState:
             self.attitude_pitch = pitch
             self.attitude_roll = roll
 
+    def _update_teacher(self, env_ids=None):
+        ids = list(range(self.num_envs)) if env_ids is None else env_ids.tolist()
+        index = torch.as_tensor(ids, device=self.device, dtype=torch.long)
+        result = self._teacher.evaluate(self.base_pos[index, :2], self.heading[index],
+                                        self.ego_motion[index], ids)
+        self.oracle_s[index] = result['s']
+        self.oracle_params[index] = result['params']
+        for name in ['geometric_valid', 'supervision_valid', 'emergency', 'rate_checked', 'rate_valid']:
+            getattr(self, 'oracle_' + name)[index] = result[name]
+        for i, env_id in enumerate(ids):
+            self.oracle_status[env_id] = result['status'][i]
+            self.oracle_reason[env_id] = result['reason'][i]
+        self.teacher_elapsed_s = result['elapsed_s']
+
     def _compute_rewards(self):
         self.rew_buf[:] = 0.0
         low = self._envelope_low_dev
@@ -560,13 +607,23 @@ class EnvelopeState:
         violation, self._collision_hard = hex_collision_terms(self.actions_mapped, self.heading, self.base_pos[:, :2], self.distance_field, margin=float(self.cfg.envelope.margin), soft_margin=float(self.cfg.envelope.soft_margin))
         act_rate = raw_action_rate_term(self.actions, self.last_actions_raw)
         limit_violation = envelope_limit_violation(self.actions_target, low, high, float(self.cfg.envelope.soft_dof_pos_limit))
-        oracle_params, oracle_hard_raw = compute_direct_oracle_params_with_stats(self.heading, self.base_pos[:, :2], self.distance_field, low, high, margin=float(self.cfg.envelope.oracle_margin), step=float(self.cfg.envelope.oracle_step), max_dist=float(self.cfg.envelope.oracle_max_dist), soft_dof_pos_limit=float(self.cfg.envelope.soft_dof_pos_limit), interp_crossing=bool(getattr(self.cfg.envelope, 'oracle_interp_crossing', True)), group_mode=str(getattr(self.cfg.envelope, 'oracle_group_mode', 'coupled')))
-        self._oracle_floor_pinned = _hex_sample_violations(self._oracle_floor_pinned_env, self.heading, self.base_pos[:, :2], self.distance_field, margin=float(self.cfg.envelope.margin), soft_margin=float(self.cfg.envelope.soft_margin)).max(dim=-1).values > 0.05
-        smoother = getattr(self, '_oracle_smoother', None)
-        if smoother is not None:
-            oracle_params = smoother.update(oracle_params)
-        oracle_mse = ((normalized_envelope_params(self.actions_mapped, low, high) - normalized_envelope_params(oracle_params, low, high)) ** 2).mean(dim=-1)
-        _, oracle_hard = hex_collision_terms(oracle_params, self.heading, self.base_pos[:, :2], self.distance_field, margin=float(self.cfg.envelope.margin), soft_margin=float(self.cfg.envelope.soft_margin))
+        if self._teacher is not None:
+            self._update_teacher()
+            oracle_params = self.oracle_params
+            oracle_hard_raw = (~self.oracle_geometric_valid).float()
+            oracle_hard = oracle_hard_raw
+            self._oracle_floor_pinned = torch.tensor([x == "minimum_infeasible" for x in self.oracle_status], device=self.device)
+            smoother = None
+            oracle_mse = ((normalized_envelope_params(self.actions_mapped, low, high) - self.oracle_s) ** 2).mean(-1)
+            oracle_mse = torch.where(self.oracle_supervision_valid, oracle_mse, 0.)
+        else:
+            oracle_params, oracle_hard_raw = compute_direct_oracle_params_with_stats(self.heading, self.base_pos[:, :2], self.distance_field, low, high, margin=float(self.cfg.envelope.oracle_margin), step=float(self.cfg.envelope.oracle_step), max_dist=float(self.cfg.envelope.oracle_max_dist), soft_dof_pos_limit=float(self.cfg.envelope.soft_dof_pos_limit), interp_crossing=bool(getattr(self.cfg.envelope, 'oracle_interp_crossing', True)), group_mode=str(getattr(self.cfg.envelope, 'oracle_group_mode', 'coupled')))
+            self._oracle_floor_pinned = _hex_sample_violations(self._oracle_floor_pinned_env, self.heading, self.base_pos[:, :2], self.distance_field, margin=float(self.cfg.envelope.margin), soft_margin=float(self.cfg.envelope.soft_margin)).max(dim=-1).values > 0.05
+            smoother = getattr(self, '_oracle_smoother', None)
+            if smoother is not None:
+                oracle_params = smoother.update(oracle_params)
+            oracle_mse = ((normalized_envelope_params(self.actions_mapped, low, high) - normalized_envelope_params(oracle_params, low, high)) ** 2).mean(dim=-1)
+            _, oracle_hard = hex_collision_terms(oracle_params, self.heading, self.base_pos[:, :2], self.distance_field, margin=float(self.cfg.envelope.margin), soft_margin=float(self.cfg.envelope.soft_margin))
         terms = {'potential': potential, 'collision': violation, 'action_rate': act_rate, 'envelope_limits': limit_violation, 'oracle_mse': oracle_mse}
         for name, scale in self.reward_scales.items():
             rew = terms[name] * scale
@@ -579,13 +636,18 @@ class EnvelopeState:
         self.episode_metrics['oracle_unsafe_ratio'] += (oracle_hard > 0).to(torch.float32)
         self.episode_metrics['oracle_potential'] += potential_reward(oracle_params, low, high)
         oracle_sq = (normalized_envelope_params(self.actions_mapped, low, high) - normalized_envelope_params(oracle_params, low, high)) ** 2
+        oracle_sq = torch.where(self.oracle_supervision_valid[:, None], oracle_sq, 0.)
         for j, metric_name in enumerate(('oracle_mse_front_width', 'oracle_mse_middle_width', 'oracle_mse_back_width', 'oracle_mse_forward_limit', 'oracle_mse_backward_limit')):
             self.episode_metrics[metric_name] += oracle_sq[:, j]
         if smoother is not None:
             self.episode_metrics['oracle_snap_ratio'] += smoother.snapped.to(torch.float32)
         self.episode_metrics['oracle_floor_pinned_ratio'] += self._oracle_floor_pinned.to(torch.float32)
-        self.oracle_params.copy_(oracle_params)
-        self.oracle_s.copy_(normalized_envelope_params(oracle_params, low, high))
+        self.episode_metrics['teacher_geometry_valid_ratio'] += self.oracle_geometric_valid.float()
+        self.episode_metrics['teacher_supervision_valid_ratio'] += self.oracle_supervision_valid.float()
+        self.episode_metrics['teacher_emergency_ratio'] += self.oracle_emergency.float()
+        if self._teacher is None:
+            self.oracle_params.copy_(oracle_params)
+            self.oracle_s.copy_(normalized_envelope_params(oracle_params, low, high))
 
 
     def _compute_observations(self):

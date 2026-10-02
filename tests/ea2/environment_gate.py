@@ -14,7 +14,7 @@ from hexapod_mjlab.tasks.envelope_adaptive_2.quaternion import quat_from_euler_x
 
 def main():
     torch.set_num_threads(1)
-    cfg=EA2Cfg();cfg.env.num_envs=2;cfg.lidar.enable_sensor_noise=False
+    cfg=EA2Cfg();cfg.envelope.oracle_kind="legacy";cfg.env.num_envs=2;cfg.lidar.enable_sensor_noise=False
     env=make_env(cfg);adapter=SLAdapter(env)
     try:
         obs=adapter.reset();s=env.ea2

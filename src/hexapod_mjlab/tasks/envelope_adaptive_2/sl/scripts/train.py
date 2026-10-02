@@ -36,6 +36,8 @@ def main():
     files=[args.data_dir/f'map_seed{s}.pt' for s in seeds]
     maps=[load_map(str(p)) for p in files];dataset=SLDataset(cfg,maps)
     out=args.out_dir or Path(run_dir(args.run_name));out.mkdir(parents=True,exist_ok=True)
+    if (out/"model.pt").exists():
+        raise FileExistsError(f"Preserving existing checkpoint: {out}; choose a new run")
     provenance=training_provenance(cfg,maps,files,dataset,args.seed)
     (out/'sl_config.json').write_text(json.dumps(provenance,indent=2)+'\n')
     print(f'TRAIN windows={len(dataset)} train={len(dataset.train_idx)} val={len(dataset.val_idx)}',flush=True)

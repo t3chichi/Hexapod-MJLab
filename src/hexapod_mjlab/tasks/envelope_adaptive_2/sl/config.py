@@ -12,12 +12,11 @@ class SLDataConfig:
     #: seed yields a different obstacle layout.  ``1`` is the production value
     #: (``task_registry`` copies ``train_cfg.seed`` into ``env_cfg.seed``).
     #:
-    #: Include at least one dense map -- dense scenes are the measured weak spot
-    #: (R2 0.72 vs 0.83, collision 25% vs 18%).
+    #: Original map recipe; historical team measurements are not mjlab results.
     seeds: List[int] = field(default_factory=lambda: [1, 7, 13, 21])
 
     #: Obstacle-count overrides, positionally paired with ``seeds``.  ``None``
-    #: keeps the config default (18).  Use :meth:`seed_specs` to iterate the two
+    #: keeps the config default (24).  Use :meth:`seed_specs` to iterate the two
     #: lists together safely.
     pillar_counts: List[Optional[int]] = field(
         default_factory=lambda: [None, None, None, 28]

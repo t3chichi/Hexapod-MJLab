@@ -47,8 +47,13 @@ def draw_state(state,visualizer):
     for index in indices:
         draw_polyline(visualizer,hex_world(state.actions_mapped,state,index),closed=True,
                       color=(*state.cfg.envelope.debug_color,1.),radius=state.cfg.envelope.debug_line_radius)
+        certified = bool(state.oracle_geometric_valid[index])
+        emergency = bool(state.oracle_emergency[index])
+        reference_color = (1., .75, 0., 1.) if certified else (.55, .55, .55, 1.)
+        if emergency:
+            reference_color = (1., .25, 0., 1.)
         draw_polyline(visualizer,hex_world(state.oracle_params,state,index),closed=True,
-                      color=(1.,.75,0.,1.),radius=.008)
+                      color=reference_color,radius=.008)
         start=state.base_pos[index].cpu().numpy()
         end=start+np.array([math.cos(float(state.heading[index])),math.sin(float(state.heading[index])),0.])
         visualizer.add_arrow(start,end,color=(.2,.5,1.,1.),width=.02)

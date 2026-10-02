@@ -15,7 +15,7 @@ from .dataset import SLDataset
 from .model import EnvelopeNet
 from .config import PARAM_NAMES, SLConfig
 
-from .losses import aux_memory_loss, aux_head_weights, s_to_params, batch_safety_loss, frame_map_ids
+from .losses import masked_mse, aux_pair_mask, aux_memory_loss, aux_head_weights, s_to_params, batch_safety_loss, frame_map_ids
 
 
 @dataclass
@@ -53,26 +53,37 @@ def _predict(
 
 
 
-def compute_metrics(pred: torch.Tensor, target: torch.Tensor) -> Dict:
+def compute_metrics(pred: torch.Tensor, target: torch.Tensor, valid=None) -> Dict:
     """Offline metrics for normalised-envelope predictions."""
-    err = (pred - target) ** 2
-    mse_per_dim = err.mean(dim=(0, 1))
-    var_per_dim = target.var(dim=(0, 1))
+    mask = torch.ones(target.shape[:-1], dtype=torch.bool) if valid is None else valid.cpu()
+    p, t = pred[mask], target[mask]
+    if len(t) < 2:
+        raise ValueError("Metrics require at least two valid frames")
+    err = (p - t) ** 2
+    mse_per_dim = err.mean(0)
+    var_per_dim = t.var(0)
     r2_per_dim = 1.0 - mse_per_dim / var_per_dim.clamp_min(1e-8)
-
     mse = float(err.mean())
     var = float(var_per_dim.mean())
     r2 = 1.0 - mse / max(var, 1e-8)
+    def temporal_std(values):
+        # Missing labels do not compress time or link windows/episodes.
+        count = mask.sum(1)
+        clean = torch.where(mask[..., None], values, 0.)
+        mu = clean.sum(1) / count.clamp_min(1)[:, None]
+        delta = torch.where(mask[..., None], values - mu[:, None], 0.)
+        variance = delta.square().sum(1) / (count - 1).clamp_min(1)[:, None]
+        return float(variance[count > 1].sqrt().mean()) if bool((count > 1).any()) else None
 
     # --- PCA decomposition of the target, then R2 along each component ---
-    flat_t = target.reshape(-1, 5).numpy()
+    flat_t = t.numpy()
     mu = flat_t.mean(0)
     centred = flat_t - mu
     _, s, vt = np.linalg.svd(np.cov(centred.T), hermitian=True)
     # Covariance singular values are already variances, not data singular values.
     ev = s / max(float(s.sum()), 1e-20)
     legacy_ev = (s**2) / max(float((s**2).sum()), 1e-20)
-    flat_p = pred.reshape(-1, 5).numpy()
+    flat_p = p.numpy()
 
     pc_var, pc_r2 = [], []
     for j in range(5):
@@ -98,14 +109,16 @@ def compute_metrics(pred: torch.Tensor, target: torch.Tensor) -> Dict:
         "target_var": var,
         "mse_per_dim": {n: float(x) for n, x in zip(PARAM_NAMES, mse_per_dim)},
         "r2_per_dim": {n: float(x) for n, x in zip(PARAM_NAMES, r2_per_dim)},
-        "target_std_per_dim": {n: float(x) for n, x in zip(PARAM_NAMES, target.std(dim=(0, 1)))},
+        "target_std_per_dim": {n: float(x) for n, x in zip(PARAM_NAMES, t.std(0))},
         "pc_var": pc_var,
         "legacy_pc_var": [float(x) for x in legacy_ev],
         "pc_r2": pc_r2,
         "subspace_r2": sub_r2,
         # dynamic-ness: std over time, compared against oracle's own
-        "temporal_std": float(pred.std(dim=1).mean()),
-        "temporal_std_oracle": float(target.std(dim=1).mean()),
+        "valid_frames": int(mask.sum()),
+        "total_frames": int(mask.numel()),
+        "temporal_std": temporal_std(pred),
+        "temporal_std_oracle": temporal_std(target),
     }
 
 
@@ -157,6 +170,8 @@ def train(
         net.train()
         perm = torch.randperm(len(tr))
         running = 0.0
+        main_frames = 0
+        aux_counts = {}
         aux_running = {}      # per-k raw aux loss sums (pre-weight)
         running_safe, safe_frames = 0.0, 0
         aux_beta = float(getattr(cfg.train, "aux_beta", 0.5))
@@ -168,33 +183,42 @@ def train(
             b = tr[perm[i : i + bs]]
             x = dataset.batch(b).transpose(0, 1).to(dev)
             y = tgt[b].transpose(0, 1).to(dev)
+            valid = dataset.valid[b].transpose(0, 1).to(dev)
+            count = int(valid.sum())
+            if not count:
+                continue
             use_aux = net.aux_heads and aux_beta > 0
             if use_aux or safe_lambda > 0:
                 main_out, h_seq = net.forward_with_aux(x)
             else:
                 main_out = net(x)
-            main_mse = torch.nn.functional.mse_loss(main_out, y)
+            main_mse = masked_mse(main_out, y, valid)
             loss = main_mse
-            running += float(main_mse.detach()) * len(b)
+            running += float(main_mse.detach()) * count
+            main_frames += count
             if use_aux:
                 for k_str, head in net.aux_heads.items():
-                    aux_l = aux_memory_loss(head(h_seq), y, int(k_str), cfg.model.aux_mode)
+                    aux_l = aux_memory_loss(head(h_seq), y, int(k_str), cfg.model.aux_mode, valid)
                     loss = loss + aux_beta * aux_w[int(k_str)] * aux_l
-                    aux_running[int(k_str)] = aux_running.get(int(k_str), 0.0) + float(aux_l.detach()) * len(b)
+                    aux_count = int(aux_pair_mask(valid, int(k_str)).sum())
+                    aux_running[int(k_str)] = aux_running.get(int(k_str), 0.0) + float(aux_l.detach()) * aux_count
+                    aux_counts[int(k_str)] = aux_counts.get(int(k_str), 0) + aux_count
             if safe_lambda > 0:
                 # flatten the (L, B, ...) window batch into frames: the loss
                 # contract is a flat (N, 5) frame batch with per-frame fields
                 L_frames = main_out.shape[0]
-                safe_l, trig = batch_safety_loss(
+                safe_l, trig, n_safe = batch_safety_loss(
                     main_out.reshape(-1, 5),
                     dataset.heading[b].transpose(0, 1).reshape(-1).to(dev),
                     dataset.pos[b].transpose(0, 1).reshape(-1, 2).to(dev),
                     frame_map_ids(dataset.map_id[b], L_frames).to(dev),
                     dfs,
+                    valid=valid.reshape(-1) if dataset.teacher["kind"] == "exact" else None,
+                    return_count=True,
                 )
                 loss = loss + safe_lambda * safe_l
-                running_safe += float(safe_l.detach()) * len(b)
-                safe_frames += len(b)
+                running_safe += float(safe_l.detach()) * n_safe
+                safe_frames += n_safe
             opt.zero_grad()
             if not torch.isfinite(loss):
                 raise FloatingPointError("Nonfinite supervised loss")
@@ -202,9 +226,11 @@ def train(
             nn.utils.clip_grad_norm_(net.parameters(), cfg.train.grad_clip)
             opt.step()
 
-        train_mse = running / len(tr)
+        if not main_frames:
+            raise ValueError("Training split has no valid supervision")
+        train_mse = running / main_frames
         aux_mse_epoch = (
-            {k: v / len(tr) for k, v in aux_running.items()} if use_aux else None
+            {k: v / max(1, aux_counts[k]) for k, v in aux_running.items()} if use_aux else None
         )
         aux_str = (
             "[" + " ".join(f"k{k}:{v:.4f}" for k, v in sorted(aux_mse_epoch.items())) + "]"
@@ -217,7 +243,7 @@ def train(
 
         if do_val:
             val_pred = _predict(net, dataset, va, dev)
-            val_metrics = compute_metrics(val_pred, tgt[va])
+            val_metrics = compute_metrics(val_pred, tgt[va], dataset.valid[va])
             hist.train_mse.append(train_mse)
             hist.val_mse.append(val_metrics["mse"])
             hist.val_r2.append(val_metrics["r2"])
@@ -262,8 +288,8 @@ def train(
         net.load_state_dict(best_state)
     net.eval()
 
-    final_val = compute_metrics(_predict(net, dataset, va, dev), tgt[va])
-    final_train = compute_metrics(_predict(net, dataset, tr, dev), tgt[tr])
+    final_val = compute_metrics(_predict(net, dataset, va, dev), tgt[va], dataset.valid[va])
+    final_train = compute_metrics(_predict(net, dataset, tr, dev), tgt[tr], dataset.valid[tr])
 
     # per-k aux loss on the val split: how well h decodes the (recalled or
     # future) envelope -- the direct memory-utilisation readout
@@ -272,13 +298,16 @@ def train(
         aux_val_mse = {}
         with torch.no_grad():
             for k_str, head in net.aux_heads.items():
-                errs = []
+                error_sum, aux_count = 0., 0
                 for i in range(0, len(va), 128):
                     x = dataset.batch(va[i : i + 128]).transpose(0, 1).to(dev)
                     y = tgt[va[i : i + 128]].transpose(0, 1).to(dev)
+                    valid = dataset.valid[va[i : i + 128]].transpose(0, 1).to(dev)
                     _, h_seq = net.forward_with_aux(x)
-                    errs.append(float(aux_memory_loss(head(h_seq), y, int(k_str), cfg.model.aux_mode)))
-                aux_val_mse[f"k{int(k_str)}"] = float(np.mean(errs))
+                    count = int(aux_pair_mask(valid, int(k_str)).sum())
+                    error_sum += float(aux_memory_loss(head(h_seq), y, int(k_str), cfg.model.aux_mode, valid)) * count
+                    aux_count += count
+                aux_val_mse[f"k{int(k_str)}"] = error_sum / aux_count if aux_count else None
 
     # val-set safety metrics: trigger rate (frames whose prediction violates)
     # and mean violation -- the collapse guard for the safety loss
@@ -291,20 +320,22 @@ def train(
                 x = dataset.batch(idx).transpose(0, 1).to(dev)
                 main_out = net(x)
                 L_frames = main_out.shape[0]
-                l, t = batch_safety_loss(
+                l, t, b_n = batch_safety_loss(
                     main_out.reshape(-1, 5),
                     dataset.heading[idx].transpose(0, 1).reshape(-1).to(dev),
                     dataset.pos[idx].transpose(0, 1).reshape(-1, 2).to(dev),
                     frame_map_ids(dataset.map_id[idx], L_frames).to(dev),
                     dfs,
+                    valid=dataset.valid[idx].transpose(0, 1).reshape(-1).to(dev) if dataset.teacher["kind"] == "exact" else None,
+                    return_count=True,
                 )
-                b_n = len(idx)
                 viol += float(l) * b_n
                 trig += float(t) * b_n
                 n += b_n
-        safe_val = {"trigger_rate": trig / n, "mean_violation": viol / n}
+        safe_val = {"trigger_rate": trig / n if n else None, "mean_violation": viol / n if n else None, "valid_frames": n}
 
     return {
+        "teacher": dataset.teacher,
         "net": net,
         "history": hist,
         "best_epoch": best_epoch,
@@ -328,7 +359,8 @@ def save_checkpoint(result: Dict, cfg: SLConfig, path: str, provenance=None) -> 
             "state_dict": result["net"].state_dict(),
             "config": provenance['config'] if provenance is not None else cfg.to_dict(),
             "provenance": provenance,
-            "data_version": 2,
+            "data_version": 3,
+            "teacher": provenance.get("teacher", result["teacher"]) if provenance else result["teacher"],
             "cfg_model": cfg.model.__dict__,
             "best_epoch": result["best_epoch"],
             "best_val_r2": result["best_val_r2"],

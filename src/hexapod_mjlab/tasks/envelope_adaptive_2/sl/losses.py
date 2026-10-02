@@ -8,8 +8,23 @@ _SAFE_MARGIN = EnvelopeCfg().margin
 _SAFE_SOFT = EnvelopeCfg().soft_margin
 _FLOOR_PINNED_VIOLATION = .05
 
+def masked_mse(pred, target, valid=None):
+    """Select before arithmetic: invalid NaNs/extreme values cannot enter gradients."""
+    if valid is None:
+        return torch.nn.functional.mse_loss(pred, target)
+    if valid.shape != target.shape[:-1]:
+        raise ValueError("Validity mask must match frame axes")
+    if not bool(valid.any()):
+        return pred.reshape(-1)[:0].sum()
+    return torch.nn.functional.mse_loss(pred[valid], target[valid])
+
+
+def aux_pair_mask(valid, k):
+    return valid[k:] & valid[:-k]
+
+
 def aux_memory_loss(
-    pred: torch.Tensor, y: torch.Tensor, k: int, mode: str
+    pred: torch.Tensor, y: torch.Tensor, k: int, mode: str, valid=None
 ) -> torch.Tensor:
     """Auxiliary memory loss for one probe horizon ``k``.
 
@@ -29,10 +44,11 @@ def aux_memory_loss(
     L = y.shape[0]
     if not 0 < k < L:
         raise ValueError(f"aux horizon k={k} must be in (0, {L})")
+    mask = None if valid is None else aux_pair_mask(valid, k)
     if mode == "recall":
-        return torch.nn.functional.mse_loss(pred[k:], y[:-k])
+        return masked_mse(pred[k:], y[:-k], mask)
     if mode == "forward":
-        return torch.nn.functional.mse_loss(pred[: L - k], y[k:])
+        return masked_mse(pred[: L - k], y[k:], mask)
     raise ValueError(f"unknown aux_mode: {mode!r}")
 
 def aux_head_weights(ks, seq_len: int, beta: float) -> dict:
@@ -66,6 +82,8 @@ def batch_safety_loss(
     pos: torch.Tensor,
     map_ids: torch.Tensor,
     dfs: torch.Tensor,
+    valid=None,
+    return_count=False,
 ):
     """Differentiable collision loss for a batch of frames.
 
@@ -92,7 +110,10 @@ def batch_safety_loss(
     losses, weights, triggers = [], [], []
     for m in map_ids.unique():
         sel = map_ids == m
-        n = int(sel.sum())
+        if valid is not None:
+            sel = sel & valid
+        if not bool(sel.any()):
+            continue
         with torch.no_grad():  # mask only; must not carry gradient
             min_params = s_to_params(torch.zeros_like(s_pred[sel]))
             floor = (
@@ -109,18 +130,19 @@ def batch_safety_loss(
             sampling="bilinear",
         )[..., :24]
         frame_loss = v.mean(dim=-1)
-        keep = ~floor
+        # Exact data uses its independent whole-polygon certificate; legacy keeps grid mask.
+        keep = ~floor if valid is None else torch.ones_like(floor)
         n_keep = int(keep.sum())
         if n_keep:
             losses.append(frame_loss[keep].sum())
             weights.append(n_keep)
             triggers.append(float((frame_loss > 0)[keep].float().sum()) / n_keep)
     if not losses:
-        zero = params.sum() * 0.0
-        return zero, 0.0
+        zero = s_pred.reshape(-1)[:0].sum()
+        return (zero, 0.0, 0) if return_count else (zero, 0.0)
     total = torch.stack(losses).sum() / sum(weights)
     rate = sum(t * w for t, w in zip(triggers, weights)) / sum(weights)
-    return total, rate
+    return (total, rate, sum(weights)) if return_count else (total, rate)
 
 def frame_map_ids(window_map_ids, sequence_length):
     """Time-major (L,B,...) flatten needs [map0,map1,...] once per time step."""

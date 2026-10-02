@@ -47,7 +47,11 @@ def main():
         paths=[data_dir/f'map_seed{s}.pt' for s in cfg.data.seeds]
         hashes={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
         maps=[load_map(str(p)) for p in paths]
-        targets=torch.cat([m.target[cfg.data.warmup_steps:][~m.done[cfg.data.warmup_steps:]] for m in maps])
+        targets=torch.cat([m.target[cfg.data.warmup_steps:][m.supervision_valid[cfg.data.warmup_steps:] & ~m.done[cfg.data.warmup_steps:]] for m in maps])
+        if len(targets) < 2:
+            raise ValueError("Data quality gate requires valid supervision frames")
+        status["teacher"] = maps[0].meta.get("teacher", {"kind": "legacy"})
+        status["frame_validity"] = {"total": sum(m.done.numel() for m in maps), "geometric": sum(int(m.geometric_valid.sum()) for m in maps), "supervision": sum(int(m.supervision_valid.sum()) for m in maps), "emergency": sum(int(m.emergency.sum()) for m in maps)}
         std=targets.std(0);contracted=(targets<=.8).any(-1).float().mean()
         if not torch.isfinite(targets).all() or float(std.max())<1e-3 or float(contracted)<.01:
             raise AssertionError(f'Data quality gate failed: std={std.tolist()}, contraction={float(contracted)}')

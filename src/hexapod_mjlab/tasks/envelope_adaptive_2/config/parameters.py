@@ -130,6 +130,8 @@ class AttitudeCfg:
 
 @dataclass
 class EnvelopeCfg:
+    # Explicit legacy option preserves migrated datasets/checkpoints.
+    oracle_kind: str = "exact"
     margin: float = 0.1
     soft_margin: float = 0.1
     action_max: float = 4.0

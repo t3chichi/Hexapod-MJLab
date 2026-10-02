@@ -5,7 +5,7 @@ import torch
 from mjlab.viewer.native.viewer import NativeMujocoViewer
 from ...config.parameters import EA2Cfg
 from ...env import make_env,SLAdapter
-from ..evaluate import load_checkpoint,Predictor,s_to_action
+from ..evaluate import load_checkpoint,checkpoint_teacher,Predictor,s_to_action
 
 
 class PlaySession:
@@ -42,6 +42,7 @@ def main():
     ap.add_argument('--seed',type=int,default=1)
     ap.add_argument('--num-envs',type=int,default=1)
     ap.add_argument('--device',default='cuda:0')
+    ap.add_argument('--oracle', choices=['legacy', 'exact'], default=None, help='explicit teacher override; otherwise restore checkpoint teacher')
     ap.add_argument('--mode',choices=['stateful','window'],default='stateful')
     ap.add_argument('--full-lidar',action='store_true')
     ap.add_argument('--point-stride',type=int,default=1)
@@ -52,6 +53,8 @@ def main():
     cfg.lidar.use_reduced_raycast=not args.full_lidar
     cfg.lidar.debug_env_ids=list(range(args.num_envs));cfg.lidar.debug_point_stride=args.point_stride
     net,meta=load_checkpoint(str(args.checkpoint),args.device)
+    cfg.envelope.oracle_kind = args.oracle or checkpoint_teacher(meta)["kind"]
+    print(f"PLAY teacher={cfg.envelope.oracle_kind}; yellow=valid, orange=emergency, gray=unavailable/uncertified")
     env=make_env(cfg,args.device,capture_debug=True,
                  render_mode='rgb_array' if args.snapshot else None)
     session=PlaySession(env,net,args.mode,meta.get('config',{}).get('train',{}).get('seq_len',400))
