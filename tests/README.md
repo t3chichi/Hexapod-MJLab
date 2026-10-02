@@ -60,3 +60,42 @@ the M5 harness in `scripts/`.
   `79dd370`, identically before/after the 2026-09-29 reorg (the move is not a
   factor — deterministic outputs are bit-identical). Re-run on failure before
   investigating.
+
+## EA2 supervised-learning migration
+
+`tests/ea2/` contains the approved staged gates. Run from the repository root
+with `PYTHONPATH=src` in `hp_mjlab`; logs are in `logs/ea2/acceptance/` so they
+can be kept together with the frozen-data pipeline evidence.
+
+| Script | Verification | Device |
+|---|---|---|
+| `platform_gate.py` | Actual manager environment, action/observation contract and clock/reset | GPU |
+| `numerical_gate.py` | Frozen-source geometry, oracle, smoothing, maps, paths and noise formula | CPU |
+| `environment_gate.py` | Motion, reduced/full raycasts, timing, terminal/reset and attitude replay | GPU |
+| `supervision_gate.py` | Old weights/windows, recurrence reset, areas, auxiliary gradients, map IDs and target timing | CPU |
+| `collection_gate.py` | Real short collection, save/load and rollout | GPU |
+| `visualization_gate.py [--full-lidar]` | Native viewer controls, bounded render and independent drawing example | GPU + display |
+| `packaging_gate.py /path/to/package.whl` | Wheel assets and isolated imports without old runtime modules | CPU |
+
+The source-comparison gates read the original repository at
+`~/el4090_legged_gym` and verify its manifest first. EA2 runtime modules and
+wheel imports do not depend on that repository. The five-epoch learning gate
+is the separate `sl.scripts.pipeline --small --play` command documented in
+the root README; it must not silently enlarge its data or epoch budget.
+
+## EA2 static oracle experiment
+
+The approved offline experiment reads the frozen small migration corpus; it
+does not replace the production oracle or train a network. Run from the root
+with `PYTHONPATH=src OMP_NUM_THREADS=1` in `hp_mjlab`, in this order:
+
+| Script | Verification/output |
+|---|---|
+| `ea2/static_oracle_gate.py` | Six synthetic classes, 16 analytic pose/margin cases and independent geometry probes |
+| `ea2/static_oracle_compare.py` | Every one of the frozen 12,320 valid poses; original and matching-margin baselines; exact whole-polygon validation |
+| `ea2/static_oracle_diagnostics.py` | Saved-result denominator clarification, fixed batch/source and dense-boundary audits; no new full candidate run |
+| `ea2/static_oracle_report.py` | All-pose coverage, common-safe shape/adjacent-change metrics and PNGs; synthetic baseline illustration |
+
+CPU only; existing SciPy, no new dependencies. Evidence goes to
+`logs/ea2/oracle_static/20261003/`. Correctness PASS is separate from efficacy;
+see [the experiment record](../docs/EA2静态oracle对照实验.md) for results and limits.

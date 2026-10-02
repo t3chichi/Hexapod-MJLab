@@ -62,3 +62,27 @@ conda run --no-capture-output -n hp_mjlab python tests/lidar_sensor/symmetry_che
 ```
 
 迁移背景、旧→新文件映射与迁移决策见 [MIGRATION.md](MIGRATION.md)。
+
+## 五维包络监督学习任务
+
+`tasks/envelope_adaptive_2/` 与 `tasks/el_4090_lidar/` 并列。它使用实际
+`ManagerBasedRlEnv` 承载地图、脚本运动和雷达，但由独立监督学习入口训练
+190维观测→5维包络的GRU网络。没有机器人关节控制，五维动作不会改变载体路径。
+
+在仓库根目录运行已批准的小规模完整流程（两地图各8环境×800步、两配方各5轮）：
+
+```bash
+PYTHONPATH=src conda run --no-capture-output -n hp_mjlab python -m \
+  hexapod_mjlab.tasks.envelope_adaptive_2.sl.scripts.pipeline --small --play
+```
+
+数据、checkpoint和证据分别位于 `logs/ea2/data/`、`logs/ea2/runs/`、
+`logs/ea2/acceptance/`。采集、训练、评估和交互显示也可分别调用。
+使用命令、对齐范围、验收结果及后续复用边界见
+[EA2迁移与验收记录](docs/EA2迁移与验收记录.md)。公共世界坐标绘制位于
+`utils/visualization/`，独立示例为 `utils/visualization/example.py`。
+
+离线静态oracle实验在`tasks/envelope_adaptive_2/experiments/`，未接入默认
+训练或环境。已完成的两图12,320帧、0.10/0.20米新旧对照及解析检查见
+[EA2静态oracle对照实验](docs/EA2静态oracle对照实验.md)：连续几何安全覆盖
+改善，面积、展开程度及平滑性的整体改善尚未成立。
