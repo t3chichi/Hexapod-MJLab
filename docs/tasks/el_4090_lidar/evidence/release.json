@@ -1,0 +1,177 @@
+{
+  "schema": 1,
+  "date": "2026-10-03",
+  "scope": "T0-A actual flat physical baseline and short training/evaluation pipeline; not T0-B learned walking",
+  "state": "PASS",
+  "run": "logs/t0/t0a-strict-20261003-223137",
+  "stages": [
+    {
+      "name": "audit_identity",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 6.7884955879999325,
+      "log": "stage_logs/01_audit_identity.log"
+    },
+    {
+      "name": "test_units",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 5.784139675000915,
+      "log": "stage_logs/02_test_units.log"
+    },
+    {
+      "name": "contract_gate",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 7.738044217010611,
+      "log": "stage_logs/03_contract_gate.log"
+    },
+    {
+      "name": "contact_gate",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 8.335442461000639,
+      "log": "stage_logs/04_contact_gate.log"
+    },
+    {
+      "name": "hold_gate",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 13.504855832012254,
+      "log": "stage_logs/05_hold_gate.log"
+    },
+    {
+      "name": "terminal_gate",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 37.3857745060086,
+      "log": "stage_logs/06_terminal_gate.log"
+    },
+    {
+      "name": "gate_a",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 7.639385365007911,
+      "log": "stage_logs/07_gate_a.log"
+    },
+    {
+      "name": "gate_b",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 7.739102745006676,
+      "log": "stage_logs/08_gate_b.log"
+    },
+    {
+      "name": "train_short",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 33.46716735699738,
+      "log": "stage_logs/08_train_short.log"
+    },
+    {
+      "name": "eval_episodes",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 132.66273000300862,
+      "log": "stage_logs/09_eval_episodes.log"
+    },
+    {
+      "name": "replay_verify",
+      "state": "PASS",
+      "returncode": 0,
+      "wall_time_s": 19.17454969098617,
+      "log": "stage_logs/10_replay_verify.log"
+    }
+  ],
+  "total_wall_time_s": 285.429,
+  "hold": {
+    "mean_tracking_rmse_worst_env": 0.03367452601447822,
+    "worst_joint_time_rmse": 0.08978934755337309,
+    "max_tilt_deg": 0.17693869769573212,
+    "max_drift_m": 0.0012927126813907057,
+    "tail_joint_speed": 0.0003531005640979856,
+    "tail_root_linear_speed": 4.289052594685927e-05,
+    "tail_root_angular_speed": 5.906267324462533e-05,
+    "peak_preclip_torque": 12.832292556762695,
+    "tail_unactuated_force_max": 0.005828857421875,
+    "tail_unactuated_moment_max": 0.001331329345703125
+  },
+  "eval_counts": {
+    "stand": {
+      "n": 32,
+      "passed": 32,
+      "fail_reasons": {}
+    },
+    "forward_025": {
+      "n": 32,
+      "passed": 0,
+      "fail_reasons": {
+        "command_ok": 32
+      }
+    }
+  },
+  "all_64_episode_data_valid": true,
+  "all_64_complete_and_no_violation": true,
+  "learned_walking_passed": false,
+  "training": {
+    "wall_time_s": 27.9,
+    "wall_budget_s": 1200.0,
+    "env_step_calls": 120,
+    "expected_step_calls": 120,
+    "env_control_steps": 3840,
+    "expected_env_control_steps": 3840,
+    "budget_cap_env_control_steps": 3840,
+    "within_frozen_budget": true,
+    "iterations_completed": 5,
+    "torch_peak_mb": 787.0
+  },
+  "checkpoint": {
+    "path": "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/t0/t0a-strict-20261003-223137/t0_short_model.pt",
+    "sha256": "1bb09e9df4e61b56802e7b6b3ede004db844e2299cf8a7f8325261166a07f50a",
+    "size_bytes": 9783655
+  },
+  "identity_files": 176,
+  "versions": {
+    "torch": "2.11.0",
+    "mujoco": "3.11.0",
+    "mujoco-warp": "3.11.0",
+    "warp-lang": "1.17.0",
+    "mjlab": "1.6.0",
+    "rsl-rl-lib": "5.4.2",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1"
+  },
+  "artifacts": {
+    "logs/t0/t0a-strict-20261003-223137/acceptance.json": "9fb89da73ca286620b1958dac70ce034592e6f1bfcd81eadf7a3bd3d5d439725",
+    "logs/t0/t0a-strict-20261003-223137/input_identity.json": "10872c8dc9afb3c8e479310530e8b63eb7c6f106ce12a6bf12c2af3142b5ace6",
+    "logs/t0/t0a-strict-20261003-223137/output_identity.json": "7e988620389facaea5e23a7b2e08c24d42c4e5cef89f83fd962196c966f01995",
+    "logs/t0/t0a-strict-20261003-223137/eval_summary.json": "27967fa1b305153c74039bba8e16986ac64f5feeeac2fe9b04edd48a5f5338d2",
+    "logs/t0/t0a-strict-20261003-223137/hold_gate.json": "1156d8169724bc17bb2fb9c05b3a5173df3d95bedfeb261107e9c50b4c97b11f",
+    "logs/t0/t0a-strict-20261003-223137/replay/replay_verify.json": "ad43d51f78660d468d748f59401b415ac7c1fffa01a8e55f242bc2d80ad27660"
+  },
+  "frozen_T1_library": {
+    "path": "docs/research/morphology/evidence/library.json",
+    "sha256": "bf95b13eefdf10576144f06a613bf2e38c2f379dc8e94c9ad5c3159e862a90ac",
+    "original_run": "logs/morphology/acceptance-v3-20261003/library.json"
+  },
+  "history": {
+    "original_GLM": "logs/t0/t0a-accept-20261003-203540",
+    "initial_review": "logs/t0/review-20261003",
+    "controlled_ground_comparison": "logs/t0/refactor-baseline-20261003",
+    "prepare_runs": [
+      "logs/t0/t0a-strict-20261003-215240",
+      "logs/t0/t0a-strict-20261003-215535",
+      "logs/t0/t0a-strict-20261003-220103"
+    ],
+    "terminal_positive_probe": "logs/t0/t0a-20261003-220353",
+    "first_full_flow_report_path_failure": "logs/t0/t0a-strict-20261003-221540"
+  },
+  "refactor_short_training_runs": 2,
+  "refactor_total_env_control_steps": 7680,
+  "limits": [
+    "Single seed short recipe is a pipeline check, not a learned walking result or thesis final multi-seed evaluation.",
+    "T0 physical plane valid root domain [-11,11]^2; terrain-only rays do not implement robot self-occlusion.",
+    "GPU force-balance and CPU rigid-contact LP are separate validation layers; CPU soft-contact inverse on GPU state differs and is retained as a diagnostic.",
+    "Nominal uncalibrated actuator limits and simulator-only safety do not certify hardware."
+  ]
+}

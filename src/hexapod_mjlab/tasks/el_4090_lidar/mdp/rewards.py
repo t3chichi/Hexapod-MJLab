@@ -240,14 +240,23 @@ def dof_acc(
 
 
 def base_height(
-  env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
+  env: ManagerBasedRlEnv,
+  asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+  target: float | None = None,
 ) -> torch.Tensor:
+  """Squared height error against ``target`` (default: old fixed 0.25 m).
+
+  ``target=None`` keeps the legacy ``BASE_HEIGHT_TARGET`` (0.25 m, old head
+  config). The T0 flat variant passes the T1-verified witness height instead;
+  both measure height above the terrain (``root_z - measured_heights``).
+  """
   asset: Entity = env.scene[asset_cfg.name]
   base_height_val = torch.mean(
     asset.data.root_link_pos_w[:, 2].unsqueeze(1) - measured_heights(env),
     dim=1,
   )
-  return torch.square(base_height_val - BASE_HEIGHT_TARGET)
+  target_val = BASE_HEIGHT_TARGET if target is None else float(target)
+  return torch.square(base_height_val - target_val)
 
 
 def action_rate_l2(env: ManagerBasedRlEnv) -> torch.Tensor:

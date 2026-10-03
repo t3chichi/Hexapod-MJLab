@@ -5,9 +5,13 @@ import warnings
 from mjlab.tasks.registry import register_mjlab_task
 
 from hexapod_mjlab.tasks.el_4090_lidar.rl import El4090LidarRunner
+from hexapod_mjlab.tasks.el_4090_lidar.t0.flat_env_cfg import T0_TASK_ID
+from hexapod_mjlab.tasks.el_4090_lidar.t0.flat_env_cfg import (
+  make_el_4090_t0_flat_env_cfg,
+)
 
 from .env_cfgs import el_4090_lidar_head_env_cfg
-from .rl_cfg import el_4090_lidar_ppo_runner_cfg
+from .rl_cfg import el_4090_lidar_ppo_runner_cfg, el_4090_t0_flat_ppo_runner_cfg
 
 EL4090_TASK_ID = "El-4090-Lidar"
 
@@ -29,6 +33,17 @@ register_mjlab_task(
   env_cfg=el_4090_lidar_head_env_cfg(),
   play_env_cfg=el_4090_lidar_head_env_cfg(play=True),
   rl_cfg=el_4090_lidar_ppo_runner_cfg(),
+  runner_cls=El4090LidarRunner,
+)
+
+# T0-A isolated flat-ground variant (deterministic; see t0/flat_env_cfg.py).
+# Registered after and independently of the pillar task; the pillar task's
+# resolution above is untouched.
+register_mjlab_task(
+  task_id=T0_TASK_ID,
+  env_cfg=make_el_4090_t0_flat_env_cfg(),
+  play_env_cfg=make_el_4090_t0_flat_env_cfg(play=True),
+  rl_cfg=el_4090_t0_flat_ppo_runner_cfg(),
   runner_cls=El4090LidarRunner,
 )
 

@@ -133,3 +133,22 @@ class El4090LidarRunnerCfg(RslRlOnPolicyRunnerCfg):
 def el_4090_lidar_ppo_runner_cfg() -> El4090LidarRunnerCfg:
   """Factory for the registered task's rl_cfg."""
   return El4090LidarRunnerCfg()
+
+
+def el_4090_t0_flat_ppo_runner_cfg() -> El4090LidarRunnerCfg:
+  """RL cfg for the T0-A flat variant.
+
+  Same network/PPO contract as the pillar task (LidarPPO5x, 24 steps/env,
+  mirror + aux supervision); only the bookkeeping differs: experiment name,
+  save at every iteration (short pipeline checkpoints must not depend on the
+  legacy save-interval 50) and seed 1 (the T0-A fixed training seed).
+  """
+  cfg = El4090LidarRunnerCfg()
+  cfg.algorithm.symmetry_cfg.pop("symmetry_kwargs")
+  cfg.algorithm.symmetry_cfg["data_augmentation_func"] = (
+    "hexapod_mjlab.tasks.el_4090_lidar.t0.symmetry:t0_symmetry"
+  )
+  cfg.experiment_name = "el_4090_lidar_t0_flat"
+  cfg.save_interval = 1
+  cfg.seed = 1
+  return cfg

@@ -109,3 +109,7 @@ NaN/gradient isolation, public API provenance, paired areas),
 `teacher_release_pipeline.py` (frozen release corpus, two SL recipes, rollout,
 export and play). The release harness preserves existing evidence and assumes
 its named data has already been collected. New outputs must use a new run name.
+
+## T0-A严格平地门
+
+`python tests/t0/test_units.py`运行纯CPU的统计、镜像、身份、状态与产物反例。真实GPU门及固定短训练由`python scripts/tools/t0/run_acceptance.py`统一执行；任一准备门失败阻止训练，全部必需阶段缺一不可。范围与当前结果见[使用与验收](../docs/tasks/el_4090_lidar/T0-A使用与验收.md)。

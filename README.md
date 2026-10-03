@@ -87,4 +87,8 @@ PYTHONPATH=src conda run --no-capture-output -n hp_mjlab python -m \
 原静态实验与负结果仍见[oracle实验记录](docs/tasks/envelope_adaptive_2/oracle/实验记录.md)。
 后续六维形态/真实机器人联合任务准备见[联合任务细化方案](docs/research/联合任务方案.md)。
 
+形态测量已通过限定范围验收：35个静态保持构型、7个指定慢速运动构型，见
+[形态测量与质量审查](docs/research/morphology/形态可达性测量.md)。T0-A确定性平地管线已重构，当前状态见[T0-A使用与验收](docs/tasks/el_4090_lidar/T0-A使用与验收.md)，
+[T0-A执行范围与GLM提示词](docs/tasks/el_4090_lidar/T0-A执行方案.md)列出具体目标、预算与验收门；正式学习行走仍待后续验收。
+
 文档分类与维护规则见[docs导航](docs/README.md)。
