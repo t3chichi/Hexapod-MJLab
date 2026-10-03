@@ -1,0 +1,488 @@
+{
+  "schema_version": 1,
+  "status": "accepted_for_declared_T1_scope",
+  "date": "2026-10-03",
+  "run_path": "logs/morphology/acceptance-v3-20261003",
+  "verification_path": "logs/morphology/acceptance-v3-frozen-verification-20261003",
+  "acceptance": {
+    "schema_version": 2,
+    "verdict": "PASS",
+    "checks": {
+      "core_adversarial": true,
+      "every_witness_independently_replayed": true,
+      "source_model_inputs_unchanged": true,
+      "all_artifacts_match_frozen_sources": true,
+      "known_unsafe_legacy_cases_rejected": true,
+      "static_family_coverage": true,
+      "nominal_slow_crawl": true,
+      "dynamic_family_coverage": true,
+      "validated_library_nonempty": true
+    },
+    "executions": [
+      {
+        "stage": "core",
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/scripts/tools/morphology/run_checks.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+          "--out",
+          "logs/morphology/acceptance-v3-20261003/core.json"
+        ],
+        "returncode": 0,
+        "duration_s": 1.6291482189990347
+      },
+      {
+        "stage": "local_ranges",
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/scripts/tools/morphology/analyze_ranges.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+          "--step",
+          ".005",
+          "--out",
+          "logs/morphology/acceptance-v3-20261003/local_ranges.json"
+        ],
+        "returncode": 0,
+        "duration_s": 3.2201236079999944
+      },
+      {
+        "stage": "sampling",
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/scripts/tools/morphology/sample_reachability.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+          "--h-min",
+          ".20",
+          "--h-max",
+          ".64",
+          "--h-step",
+          ".02",
+          "--xy-step",
+          ".05",
+          "--k",
+          "8",
+          "--combo-cap",
+          "256",
+          "--static-budget",
+          "256",
+          "--ik-seeds",
+          "10",
+          "--clearance",
+          ".005",
+          "--workers",
+          "12",
+          "--out",
+          "logs/morphology/acceptance-v3-20261003/sampling.json"
+        ],
+        "returncode": 0,
+        "duration_s": 301.4862049669973
+      },
+      {
+        "stage": "replay",
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/scripts/tools/morphology/replay.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+          "--sampling",
+          "logs/morphology/acceptance-v3-20261003/sampling.json",
+          "--out",
+          "logs/morphology/acceptance-v3-20261003/replay.json"
+        ],
+        "returncode": 0,
+        "duration_s": 10.761801346998254
+      },
+      {
+        "stage": "families",
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/scripts/tools/morphology/build_cases.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+          "--branch-budget",
+          "256",
+          "--out",
+          "logs/morphology/acceptance-v3-20261003/families.json"
+        ],
+        "returncode": 0,
+        "duration_s": 3.013056273004622
+      },
+      {
+        "stage": "holds",
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/scripts/tools/morphology/verify_hold.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+          "--sampling",
+          "logs/morphology/acceptance-v3-20261003/sampling.json",
+          "--cases",
+          "logs/morphology/acceptance-v3-20261003/families.json",
+          "--legacy",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/morphology/legacy-glm-20261003/hold_results.json",
+          "--heights",
+          "",
+          "--steps",
+          "1000",
+          "--out",
+          "logs/morphology/acceptance-v3-20261003/holds.json"
+        ],
+        "returncode": 0,
+        "duration_s": 21.31358172200271
+      },
+      {
+        "stage": "gaits",
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/scripts/tools/morphology/verify_gait.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+          "--cases",
+          "logs/morphology/acceptance-v3-20261003/families.json",
+          "--case-ids",
+          "height_0.40_width_1.00,height_0.44_width_1.00,height_0.48_width_1.00,height_0.52_width_1.00,height_0.56_width_1.00,contract_0.65_h0.48,contract_0.85_h0.48,contract_0.95_h0.48,asym_+0.15_+0.05_h0.48,asym_+0.25_+0.05_h0.48,asym_-0.05_-0.15_h0.48,asym_-0.05_-0.25_h0.48",
+          "--cycles",
+          "2",
+          "--out",
+          "logs/morphology/acceptance-v3-20261003/gaits.json"
+        ],
+        "returncode": 0,
+        "duration_s": 303.9616851280007
+      },
+      {
+        "stage": "library",
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/scripts/tools/morphology/export_library.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+          "--holds",
+          "logs/morphology/acceptance-v3-20261003/holds.json",
+          "--gaits",
+          "logs/morphology/acceptance-v3-20261003/gaits.json",
+          "--sampling",
+          "logs/morphology/acceptance-v3-20261003/sampling.json",
+          "--out",
+          "logs/morphology/acceptance-v3-20261003/library.json"
+        ],
+        "returncode": 0,
+        "duration_s": 4.7128354250016855
+      }
+    ],
+    "total_duration_s": 651.2962942279992,
+    "sampling_witnesses": 3860,
+    "sampling_not_global_bounds": true,
+    "hold_pass_ids": [
+      "h0.460-w0164",
+      "h0.480-w0000",
+      "h0.500-w0141",
+      "h0.520-w0164",
+      "h0.540-w0164",
+      "h0.560-w0153",
+      "h0.580-w0153",
+      "h0.600-w0153",
+      "h0.620-w0157",
+      "h0.640-w0149",
+      "height_0.40_width_1.00",
+      "height_0.44_width_1.00",
+      "height_0.44_width_1.10",
+      "height_0.48_width_1.00",
+      "height_0.48_width_1.10",
+      "height_0.52_width_1.00",
+      "height_0.52_width_1.10",
+      "height_0.54_width_1.00",
+      "height_0.54_width_1.10",
+      "height_0.56_width_1.00",
+      "height_0.56_width_1.10",
+      "contract_0.65_h0.48",
+      "contract_0.75_h0.40",
+      "contract_0.75_h0.48",
+      "contract_0.85_h0.40",
+      "contract_0.85_h0.48",
+      "contract_0.95_h0.40",
+      "contract_0.95_h0.48",
+      "asym_+0.15_+0.05_h0.48",
+      "asym_+0.25_+0.05_h0.48",
+      "asym_-0.05_-0.15_h0.48",
+      "asym_-0.05_-0.25_h0.48",
+      "legacy_d",
+      "legacy_e",
+      "legacy_stand"
+    ],
+    "hold_total": 67,
+    "hold_verdict_counts": {
+      "PASS": 35,
+      "FAIL": 21,
+      "NOT_FOUND": 11
+    },
+    "gait_pass_ids": [
+      "height_0.44_width_1.00",
+      "height_0.48_width_1.00",
+      "height_0.52_width_1.00",
+      "contract_0.85_h0.48",
+      "contract_0.95_h0.48",
+      "asym_-0.05_-0.15_h0.48",
+      "asym_-0.05_-0.25_h0.48"
+    ],
+    "gait_total": 12,
+    "gait_verdict_counts": {
+      "PASS": 7,
+      "FAIL": 5,
+      "NOT_FOUND": 0
+    },
+    "static_categories": [
+      "front_rear_asymmetry",
+      "height",
+      "lateral_contract"
+    ],
+    "dynamic_categories": [
+      "front_rear_asymmetry",
+      "height",
+      "lateral_contract"
+    ],
+    "all_family_slow_motion_coverage_complete": true,
+    "acceptance_scope": "T1 geometry/contact/statics implementation and listed witnesses under explicit model/friction/actuator assumptions; not global mechanical ranges, untested E combinations, transitions, real hardware, or T0 learned locomotion",
+    "artifacts_sha256": {
+      "manifest.json": "0148739b4d3f030cbd2053fc853a0727b7e9477ef05f56583f24110fd61a47c2",
+      "holds.json": "24ca548245d7957bed084f55a3bc9b126d1a8c02d3343af84338ae338400d81b",
+      "gaits.json": "5800e8ad9d2a38d13b969cf95339ec145c31d172e17fd7a4a9bdc8d734f07550",
+      "families.json": "35b4fd1bfded68a7ceca729cb4cfb111c4995db5863645c86b419b1827defa8d",
+      "local_ranges.json": "dd2d04603cb94fb3b4f4915391dd39a01b5cbf878733d52ebd81c6dbd10a49a8",
+      "core.json": "fdf69547dfbf461849a759161559dde939be951cc04b9ba1bbb5df507217cfcf",
+      "replay.json": "63afe0bad576cb356286caf6c73d95f8d3494c87e47eddec7cc8637ac14f0f48",
+      "library.json": "bf95b13eefdf10576144f06a613bf2e38c2f379dc8e94c9ad5c3159e862a90ac",
+      "legacy_hold_input.json": "e76bb5d355ba57973391f9d779a2ee59b4e4b427bec1558ac2ab3a35ad3f9db1",
+      "sampling.json": "f9f9c38fc38f5b533459ea19aa1b7a496e245eaea0bbe7c91eb317d4fd49a33b"
+    },
+    "provenance": {
+      "schema_version": 2,
+      "argv": [
+        "scripts/tools/morphology/pipeline.py",
+        "--out-dir",
+        "logs/morphology/acceptance-v3-20261003",
+        "--workers",
+        "12"
+      ],
+      "config": {
+        "workers": 12,
+        "gait_ids": [
+          "height_0.40_width_1.00",
+          "height_0.44_width_1.00",
+          "height_0.48_width_1.00",
+          "height_0.52_width_1.00",
+          "height_0.56_width_1.00",
+          "contract_0.65_h0.48",
+          "contract_0.85_h0.48",
+          "contract_0.95_h0.48",
+          "asym_+0.15_+0.05_h0.48",
+          "asym_+0.25_+0.05_h0.48",
+          "asym_-0.05_-0.15_h0.48",
+          "asym_-0.05_-0.25_h0.48"
+        ]
+      },
+      "sources_sha256": {
+        "__init__.py": "df34f4487ff0a6358e971607079ca9cbeb29afb763127a11bd6fbbcea3432663",
+        "analyze_ranges.py": "6318a3caed4ffcc95276c9f709d1ce971bebef408a626d43aaaef79e759ad2b1",
+        "build_cases.py": "8efe453d6b2fd9e78f9870e33b354650fc3089d177893baf5c692ea223f6d830",
+        "export_library.py": "62bb98e5722ca29439dd51fd920f93da315af5346f7a0e58dd577343f7d9d4d4",
+        "hexfit.py": "d4d11f712f363bb7e1a8e18218c1caed9e4a1b197d593961c149947ee5eb8a0e",
+        "meter.py": "84db894824d923f55b24e217a8d757d88aeb0090875957f9d3e400b9496000ac",
+        "pipeline.py": "bec852342983abfdab95a6836303d7bd60e663e54c5f3f8d822cd146d52b1cd5",
+        "provenance.py": "093a64efe543bc499da6b8f9f99a1e1bc38cba33b4326f4834e6c5216db0842c",
+        "replay.py": "a566d6a710f3b720c3229aab5386646536c2d965ebef4194366710a226cdc9a0",
+        "run_checks.py": "52f2753fe2a5c6f3949937a6caec9b6e004755004ff7bca7efdb10d8e038820f",
+        "sample_reachability.py": "8b00b0267be4393f5e2759c94e5ec66f8ff6f1a68da867916531132057d75672",
+        "statics.py": "9a3b6e14c372030a6a662dcb736b5a3f5e2551e0fa8e987612bd35fa7e30b938",
+        "verify_bundle.py": "da6891b63e31ed4533fe9f9ec62e137142463244dda2c992f47904c4a6df585b",
+        "verify_gait.py": "4f1ac4c8579f7ae07b88c525c137e5cfc467689a4ded13600412b7df7b2e9a1c",
+        "verify_hold.py": "edc43158fedcec4c6528f7b8f7d5886e0dda8a33e659795c9ea1a5670b1cbc24"
+      },
+      "model": {
+        "xml": "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+        "xml_sha256": "2e6a3a12cb5c39ca04e20af57fca024e7edde85da936508dfd6828d79f6a171c",
+        "meshes_sha256": {
+          "BASE.STL": "3c1abd3467d9757db6f3dc26b17642c18904f61c1bf037377254248a02cb3aca",
+          "LB_FOOT.STL": "c6755dab87c676c0bdf58b3e847f4cba1f1763e0ab37fc1cc78cc5710fce70d2",
+          "LB_HIP.STL": "c7cb9a66f1bd0a4ac5b22b23af9b16535a57f1552c0c78be9e8aab9d924dbb98",
+          "LB_SHANK.STL": "e53501770c98b22a51db8f2010cc54af07bb2d1232b3184fd417db6b9489b651",
+          "LB_THIGH.STL": "02fa03a0b99690fd96febcf640a9fbbb0276fe6ef8bdb7f4735b2653f1c6c6ad",
+          "LF_FOOT.STL": "dbd4f500eaf4577ecccb81829b6565d87df8867a694e64fd5fc62109298f1218",
+          "LF_HIP.STL": "b38112e3e2284090de0e4269b7f3758784e715471f661ec5aeddd4453bcb6828",
+          "LF_SHANK.STL": "889c45aa326abb83b0df8f745a987046f923dcb736c7a00799228d6c17eb9128",
+          "LF_THIGH.STL": "e5787f96cfc67229d2fcaafc806e96ee8b64826755838ea40ece43c94473f2de",
+          "LIDAR_AIRY.STL": "43f1fcacc0e74d6883dbd05f514c518aafd7e078bba9165b958cde6c6c425049",
+          "LIDAR_GLASS.STL": "8d6d4df0e706355ead95225208b1b20efa721b438bcf929838e78a85d274efa8",
+          "LM_FOOT.STL": "ff414185f74e774044629c8e774415afbf412158a95e34a012e2ff8ec9491e5a",
+          "LM_HIP.STL": "dcbabac643784d76d169579d608a02d266de885cb5a088306c1a694b2c0add4b",
+          "LM_SHANK.STL": "afe15958d669601ce73fa2521978aa27a74ec539ab342871e0b47d525d5d8811",
+          "LM_THIGH.STL": "8cce931b5b06086ef67686400a32c854410edade91c9a65394ba4460307cab4f",
+          "RADAR_BRACKET.STL": "58370e97dcf7b09ffcc28f63028ddf49731bd6bd54732aeb2cfdabf6bbe08bb4",
+          "RB_FOOT.STL": "bfbe019def6cc40d5727a03aeddc018ec608776c2144e9e170ae77b5c41e7bde",
+          "RB_HIP.STL": "6eb61a8152ce71f108bac3716ac47671583846efc711961d2f1acd4458902a24",
+          "RB_SHANK.STL": "88f5aed944b8dd4564eaff97165ca705ea7c30ef790b1679cd4c64a019344736",
+          "RB_THIGH.STL": "97061a69db7f019e9f81791c0ab44cd021c32d93f34139ab8cc30a7314306ea0",
+          "RF_FOOT.STL": "ba6e6a91662802fba625364630e7e4c9fcb2d652130a991dbf23861f51bf864f",
+          "RF_HIP.STL": "287f449a26a9439f8ad327e5a047ad8b817a736d8c41fbb3a00a58c467229a1e",
+          "RF_SHANK.STL": "5f7f07c228db597017eed5b697d16eb00ca891ff55400158d50ee9eaea32efc7",
+          "RF_THIGH.STL": "0f79d02276e896a39a5af3b6d975df914c7ab7b28ae5076a68edaf2cae579bc4",
+          "RM_FOOT.STL": "976d9f3c7e5cb18abb1fc6ae360daca8e7bf9a0219e6279316f31ad75a5c3f00",
+          "RM_HIP.STL": "dea7100a9a05bd9233442bde9c38b004fc68cc93b376e762392d957d519774c3",
+          "RM_SHANK.STL": "837caeddfd951fdfb5e76cf9d27d9ef006950360a2e3b0cc3b5455c897966bf6",
+          "RM_THIGH.STL": "ba149c6222af18e81f3ca38d02183e7865af299b0e90cffed7497725857fe502"
+        }
+      },
+      "inputs_sha256": {
+        "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/morphology/legacy-glm-20261003/hold_results.json": "e76bb5d355ba57973391f9d779a2ee59b4e4b427bec1558ac2ab3a35ad3f9db1"
+      },
+      "dependencies": {
+        "python": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+        "mujoco": "3.11.0",
+        "numpy": "2.5.3",
+        "scipy": "1.18.1"
+      }
+    }
+  },
+  "verification": {
+    "passed": true,
+    "frozen_source_and_model_reexecuted": true,
+    "executions": [
+      {
+        "stage": "core",
+        "returncode": 0,
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/morphology/acceptance-v3-20261003/source_snapshot/morphology/run_checks.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/morphology/acceptance-v3-20261003/model_snapshot/mjcf/el_4090_lidar.xml",
+          "--out",
+          "logs/morphology/acceptance-v3-frozen-verification-20261003/core.json"
+        ]
+      },
+      {
+        "stage": "replay",
+        "returncode": 0,
+        "argv": [
+          "/home/t3chichi/miniconda3/envs/hp_mjlab/bin/python",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/morphology/acceptance-v3-20261003/source_snapshot/morphology/replay.py",
+          "--xml",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/morphology/acceptance-v3-20261003/model_snapshot/mjcf/el_4090_lidar.xml",
+          "--sampling",
+          "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/morphology/acceptance-v3-20261003/sampling.json",
+          "--out",
+          "logs/morphology/acceptance-v3-frozen-verification-20261003/replay.json"
+        ]
+      }
+    ],
+    "artifact_hashes_valid": true,
+    "source_hashes_valid": true,
+    "model_hashes_valid": true,
+    "library_records": 35,
+    "accepted_motion_frames_reconstructed": 8400,
+    "maximum_errors": {
+      "static_E_m": 2.3314683517128287e-15,
+      "motion_geometry_m": 2.55351295663786e-15,
+      "force_certificate_error": 9.69715916454561e-08
+    },
+    "failures": [],
+    "verdict_consistency": true,
+    "library_counts_correct": true
+  },
+  "model_and_sources": {
+    "schema_version": 2,
+    "argv": [
+      "scripts/tools/morphology/pipeline.py",
+      "--out-dir",
+      "logs/morphology/acceptance-v3-20261003",
+      "--workers",
+      "12"
+    ],
+    "config": {
+      "workers": 12,
+      "gait_ids": [
+        "height_0.40_width_1.00",
+        "height_0.44_width_1.00",
+        "height_0.48_width_1.00",
+        "height_0.52_width_1.00",
+        "height_0.56_width_1.00",
+        "contract_0.65_h0.48",
+        "contract_0.85_h0.48",
+        "contract_0.95_h0.48",
+        "asym_+0.15_+0.05_h0.48",
+        "asym_+0.25_+0.05_h0.48",
+        "asym_-0.05_-0.15_h0.48",
+        "asym_-0.05_-0.25_h0.48"
+      ]
+    },
+    "sources_sha256": {
+      "__init__.py": "df34f4487ff0a6358e971607079ca9cbeb29afb763127a11bd6fbbcea3432663",
+      "analyze_ranges.py": "6318a3caed4ffcc95276c9f709d1ce971bebef408a626d43aaaef79e759ad2b1",
+      "build_cases.py": "8efe453d6b2fd9e78f9870e33b354650fc3089d177893baf5c692ea223f6d830",
+      "export_library.py": "62bb98e5722ca29439dd51fd920f93da315af5346f7a0e58dd577343f7d9d4d4",
+      "hexfit.py": "d4d11f712f363bb7e1a8e18218c1caed9e4a1b197d593961c149947ee5eb8a0e",
+      "meter.py": "84db894824d923f55b24e217a8d757d88aeb0090875957f9d3e400b9496000ac",
+      "pipeline.py": "bec852342983abfdab95a6836303d7bd60e663e54c5f3f8d822cd146d52b1cd5",
+      "provenance.py": "093a64efe543bc499da6b8f9f99a1e1bc38cba33b4326f4834e6c5216db0842c",
+      "replay.py": "a566d6a710f3b720c3229aab5386646536c2d965ebef4194366710a226cdc9a0",
+      "run_checks.py": "52f2753fe2a5c6f3949937a6caec9b6e004755004ff7bca7efdb10d8e038820f",
+      "sample_reachability.py": "8b00b0267be4393f5e2759c94e5ec66f8ff6f1a68da867916531132057d75672",
+      "statics.py": "9a3b6e14c372030a6a662dcb736b5a3f5e2551e0fa8e987612bd35fa7e30b938",
+      "verify_bundle.py": "da6891b63e31ed4533fe9f9ec62e137142463244dda2c992f47904c4a6df585b",
+      "verify_gait.py": "4f1ac4c8579f7ae07b88c525c137e5cfc467689a4ded13600412b7df7b2e9a1c",
+      "verify_hold.py": "edc43158fedcec4c6528f7b8f7d5886e0dda8a33e659795c9ea1a5670b1cbc24"
+    },
+    "model": {
+      "xml": "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",
+      "xml_sha256": "2e6a3a12cb5c39ca04e20af57fca024e7edde85da936508dfd6828d79f6a171c",
+      "meshes_sha256": {
+        "BASE.STL": "3c1abd3467d9757db6f3dc26b17642c18904f61c1bf037377254248a02cb3aca",
+        "LB_FOOT.STL": "c6755dab87c676c0bdf58b3e847f4cba1f1763e0ab37fc1cc78cc5710fce70d2",
+        "LB_HIP.STL": "c7cb9a66f1bd0a4ac5b22b23af9b16535a57f1552c0c78be9e8aab9d924dbb98",
+        "LB_SHANK.STL": "e53501770c98b22a51db8f2010cc54af07bb2d1232b3184fd417db6b9489b651",
+        "LB_THIGH.STL": "02fa03a0b99690fd96febcf640a9fbbb0276fe6ef8bdb7f4735b2653f1c6c6ad",
+        "LF_FOOT.STL": "dbd4f500eaf4577ecccb81829b6565d87df8867a694e64fd5fc62109298f1218",
+        "LF_HIP.STL": "b38112e3e2284090de0e4269b7f3758784e715471f661ec5aeddd4453bcb6828",
+        "LF_SHANK.STL": "889c45aa326abb83b0df8f745a987046f923dcb736c7a00799228d6c17eb9128",
+        "LF_THIGH.STL": "e5787f96cfc67229d2fcaafc806e96ee8b64826755838ea40ece43c94473f2de",
+        "LIDAR_AIRY.STL": "43f1fcacc0e74d6883dbd05f514c518aafd7e078bba9165b958cde6c6c425049",
+        "LIDAR_GLASS.STL": "8d6d4df0e706355ead95225208b1b20efa721b438bcf929838e78a85d274efa8",
+        "LM_FOOT.STL": "ff414185f74e774044629c8e774415afbf412158a95e34a012e2ff8ec9491e5a",
+        "LM_HIP.STL": "dcbabac643784d76d169579d608a02d266de885cb5a088306c1a694b2c0add4b",
+        "LM_SHANK.STL": "afe15958d669601ce73fa2521978aa27a74ec539ab342871e0b47d525d5d8811",
+        "LM_THIGH.STL": "8cce931b5b06086ef67686400a32c854410edade91c9a65394ba4460307cab4f",
+        "RADAR_BRACKET.STL": "58370e97dcf7b09ffcc28f63028ddf49731bd6bd54732aeb2cfdabf6bbe08bb4",
+        "RB_FOOT.STL": "bfbe019def6cc40d5727a03aeddc018ec608776c2144e9e170ae77b5c41e7bde",
+        "RB_HIP.STL": "6eb61a8152ce71f108bac3716ac47671583846efc711961d2f1acd4458902a24",
+        "RB_SHANK.STL": "88f5aed944b8dd4564eaff97165ca705ea7c30ef790b1679cd4c64a019344736",
+        "RB_THIGH.STL": "97061a69db7f019e9f81791c0ab44cd021c32d93f34139ab8cc30a7314306ea0",
+        "RF_FOOT.STL": "ba6e6a91662802fba625364630e7e4c9fcb2d652130a991dbf23861f51bf864f",
+        "RF_HIP.STL": "287f449a26a9439f8ad327e5a047ad8b817a736d8c41fbb3a00a58c467229a1e",
+        "RF_SHANK.STL": "5f7f07c228db597017eed5b697d16eb00ca891ff55400158d50ee9eaea32efc7",
+        "RF_THIGH.STL": "0f79d02276e896a39a5af3b6d975df914c7ab7b28ae5076a68edaf2cae579bc4",
+        "RM_FOOT.STL": "976d9f3c7e5cb18abb1fc6ae360daca8e7bf9a0219e6279316f31ad75a5c3f00",
+        "RM_HIP.STL": "dea7100a9a05bd9233442bde9c38b004fc68cc93b376e762392d957d519774c3",
+        "RM_SHANK.STL": "837caeddfd951fdfb5e76cf9d27d9ef006950360a2e3b0cc3b5455c897966bf6",
+        "RM_THIGH.STL": "ba149c6222af18e81f3ca38d02183e7865af299b0e90cffed7497725857fe502"
+      }
+    },
+    "inputs_sha256": {
+      "/home/t3chichi/.codex/worktrees/1685/Hexapod-MJLab/logs/morphology/legacy-glm-20261003/hold_results.json": "e76bb5d355ba57973391f9d779a2ee59b4e4b427bec1558ac2ab3a35ad3f9db1"
+    },
+    "dependencies": {
+      "python": "3.12.14 | packaged by Anaconda, Inc. | (main, Aug 27 2026, 14:46:43) [GCC 14.3.0]",
+      "mujoco": "3.11.0",
+      "numpy": "2.5.3",
+      "scipy": "1.18.1"
+    }
+  },
+  "frozen_summary_sha256": {
+    "logs/morphology/acceptance-v3-20261003/acceptance.json": "88c47189452dc722d23bfa7ef4f24f5a9b371bdb6795dd49df56dfce6511ceff",
+    "logs/morphology/acceptance-v3-20261003/manifest.json": "0148739b4d3f030cbd2053fc853a0727b7e9477ef05f56583f24110fd61a47c2",
+    "logs/morphology/acceptance-v3-20261003/library.json": "bf95b13eefdf10576144f06a613bf2e38c2f379dc8e94c9ad5c3159e862a90ac",
+    "logs/morphology/acceptance-v3-frozen-verification-20261003/verification.json": "834b0e06a564e902ea24e74287559d50d8cad068638446444f03b60f8d189fca",
+    "logs/morphology/acceptance-v3-20261003/report_renderer.py": "f4b0ff295e09626748bca3da7ce38981403c679aa4117cae7cd56b06b3bc253e",
+    "docs/research/morphology/figures/验收结果.png": "394c70845603749942749d2a75844ecf5ce8aa56974ba30930ca71eb86e751f8"
+  }
+}
