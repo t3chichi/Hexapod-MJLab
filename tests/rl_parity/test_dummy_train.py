@@ -86,7 +86,9 @@ class DummyLidarVecEnv(VecEnv):
         self.device = torch.device(DEVICE)
         self.cfg = {}
         self._gen = torch.Generator().manual_seed(seed)
-        self._policy = (torch.randn(num_envs, TOTAL_DIM, generator=self._gen) * 0.3).clamp(-2.5, 2.5)
+        self._policy = (torch.randn(num_envs, TOTAL_DIM, generator=self._gen) * 0.3).clamp(
+            -2.5, 2.5
+        )
         # ── 镜像一致任务构造 ──
         # 目标 = tanh(镜像不变本体特征 @ P 对称投影)。投影按动作镜像置换 P
         # 对称化（左右腿目标一致），最优策略天然满足镜像等变，mirror loss
@@ -103,7 +105,9 @@ class DummyLidarVecEnv(VecEnv):
             obs=None, actions=torch.eye(NUM_ACTIONS), env=None, num_dof=NUM_ACTIONS
         )
         perm = a_aug[NUM_ACTIONS:]  # one-hot 探针提取动作镜像置换矩阵 [A, A]
-        proj_raw = torch.randn(PROPRIO_DIM, NUM_ACTIONS, generator=self._gen) / math.sqrt(PROPRIO_DIM)
+        proj_raw = torch.randn(PROPRIO_DIM, NUM_ACTIONS, generator=self._gen) / math.sqrt(
+            PROPRIO_DIM
+        )
         self._proj = 0.5 * (proj_raw + proj_raw @ perm)
         self._steps = torch.zeros(num_envs, dtype=torch.long)
         self._action_log = []
@@ -113,7 +117,7 @@ class DummyLidarVecEnv(VecEnv):
         obs_aug, _ = get_el_4090_lidar_xsym_obs_act(
             obs=policy_flat, actions=None, env=None, obs_type="policy", **self._sym_kwargs
         )
-        mirror = obs_aug[policy_flat.shape[0]:]
+        mirror = obs_aug[policy_flat.shape[0] :]
         return 0.5 * (policy_flat[:, :PROPRIO_DIM] + mirror[:, :PROPRIO_DIM])
 
     def targets_for(self, policy_flat: torch.Tensor) -> torch.Tensor:
@@ -231,7 +235,9 @@ def make_train_cfg(env: DummyLidarVecEnv, schedule: str = "fixed") -> dict:
     }
 
 
-def train_loop(alg, env, num_iters: int, tag: str, probe_obs: TensorDict | None = None) -> list[dict]:
+def train_loop(
+    alg, env, num_iters: int, tag: str, probe_obs: TensorDict | None = None
+) -> list[dict]:
     """镜像 BASE-RN:79-133 的 rollout→returns→update 主循环。
 
     ``probe_obs``：固定的评估观测批（冻结探针）——策略跟踪 MSE 在同一批
@@ -293,7 +299,9 @@ def run_g2b() -> dict:
     cfg["algorithm"]["symmetry_cfg"] = None
     cfg["algorithm"]["aux_loss_coef"] = 0.0
     alg = LidarPPO5x.construct_algorithm(env.get_observations(), env, cfg, DEVICE)
-    probe_pol = (torch.randn(256, TOTAL_DIM, generator=torch.Generator().manual_seed(777)) * 0.3).clamp(-2.5, 2.5)
+    probe_pol = (
+        torch.randn(256, TOTAL_DIM, generator=torch.Generator().manual_seed(777)) * 0.3
+    ).clamp(-2.5, 2.5)
     probe_td = TensorDict(
         {"policy": probe_pol, "height_grid": torch.zeros(256, HEIGHT_DIM)},
         batch_size=[256],
@@ -333,7 +341,9 @@ def run_g2() -> dict:
     # ── Phase A：自适应 KL 学习率路径冒烟（2 迭代，验证 4.5 行语义可运行且无 NaN） ──
     torch.manual_seed(0)
     env_a = DummyLidarVecEnv(seed=11)
-    alg_a = LidarPPO5x.construct_algorithm(env_a.get_observations(), env_a, make_train_cfg(env_a, schedule="adaptive"), DEVICE)
+    alg_a = LidarPPO5x.construct_algorithm(
+        env_a.get_observations(), env_a, make_train_cfg(env_a, schedule="adaptive"), DEVICE
+    )
     hist_a = train_loop(alg_a, env_a, 2, "adaptive")
 
     # ── Phase B：30 迭代固定学习率下降门 ──
@@ -346,7 +356,9 @@ def run_g2() -> dict:
     # 冻结探针：固定观测批（与训练同分布），跟踪 MSE 在其上测量
     probe = TensorDict(
         {
-            "policy": (torch.randn(256, TOTAL_DIM, generator=torch.Generator().manual_seed(555)) * 0.3).clamp(-2.5, 2.5),
+            "policy": (
+                torch.randn(256, TOTAL_DIM, generator=torch.Generator().manual_seed(555)) * 0.3
+            ).clamp(-2.5, 2.5),
             "height_grid": torch.zeros(256, HEIGHT_DIM),
         },
         batch_size=[256],
@@ -386,9 +398,7 @@ def run_g2() -> dict:
     if not aux_last <= 0.95 * aux_first:
         failures.append(f"aux MSE did not decrease: first3={aux_first:.4f} last3={aux_last:.4f}")
     if not (MIRROR_COEFF * sym_last) < 5e-3:
-        failures.append(
-            f"mirror loss dominant: coeff*sym={MIRROR_COEFF * sym_last:.4f} >= 5e-3"
-        )
+        failures.append(f"mirror loss dominant: coeff*sym={MIRROR_COEFF * sym_last:.4f} >= 5e-3")
 
     g2b = run_g2b()
 
@@ -401,7 +411,12 @@ def run_g2() -> dict:
         },
         "iterations": NUM_ITERS,
         "elapsed_sec": round(elapsed, 1),
-        "value_loss": {"first3": value_first, "last3": value_last, "iter0": history[0]["value"], "iterN": history[-1]["value"]},
+        "value_loss": {
+            "first3": value_first,
+            "last3": value_last,
+            "iter0": history[0]["value"],
+            "iterN": history[-1]["value"],
+        },
         "surrogate": {"iter0": history[0]["surrogate"], "iterN": history[-1]["surrogate"]},
         "symmetry_mirror": {"iter0": history[0]["symmetry"], "iterN": history[-1]["symmetry"]},
         "policy_track_mse": {"first3": track_first, "last3": track_last},
@@ -459,7 +474,7 @@ def run_g3() -> dict:
 
     def m(x: torch.Tensor) -> torch.Tensor:
         """adapter 的纯镜像半批（取增广输出后半）。"""
-        return mirror(env=None, obs=_policy_only_td(x), actions=None)[0]["policy"][x.shape[0]:]
+        return mirror(env=None, obs=_policy_only_td(x), actions=None)[0]["policy"][x.shape[0] :]
 
     # x 先规范化为“球键已排序”形式（m 的不动点域），保证 m(m(x)) == x 逐位成立
     x0 = torch.randn(B, TOTAL_DIM).clamp(-4.9, 4.9)
@@ -508,8 +523,12 @@ def run_g3() -> dict:
     }
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from artifacts import artifact_dir
+
+
 def main() -> int:
-    out_dir = TESTS_DIR / "logs"
+    out_dir = artifact_dir(__file__)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     g3 = run_g3()

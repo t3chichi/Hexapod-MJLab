@@ -42,7 +42,10 @@ import numpy as np
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO / "src"))
 
-OUT_DIR = REPO / "tests" / "terrain" / "logs"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from artifacts import artifact_dir
+
+OUT_DIR = artifact_dir(__file__)
 SEED = 42
 NWORLD = 64
 NSTEPS = 300
@@ -94,10 +97,14 @@ def main():
 
     terrain = TerrainBuilder(TerrainConfig()).build(seed=SEED)
     cx, cy, top_m, plateau_px = drop_target(terrain)
-    print(f"terrain: {terrain.nrow}x{terrain.ncol} px, {terrain.size_x:.1f}x{terrain.size_y:.1f} m, "
-          f"h_max={terrain.heightfield.max():.3f} m")
-    print(f"drop target: world ({cx:.2f}, {cy:.2f}) m, pillar top {top_m:.3f} m, "
-          f"plateau {plateau_px} px")
+    print(
+        f"terrain: {terrain.nrow}x{terrain.ncol} px, {terrain.size_x:.1f}x{terrain.size_y:.1f} m, "
+        f"h_max={terrain.heightfield.max():.3f} m"
+    )
+    print(
+        f"drop target: world ({cx:.2f}, {cy:.2f}) m, pillar top {top_m:.3f} m, "
+        f"plateau {plateau_px} px"
+    )
 
     # ---- MJCF with the generated hfield -------------------------------
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -139,15 +146,18 @@ def main():
         z_hist.append(mjd.qpos[2])
     cpu_final_z = float(mjd.qpos[2])
     cpu_final_v = float(np.linalg.norm(mjd.qvel))
-    print(f"CPU: final z={cpu_final_z:.5f} m |v|={cpu_final_v:.2e} m/s "
-          f"drift(last50)={max(z_hist[-50:]) - min(z_hist[-50:]):.2e} m")
+    print(
+        f"CPU: final z={cpu_final_z:.5f} m |v|={cpu_final_v:.2e} m/s "
+        f"drift(last50)={max(z_hist[-50:]) - min(z_hist[-50:]):.2e} m"
+    )
 
     # hfield sampling cross-check: mujoco's own surface (vertical ray) at the
     # drop point vs numpy bilinear of our field (validates row=x, col=y
     # ordering and the z = pos_z + d*ez reconstruction)
     gid = np.zeros(1, dtype=np.int32)
-    ray = mujoco.mj_ray(mjm, mjd, np.array([cx, cy, 20.0]), np.array([0.0, 0.0, -1.0]),
-                        None, 1, 1, gid)  # bodyexclude=1: skip the resting box
+    ray = mujoco.mj_ray(
+        mjm, mjd, np.array([cx, cy, 20.0]), np.array([0.0, 0.0, -1.0]), None, 1, 1, gid
+    )  # bodyexclude=1: skip the resting box
     mujoco_h_at_drop = 20.0 - ray if ray >= 0 else float("nan")
     # numpy bilinear at (cx, cy): pixel coords
     fx = cx / terrain.x_resolution
@@ -163,8 +173,10 @@ def main():
         + (1 - dx) * dy * hf_m[i0, j1]
         + dx * dy * hf_m[i1, j1]
     )
-    print(f"hfield height at drop: mujoco={mujoco_h_at_drop:.5f} m numpy={np_h:.5f} m "
-          f"(pillar top {top_m:.5f} m)")
+    print(
+        f"hfield height at drop: mujoco={mujoco_h_at_drop:.5f} m numpy={np_h:.5f} m "
+        f"(pillar top {top_m:.5f} m)"
+    )
 
     # ---- GPU batch via mujoco-warp --------------------------------------
     m = mujoco_warp.put_model(mjm)
@@ -186,16 +198,18 @@ def main():
     rest_lo, rest_hi = top_m + 0.03, top_m + 0.08
     gpu_vs_cpu = float(np.abs(final_z - cpu_final_z).max())
 
-    print(f"GPU(nworld={NWORLD}): z final mean={final_z.mean():.5f} "
-          f"min={final_z.min():.5f} max={final_z.max():.5f} m")
-    print(f"GPU: finite={finite} max|v|={max_speed:.2e} m/s "
-          f"drift(last50)={drift:.2e} m |z-cpu_z|max={gpu_vs_cpu:.2e} m")
+    print(
+        f"GPU(nworld={NWORLD}): z final mean={final_z.mean():.5f} "
+        f"min={final_z.min():.5f} max={final_z.max():.5f} m"
+    )
+    print(
+        f"GPU: finite={finite} max|v|={max_speed:.2e} m/s "
+        f"drift(last50)={drift:.2e} m |z-cpu_z|max={gpu_vs_cpu:.2e} m"
+    )
 
     checks = {
         "all_finite": finite,
-        "resting_on_pillar": bool(
-            (final_z >= rest_lo).all() and (final_z <= rest_hi).all()
-        ),
+        "resting_on_pillar": bool((final_z >= rest_lo).all() and (final_z <= rest_hi).all()),
         "at_rest_speed": max_speed < 0.1,
         "at_rest_drift": drift < 5e-3,
         "hfield_layout_ok": abs(mujoco_h_at_drop - np_h) < 1e-3,
@@ -220,7 +234,8 @@ def main():
         "checks": checks,
     }
     (OUT_DIR / "g3_hfield_check.json").write_text(
-        json.dumps(result, indent=2, default=lambda o: o.item() if hasattr(o, "item") else str(o)) + "\n"
+        json.dumps(result, indent=2, default=lambda o: o.item() if hasattr(o, "item") else str(o))
+        + "\n"
     )
 
     if not all(checks.values()):

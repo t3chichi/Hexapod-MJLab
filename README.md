@@ -1,9 +1,8 @@
 # Hexapod-MJLab
 
-EL4090 LiDAR locomotion on **mjlab** (MuJoCo Warp)。本仓库为自
-`Lidar_legged_gym`（commit `888e493` + dirty working tree）迁移的 M0 里程碑：
-包含 LiDAR 传感器仿真（Warp ray-cast kernel）、采集池采样器、点云几何工具、
-左右对称数据增强与 rsl-rl 用的 LiDAR Actor-Critic / Wrapper。
+EL4090 六足机器人与五维包络监督任务，运行于 **mjlab / MuJoCo Warp**。
+当前已完成EA2迁移与oracle优化、限定范围形态测量，以及T0-A确定性平地训练管线验收；正式学习行走和六维受限空间联合任务仍待后续验证。
+原项目来源与平台迁移记录见[MIGRATION.md](MIGRATION.md)，当前成果与边界见[阶段总结](docs/research/阶段总结.md)。
 
 ## 安装
 
@@ -89,6 +88,8 @@ PYTHONPATH=src conda run --no-capture-output -n hp_mjlab python -m \
 
 形态测量已通过限定范围验收：35个静态保持构型、7个指定慢速运动构型，见
 [形态测量与质量审查](docs/research/morphology/形态可达性测量.md)。T0-A确定性平地管线已重构，当前状态见[T0-A使用与验收](docs/tasks/el_4090_lidar/T0-A使用与验收.md)，
-[T0-A执行范围与GLM提示词](docs/tasks/el_4090_lidar/T0-A执行方案.md)列出具体目标、预算与验收门；正式学习行走仍待后续验收。
+验收协议、操作和修复记录已统一到上述文档；正式学习行走仍待后续验收。
+
+日常回归从`python tests/run.py --profile cpu`开始；有CUDA时运行`--profile gpu`。两组均不启动任务训练，旧源码对照和长测试另行选择。入口、覆盖范围与历史重放见[测试说明](tests/README.md)。
 
 文档分类与维护规则见[docs导航](docs/README.md)。

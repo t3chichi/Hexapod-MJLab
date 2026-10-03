@@ -10,7 +10,7 @@
 
 运行（纯 torch，任意含 torch 的环境）::
 
-    python tests/pd_gru_lidar_head/pool_sampler_check.py
+    python tests/lidar_sensor/pool_sampler_check.py
 """
 
 import json
@@ -19,15 +19,18 @@ from pathlib import Path
 
 import torch
 
-TESTS_DIR = Path(__file__).resolve().parent        # .../Lidar_mjlab/tests/pd_gru_lidar_head
-SRC = TESTS_DIR.parents[1] / "src" / "hexapod_mjlab" # .../Hexapod-MJLab/src/hexapod_mjlab
+TESTS_DIR = Path(__file__).resolve().parent  # .../Hexapod-MJLab/tests/lidar_sensor
+SRC = TESTS_DIR.parents[1] / "src" / "hexapod_mjlab"  # .../Hexapod-MJLab/src/hexapod_mjlab
 POOL_SAMPLERS_PATH = SRC / "utils" / "lidar" / "pool_samplers.py"
-OUT_DIR = TESTS_DIR / "logs" / "acceptance"     # 验收产物与测试同目录
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from artifacts import artifact_dir
+
+OUT_DIR = artifact_dir(__file__)
 
 # 直接按路径加载，绕过包 __init__（保持纯 torch、无环境依赖）
 import importlib.util
-spec = importlib.util.spec_from_file_location(
-    "pool_samplers", POOL_SAMPLERS_PATH)
+
+spec = importlib.util.spec_from_file_location("pool_samplers", POOL_SAMPLERS_PATH)
 pool_samplers = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pool_samplers)
 
@@ -48,8 +51,7 @@ def build_all():
         cfg_ns.seed = 42
         for k, v in kwargs.items():
             setattr(cfg_ns, k, v)
-        samplers[name] = pool_samplers.build_pool_sampler(
-            cfg_ns, N_AZ, N_EL, RAW, DEVICE)
+        samplers[name] = pool_samplers.build_pool_sampler(cfg_ns, N_AZ, N_EL, RAW, DEVICE)
     return samplers
 
 
@@ -83,12 +85,16 @@ def main() -> int:
     # random/rotating 应随帧号变化；angle/identity 不变
     frame1 = torch.ones(E, device=DEVICE, dtype=torch.long)
     for name in ("angle_stride", "identity"):
-        if not torch.equal(samplers[name].sample(points, dists, frame),
-                           samplers[name].sample(points, dists, frame1)):
+        if not torch.equal(
+            samplers[name].sample(points, dists, frame),
+            samplers[name].sample(points, dists, frame1),
+        ):
             failures.append(f"{name}: should be frame-invariant")
     for name in ("stride_rotating", "random_uniform"):
-        if torch.equal(samplers[name].sample(points, dists, frame),
-                       samplers[name].sample(points, dists, frame1)):
+        if torch.equal(
+            samplers[name].sample(points, dists, frame),
+            samplers[name].sample(points, dists, frame1),
+        ):
             failures.append(f"{name}: should vary with frame_count")
 
     # ── 3. stride_rotating 时域互补覆盖 ────────────────────────────

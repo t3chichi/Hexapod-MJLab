@@ -11,7 +11,7 @@
 
 运行（纯 torch，任意含 torch 的环境）::
 
-    python tests/pd_gru_lidar_head/symmetry_check.py
+    python tests/lidar_sensor/symmetry_check.py
 """
 
 import json
@@ -21,9 +21,12 @@ from pathlib import Path
 
 import torch
 
-TESTS_DIR = Path(__file__).resolve().parent        # .../Lidar_mjlab/tests/pd_gru_lidar_head
-SRC = TESTS_DIR.parents[1] / "src" / "hexapod_mjlab" # .../Hexapod-MJLab/src/hexapod_mjlab
-OUT_DIR = TESTS_DIR / "logs" / "acceptance"     # 验收产物与测试同目录
+TESTS_DIR = Path(__file__).resolve().parent  # .../Hexapod-MJLab/tests/lidar_sensor
+SRC = TESTS_DIR.parents[1] / "src" / "hexapod_mjlab"  # .../Hexapod-MJLab/src/hexapod_mjlab
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from artifacts import artifact_dir
+
+OUT_DIR = artifact_dir(__file__)
 
 # ── 按路径加载待测模块 ─────────────────────────────────────────────
 # 模块内部的 ``from hexapod_mjlab.utils...`` 依赖经 editable 安装的
@@ -39,8 +42,7 @@ def _load_module(dotted_name: str, path: Path):
     return mod
 
 
-sym = _load_module("el_4090_lidar_symmetry",
-                   SRC / "rl" / "el_4090_lidar_symmetry.py")
+sym = _load_module("el_4090_lidar_symmetry", SRC / "rl" / "el_4090_lidar_symmetry.py")
 
 PROPRIO_DIM, PROX, DIST, N_DOF = 66, 256, 640, 18
 GX, GY = 17, 11
@@ -52,18 +54,24 @@ def _quat_from_euler_xyz(roll, pitch, yaw):
     cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
     cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
     cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
-    return torch.tensor([cy * sr * cp - sy * cr * sp,
-                         cy * cr * sp + sy * sr * cp,
-                         sy * cr * cp - cy * sr * sp,
-                         cy * cr * cp + sy * sr * sp])
+    return torch.tensor(
+        [
+            cy * sr * cp - sy * cr * sp,
+            cy * cr * sp + sy * sr * cp,
+            sy * cr * cp - cy * sr * sp,
+            cy * cr * cp + sy * sr * sp,
+        ]
+    )
 
 
 def _row_codes(t: torch.Tensor) -> torch.Tensor:
     """行 → 可排序 int64 编码（量化 1e-5，值域 ±5 m 内安全）。"""
     q = torch.round(t * 1e5).long()
-    return (q[:, 0] + 5_000_00) * 10_000_00 ** 2 \
-        + (q[:, 1] + 5_000_00) * 10_000_00 \
+    return (
+        (q[:, 0] + 5_000_00) * 10_000_00**2
+        + (q[:, 1] + 5_000_00) * 10_000_00
         + (q[:, 2] + 5_000_00)
+    )
 
 
 def _multiset_equal(a: torch.Tensor, b: torch.Tensor) -> bool:
@@ -83,15 +91,19 @@ def main() -> int:
     # 造结构化 proprio：角度量小一些避免出格（数学性质与量级无关）
     actions = torch.randn(B, N_DOF, device=DEVICE)
 
-    sensor_quat = _quat_from_euler_xyz(0.0, math.pi / 2.0 + 0.1, 0.0) \
-        .unsqueeze(0).to(DEVICE)
+    sensor_quat = _quat_from_euler_xyz(0.0, math.pi / 2.0 + 0.1, 0.0).unsqueeze(0).to(DEVICE)
     sensor_trans = torch.tensor([[0.7, 0.0, -0.05]], device=DEVICE)
 
     obs_aug, act_aug = sym.get_el_4090_lidar_xsym_obs_act(
-        obs=obs, actions=actions, obs_type="policy",
-        proprio_dim=PROPRIO_DIM, proximal_points=PROX,
-        distal_history_points=DIST, num_dof=N_DOF,
-        sensor_quat=sensor_quat, sensor_trans=sensor_trans,
+        obs=obs,
+        actions=actions,
+        obs_type="policy",
+        proprio_dim=PROPRIO_DIM,
+        proximal_points=PROX,
+        distal_history_points=DIST,
+        num_dof=N_DOF,
+        sensor_quat=sensor_quat,
+        sensor_trans=sensor_trans,
     )
 
     # ── 1. 形状 ────────────────────────────────────────────────────
@@ -106,17 +118,17 @@ def main() -> int:
             failures.append(f"proprio sign flip wrong at idx {i}")
     for start, end in ((12, 30), (30, 48), (48, 66)):
         h = end - start
-        if not torch.allclose(half[:, start:start + h // 2], obs[:, start + h // 2:end]):
+        if not torch.allclose(half[:, start : start + h // 2], obs[:, start + h // 2 : end]):
             failures.append(f"proprio L/R swap wrong at [{start},{end})")
-    act_swap = torch.cat([actions[:, N_DOF // 2:], actions[:, :N_DOF // 2]], dim=1)
+    act_swap = torch.cat([actions[:, N_DOF // 2 :], actions[:, : N_DOF // 2]], dim=1)
     if not torch.equal(act_aug[B:], act_swap):
         failures.append("action L/R swap wrong")
 
     # ── 3. 点云镜像等变（多重集合） ────────────────────────────────
-    prox_orig = obs[:, PROPRIO_DIM:PROPRIO_DIM + PROX * 3].reshape(-1, PROX, 3)
-    prox_aug = obs_aug[B:, PROPRIO_DIM:PROPRIO_DIM + PROX * 3].reshape(-1, PROX, 3)
-    dist_orig = obs[:, PROPRIO_DIM + PROX * 3:].reshape(-1, DIST, 3)
-    dist_aug = obs_aug[B:, PROPRIO_DIM + PROX * 3:].reshape(-1, DIST, 3)
+    prox_orig = obs[:, PROPRIO_DIM : PROPRIO_DIM + PROX * 3].reshape(-1, PROX, 3)
+    prox_aug = obs_aug[B:, PROPRIO_DIM : PROPRIO_DIM + PROX * 3].reshape(-1, PROX, 3)
+    dist_orig = obs[:, PROPRIO_DIM + PROX * 3 :].reshape(-1, DIST, 3)
+    dist_aug = obs_aug[B:, PROPRIO_DIM + PROX * 3 :].reshape(-1, DIST, 3)
     mirrored = prox_orig.clone()
     mirrored[:, :, 1] *= -1
     if not _multiset_equal(mirrored.reshape(-1, 3), prox_aug.reshape(-1, 3)):
@@ -129,17 +141,20 @@ def main() -> int:
     # ── 4. 维度守卫 + auxiliary 路径 ───────────────────────────────
     try:
         sym.get_el_4090_lidar_xsym_obs_act(
-            obs=torch.randn(B, TOTAL + 1, device=DEVICE), obs_type="policy",
-            proprio_dim=PROPRIO_DIM, proximal_points=PROX,
-            distal_history_points=DIST)
+            obs=torch.randn(B, TOTAL + 1, device=DEVICE),
+            obs_type="policy",
+            proprio_dim=PROPRIO_DIM,
+            proximal_points=PROX,
+            distal_history_points=DIST,
+        )
         failures.append("dim guard did not raise")
     except ValueError:
         pass
 
     grid = torch.randn(B, GX * GY, device=DEVICE)
     grid_aug, _ = sym.get_el_4090_lidar_xsym_obs_act(
-        obs=grid, obs_type="auxiliary",
-        height_grid_x_count=GX, height_grid_y_count=GY)
+        obs=grid, obs_type="auxiliary", height_grid_x_count=GX, height_grid_y_count=GY
+    )
     expect = torch.cat([grid, grid.reshape(-1, GX, GY).flip(dims=[2]).reshape_as(grid)])
     if not torch.equal(grid_aug, expect):
         failures.append("auxiliary grid y-flip wrong")

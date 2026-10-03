@@ -115,8 +115,12 @@ def build_new_models(obs_td: TensorDict, obs_groups: dict):
     return actor, critic
 
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from artifacts import artifact_dir
+
+
 def main() -> int:
-    out_dir = TESTS_DIR / "logs"
+    out_dir = artifact_dir(__file__)
     out_dir.mkdir(parents=True, exist_ok=True)
     results: dict = {}
     failures: list[str] = []
@@ -206,7 +210,9 @@ def main() -> int:
         # 5) critic 缓存未命中（换一批观测，须从输入重建而非复用缓存）
         obs2 = torch.randn(B, TOTAL_DIM)
         obs2[:, PROPRIO_DIM:] = obs2[:, PROPRIO_DIM:].clamp(-4.9, 4.9)
-        obs_td2 = TensorDict({"policy": obs2.clone(), "height_grid": height.clone()}, batch_size=[B])
+        obs_td2 = TensorDict(
+            {"policy": obs2.clone(), "height_grid": height.clone()}, batch_size=[B]
+        )
         old_value2 = old.evaluate(obs2)
         new_value2 = critic(obs_td2)
         check("critic_value_cache_miss", old_value2, new_value2)

@@ -12,7 +12,7 @@
 
 运行（纯 torch，任意含 torch 的环境）::
 
-    python tests/pd_gru_lidar_head/mount_check.py
+    python tests/lidar_sensor/mount_check.py
 """
 
 import json
@@ -24,9 +24,12 @@ from pathlib import Path
 import numpy as np
 import torch
 
-TESTS_DIR = Path(__file__).resolve().parent        # .../Lidar_mjlab/tests/pd_gru_lidar_head
-SRC = TESTS_DIR.parents[1] / "src" / "hexapod_mjlab" # .../Hexapod-MJLab/src/hexapod_mjlab
-OUT_DIR = TESTS_DIR / "logs" / "acceptance"     # 验收产物与测试同目录
+TESTS_DIR = Path(__file__).resolve().parent  # .../Hexapod-MJLab/tests/lidar_sensor
+SRC = TESTS_DIR.parents[1] / "src" / "hexapod_mjlab"  # .../Hexapod-MJLab/src/hexapod_mjlab
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from artifacts import artifact_dir
+
+OUT_DIR = artifact_dir(__file__)
 
 N_AZIMUTH = 900
 N_ELEVATION = 96
@@ -41,16 +44,20 @@ DEG = 180.0 / math.pi
 # 本地四元数工具（isaacgym.torch_utils 同源公式，保持无 Isaac 可运行）
 # ---------------------------------------------------------------------------
 
+
 def _quat_from_euler_xyz(roll: float, pitch: float, yaw: float) -> torch.Tensor:
     cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
     cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
     cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
-    return torch.tensor([
-        cy * sr * cp - sy * cr * sp,
-        cy * cr * sp + sy * sr * cp,
-        sy * cr * cp - cy * sr * sp,
-        cy * cr * cp + sy * sr * sp,
-    ], dtype=torch.float64)  # xyzw
+    return torch.tensor(
+        [
+            cy * sr * cp - sy * cr * sp,
+            cy * cr * sp + sy * sr * cp,
+            sy * cr * cp - cy * sr * sp,
+            cy * cr * cp + sy * sr * sp,
+        ],
+        dtype=torch.float64,
+    )  # xyzw
 
 
 def _quat_apply(q: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
@@ -67,11 +74,14 @@ def generate_airy_directions() -> torch.Tensor:
     theta = torch.arange(N_AZIMUTH, dtype=torch.float64) * (2.0 * math.pi / N_AZIMUTH)
     cos_phi, sin_phi = torch.cos(phi), torch.sin(phi)
     cos_theta, sin_theta = torch.cos(theta), torch.sin(theta)
-    dirs = torch.stack([
-        cos_phi[None, :] * cos_theta[:, None],
-        cos_phi[None, :] * sin_theta[:, None],
-        sin_phi[None, :].expand(N_AZIMUTH, N_ELEVATION),
-    ], dim=-1).reshape(-1, 3)
+    dirs = torch.stack(
+        [
+            cos_phi[None, :] * cos_theta[:, None],
+            cos_phi[None, :] * sin_theta[:, None],
+            sin_phi[None, :].expand(N_AZIMUTH, N_ELEVATION),
+        ],
+        dim=-1,
+    ).reshape(-1, 3)
     return dirs
 
 
@@ -82,16 +92,18 @@ def main() -> int:
 
     # ── 1. 与 LidarSensor 的 generate_AIRY 交叉核对 ──────────────────
     import importlib.util
-    gen_path = (SRC / "utils" / "lidar" / "sensor_pattern" / "sensor_lidar"
-                / "genera_lidar_scan_pattern.py")
+
+    gen_path = (
+        SRC / "utils" / "lidar" / "sensor_pattern" / "sensor_lidar" / "genera_lidar_scan_pattern.py"
+    )
     spec = importlib.util.spec_from_file_location("gen_scan", gen_path)
     gen_mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gen_mod)
     theta_grid, phi_grid = gen_mod.SpinningLidarGenerator.generate_AIRY(
-        n_channels=N_ELEVATION, horizontal_resolution_deg=H_RES_DEG)
+        n_channels=N_ELEVATION, horizontal_resolution_deg=H_RES_DEG
+    )
     n_az_actual = int(round(360.0 / H_RES_DEG))
-    ok_pattern = (theta_grid.shape[0] == N_AZIMUTH * N_ELEVATION
-                  and n_az_actual == N_AZIMUTH)
+    ok_pattern = theta_grid.shape[0] == N_AZIMUTH * N_ELEVATION and n_az_actual == N_AZIMUTH
     # generate_AIRY 内部 np.linspace(0, 2π, n_az, endpoint=False) 与本地
     # 2π*az/900 等价；逐元素核对前 96×3 块
     dirs_local = generate_airy_directions()
@@ -99,9 +111,13 @@ def main() -> int:
     phi_t = torch.tensor(phi_grid.reshape(N_AZIMUTH, N_ELEVATION))
     phi_local = torch.arange(N_ELEVATION, dtype=torch.float64) * (math.pi / 2.0) / (N_ELEVATION - 1)
     ok_pattern = ok_pattern and bool(
-        torch.allclose(theta_t, torch.arange(N_AZIMUTH, dtype=torch.float64)
-                       [:, None] * (2 * math.pi / N_AZIMUTH), atol=1e-9)
-        and torch.allclose(phi_t, phi_local[None, :].expand(N_AZIMUTH, -1), atol=1e-9))
+        torch.allclose(
+            theta_t,
+            torch.arange(N_AZIMUTH, dtype=torch.float64)[:, None] * (2 * math.pi / N_AZIMUTH),
+            atol=1e-9,
+        )
+        and torch.allclose(phi_t, phi_local[None, :].expand(N_AZIMUTH, -1), atol=1e-9)
+    )
     results["pattern_cross_check"] = bool(ok_pattern)
     if not ok_pattern:
         failures.append("ray pattern mismatch vs generate_AIRY")
@@ -111,12 +127,18 @@ def main() -> int:
     body_dirs = _quat_apply(offset_q, dirs_local)
 
     pole = body_dirs[(N_AZIMUTH // 2) * N_ELEVATION + (N_ELEVATION - 1)]  # 任意方位的 el=90
-    ring_down = body_dirs[0 * N_ELEVATION + 0]       # az=0, el=0 → 体坐标 -z
+    ring_down = body_dirs[0 * N_ELEVATION + 0]  # az=0, el=0 → 体坐标 -z
     ring_left = body_dirs[(N_AZIMUTH // 4) * N_ELEVATION + 0]
     ring_up = body_dirs[(N_AZIMUTH // 2) * N_ELEVATION + 0]
 
     checks = {
-        "pole_forward": bool(torch.allclose(pole, torch.tensor([math.cos(TILT_RAD), 0.0, -math.sin(TILT_RAD)], dtype=torch.float64), atol=1e-6)),
+        "pole_forward": bool(
+            torch.allclose(
+                pole,
+                torch.tensor([math.cos(TILT_RAD), 0.0, -math.sin(TILT_RAD)], dtype=torch.float64),
+                atol=1e-6,
+            )
+        ),
         "pole_tilt_down_deg": float(math.asin(-pole[2].item()) * DEG),
         # tilt 使垂直环射线偏转 TILT_RAD，界取 0.99 而非 0.999
         "ring_down_is_nadir": bool(ring_down[2].item() < -0.99),
@@ -129,9 +151,10 @@ def main() -> int:
             failures.append(f"mount geometry: {key}")
 
     # ── 3. 覆盖统计 + split 阈值退化量化 ──────────────────────────
-    el_body = torch.asin(body_dirs[:, 2].clamp(-1, 1)) * DEG          # 体坐标仰角
-    phi_sensor = (torch.arange(N_ELEVATION, dtype=torch.float64)
-                  * (90.0 / (N_ELEVATION - 1)))                       # 传感器系仰角
+    el_body = torch.asin(body_dirs[:, 2].clamp(-1, 1)) * DEG  # 体坐标仰角
+    phi_sensor = torch.arange(N_ELEVATION, dtype=torch.float64) * (
+        90.0 / (N_ELEVATION - 1)
+    )  # 传感器系仰角
     prox_frac = float((phi_sensor >= SPLIT_THETA_DEG).float().mean())
     results["coverage"] = {
         "body_elevation_min_deg": float(el_body.min()),
@@ -139,10 +162,12 @@ def main() -> int:
         "split_theta_deg": SPLIT_THETA_DEG,
         "proximal_ray_fraction": prox_frac,
         "distal_ray_fraction": 1.0 - prox_frac,
-        "note": ("45° 阈值 = 与穹顶轴(体前方, 下倾 tilt)的夹角；阈值锥与地面"
-                 "相交为抛物线(双曲线)，前向楔内黄/近场透镜与两翼红。"
-                 "注意: 体仰角≈-44° 仅在正前方位角处成立, 侧向边界接近体"
-                 "水平面, 勿用'体仰角分界'理解。G4 扫描定稿"),
+        "note": (
+            "45° 阈值 = 与穹顶轴(体前方, 下倾 tilt)的夹角；阈值锥与地面"
+            "相交为抛物线(双曲线)，前向楔内黄/近场透镜与两翼红。"
+            "注意: 体仰角≈-44° 仅在正前方位角处成立, 侧向边界接近体"
+            "水平面, 勿用'体仰角分界'理解。G4 扫描定稿"
+        ),
     }
     if not 0.45 <= prox_frac <= 0.55:
         failures.append(f"unexpected proximal fraction {prox_frac:.3f}")
@@ -150,6 +175,7 @@ def main() -> int:
     # ── 4. 覆盖可视化（BEV + 侧视） ────────────────────────────────
     try:
         import matplotlib
+
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
@@ -157,11 +183,13 @@ def main() -> int:
         fig, axes = plt.subplots(1, 2, figsize=(12, 6))
         axes[0].scatter(sub[:, 0], sub[:, 1], s=0.5, c=sub[:, 2], cmap="coolwarm")
         axes[0].set_title("Airy head mount BEV (x-y), color=body z")
-        axes[0].set_xlabel("body x"); axes[0].set_ylabel("body y")
+        axes[0].set_xlabel("body x")
+        axes[0].set_ylabel("body y")
         axes[0].set_aspect("equal")
         axes[1].scatter(sub[:, 0], sub[:, 2], s=0.5, c="gray")
         axes[1].set_title(f"side view (x-z), tilt={TILT_RAD:.3f} rad")
-        axes[1].set_xlabel("body x"); axes[1].set_ylabel("body z")
+        axes[1].set_xlabel("body x")
+        axes[1].set_ylabel("body z")
         axes[1].set_aspect("equal")
         fig.tight_layout()
         fig.savefig(OUT_DIR / "g1_mount_coverage.png", dpi=140)
