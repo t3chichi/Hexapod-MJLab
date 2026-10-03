@@ -55,7 +55,7 @@ def main():
     for ax in axes.flat:ax.set(xticks=x,xticklabels=labels);ax.grid(axis='y',alpha=.2)
     fig.suptitle('EA2 selected teacher: frozen two-map + independent-map audit')
     fig.supxlabel('Negative change is better. MIN-infeasible frames remain in safety denominators.\nEmergency frames remain in trajectory comparisons.', fontsize=9)
-    out=Path('docs/figures');out.mkdir(exist_ok=True)
+    out=Path('docs/tasks/envelope_adaptive_2/oracle/figures');out.mkdir(parents=True,exist_ok=True)
     fig.savefig(out/'ea2_oracle_selection_20261003.png',dpi=160);plt.close(fig)
     print('SELECTION REPORT PASS',path)
     for r in selected:print(r['seed'],r['candidate_valid'],r['legacy_safe_shape'],r['relative_to_production_legacy_percent'])

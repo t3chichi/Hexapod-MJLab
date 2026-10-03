@@ -98,7 +98,7 @@ with `PYTHONPATH=src OMP_NUM_THREADS=1` in `hp_mjlab`, in this order:
 
 CPU only; existing SciPy, no new dependencies. Evidence goes to
 `logs/ea2/oracle_static/20261003/`. Correctness PASS is separate from efficacy;
-see [the experiment record](../docs/EA2静态oracle对照实验.md) for results and limits.
+see [the experiment record](../docs/tasks/envelope_adaptive_2/oracle/实验记录.md) for results and limits.
 
 The default EA2 teacher is now the whole-polygon causal provider. Historical
 source gates explicitly retain `oracle_kind="legacy"` where they inspect the

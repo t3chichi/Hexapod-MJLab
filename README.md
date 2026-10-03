@@ -79,10 +79,12 @@ PYTHONPATH=src conda run --no-capture-output -n hp_mjlab python -m \
 数据、checkpoint和证据分别位于 `logs/ea2/data/`、`logs/ea2/runs/`、
 `logs/ea2/acceptance/`。采集、训练、评估和交互显示也可分别调用。
 使用命令、对齐范围、验收结果及后续复用边界见
-[EA2迁移与验收记录](docs/EA2迁移与验收记录.md)。公共世界坐标绘制位于
+[EA2使用说明](docs/tasks/envelope_adaptive_2/使用说明.md)与[迁移验收](docs/tasks/envelope_adaptive_2/迁移验收.md)。公共世界坐标绘制位于
 `utils/visualization/`，独立示例为 `utils/visualization/example.py`。
 
 当前默认教师已升级为完整多边形与因果前视方案；有效性、紧急参考和监督标签分别记录，旧模型自动恢复legacy教师。固定0.10米配方的四图验证、已知尾部代价、任务重构及复现命令见
-[oracle选型与重构验收](docs/EA2%20oracle选型与任务重构验收.md)。
-原静态实验与负结果仍见[EA2静态oracle对照实验](docs/EA2静态oracle对照实验.md)。
-后续六维形态/真实机器人联合任务准备见[联合任务细化方案](docs/毕业设计联合任务准备与细化方案.md)。
+[oracle选型与重构验收](docs/tasks/envelope_adaptive_2/oracle/选型与验收.md)。
+原静态实验与负结果仍见[oracle实验记录](docs/tasks/envelope_adaptive_2/oracle/实验记录.md)。
+后续六维形态/真实机器人联合任务准备见[联合任务细化方案](docs/research/联合任务方案.md)。
+
+文档分类与维护规则见[docs导航](docs/README.md)。
