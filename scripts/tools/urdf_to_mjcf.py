@@ -10,6 +10,14 @@ Reproducible, in-repo pipeline (no references outside this repository):
     src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090.xml    (deliverable)
     tests/robot/joint_table.json / .md      (URDF vs MJCF cross-check + old-config gains)
 
+Variants (--variant, default "base"): the "radar" variant converts
+urdf/el_4090_lidar.urdf (a strict URDF superset of the base: 4 extra fixed
+links — RADAR_BRACKET, LIDAR_AIRY, LIDAR_GLASS and the empty LIDAR_SENSOR
+mount frame — plus a lidar_sensor site on the latter) into
+mjcf/el_4090_lidar.xml. Its 18 revolute joints are identical to the base, so
+it does not write the joint table; tests/robot/joint_table.* stays bound to
+the base pair.
+
 Programmatic edits applied to the imported spec:
 
   a) compiler meshdir="../meshes" (XML lives in mjcf/, meshes in ../meshes) and
@@ -52,11 +60,37 @@ import mujoco
 import numpy as np
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-URDF_PATH = REPO / "src/hexapod_mjlab/assets/robots/el_4090/urdf/el_4090.urdf"
-MESHES_DIR = REPO / "src/hexapod_mjlab/assets/robots/el_4090/meshes"
-XML_OUT = REPO / "src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090.xml"
+ASSETS_DIR = REPO / "src/hexapod_mjlab/assets/robots/el_4090"
+MESHES_DIR = ASSETS_DIR / "meshes"
 JOINT_TABLE_JSON = REPO / "tests/robot/joint_table.json"
 JOINT_TABLE_MD = REPO / "tests/robot/joint_table.md"
+
+# Robot variants sharing the el_4090 asset directory (same meshes/, sibling
+# URDFs). The radar variant is a strict URDF superset of the base: identical
+# 18 revolute joints and link inertials, plus 4 fixed radar links (RADAR_
+# BRACKET, LIDAR_AIRY, LIDAR_GLASS and the empty LIDAR_SENSOR mount frame).
+# Its joint table is therefore byte-equivalent to the base one, which stays
+# the committed acceptance data — the variant only adds a second MJCF.
+VARIANTS = {
+    "base": {
+        "urdf": ASSETS_DIR / "urdf/el_4090.urdf",
+        "xml_out": ASSETS_DIR / "mjcf/el_4090.xml",
+        "n_fixed_joints": 6,
+        "n_body": 26,   # world + BASE + 18 jointed + 6 fixed FOOT
+        "n_mesh": 25,
+        "write_joint_table": True,
+        "sensor_body": None,
+    },
+    "radar": {
+        "urdf": ASSETS_DIR / "urdf/el_4090_lidar.urdf",
+        "xml_out": ASSETS_DIR / "mjcf/el_4090_lidar.xml",
+        "n_fixed_joints": 10,
+        "n_body": 30,   # base 26 + RADAR_BRACKET + LIDAR_AIRY + LIDAR_GLASS + LIDAR_SENSOR
+        "n_mesh": 28,
+        "write_joint_table": False,
+        "sensor_body": "LIDAR_SENSOR",  # empty URDF frame kept as body + site
+    },
+}
 
 # --------------------------------------------------------------------------- #
 # Old legged_gym config values (see module docstring for provenance).
@@ -145,9 +179,9 @@ def parse_urdf(path: pathlib.Path) -> dict:
 # --------------------------------------------------------------------------- #
 # Stand-height measurement (separate throwaway spec with a floor plane)
 # --------------------------------------------------------------------------- #
-def measure_stand_height() -> tuple[float, float]:
+def measure_stand_height(urdf_path: pathlib.Path) -> tuple[float, float]:
     """Return (exact_touch_height, min_foot_clearance_at_z1) at default joint angles."""
-    spec = mujoco.MjSpec.from_file(str(URDF_PATH))
+    spec = mujoco.MjSpec.from_file(str(urdf_path))
     spec.body("BASE").add_joint(type=mujoco.mjtJoint.mjJNT_FREE)
     spec.worldbody.add_geom(type=mujoco.mjtGeom.mjGEOM_PLANE, size=[0, 0, 0.1],
                             name="measurement_floor")
@@ -178,14 +212,18 @@ def measure_stand_height() -> tuple[float, float]:
 # --------------------------------------------------------------------------- #
 # Main conversion
 # --------------------------------------------------------------------------- #
-def main() -> None:
-    urdf = parse_urdf(URDF_PATH)
+def main(variant: str = "base") -> None:
+    cfg = VARIANTS[variant]
+    urdf_path = cfg["urdf"]
+    xml_out = cfg["xml_out"]
+
+    urdf = parse_urdf(urdf_path)
     rev_joints = [j for j in urdf["joints"] if j["type"] == "revolute"]
     fixed_joints = [j for j in urdf["joints"] if j["type"] == "fixed"]
-    assert len(rev_joints) == 18 and len(fixed_joints) == 6
+    assert len(rev_joints) == 18 and len(fixed_joints) == cfg["n_fixed_joints"]
 
     # --- stand height (measured, must match the constant above) -------------
-    exact_touch, min_dist = measure_stand_height()
+    exact_touch, min_dist = measure_stand_height(urdf_path)
     stand_height = round(exact_touch + FOOT_CLEARANCE, 5)
     assert abs(stand_height - STAND_HEIGHT) < 1e-4, (
         f"measured stand height {stand_height} drifted from constant {STAND_HEIGHT}")
@@ -194,7 +232,7 @@ def main() -> None:
           f"keyframe z = {stand_height:.5f} m ({FOOT_CLEARANCE*1000:.0f} mm clearance)")
 
     # --- import URDF ---------------------------------------------------------
-    spec = mujoco.MjSpec.from_file(str(URDF_PATH))
+    spec = mujoco.MjSpec.from_file(str(urdf_path))
     spec.option.timestep = OLD_CONFIG["sim_dt"]  # match old sim dt
 
     # (a) meshdir + maxhullvert + fusestatic ------------------------------------
@@ -207,6 +245,19 @@ def main() -> None:
     # (b) freejoint on BASE ----------------------------------------------------
     base = spec.body("BASE")
     base.add_joint(type=mujoco.mjtJoint.mjJNT_FREE, name="root")
+
+    # (b2) sensor mount frame — the radar variant's empty LIDAR_SENSOR URDF
+    # link is the mechanical LiDAR frame; expose it as a site so the sensor
+    # stack can read the mount pose from the model instead of hand-written
+    # offsets (site sits at the body origin; the body carries no geoms).
+    # NOTE: the radome (LIDAR_GLASS) is visual-only in the URDF by design and
+    # cannot travel through MjSpec: the URDF compiler default discardvisual
+    # drops every non-colliding geom (contype=conaffinity=0) at compile time,
+    # taking its now-unreferenced mesh with it. It is injected back into the
+    # XML post-processing below as a group-1 visual geom.
+    if cfg["sensor_body"]:
+        site = spec.body(cfg["sensor_body"]).add_site(name="lidar_sensor")
+        site.size = [0.01, 0.0, 0.0]
 
     # (c) motors, one per hinge joint, in URDF order ---------------------------
     for j in rev_joints:
@@ -234,8 +285,8 @@ def main() -> None:
     spec.add_key(name="stand", qpos=qpos.tolist(), qvel=np.zeros(model.nv).tolist())
 
     # --- final compile + write ------------------------------------------------
-    model = spec.compile()  # 26 bodies: world + BASE + 18 jointed + 6 fixed FOOT
-    assert model.nkey == 1 and model.nu == 18 and model.nbody == 26 and model.nq == 25
+    model = spec.compile()  # base: 26 bodies; radar: 26 + 4 fixed radar links
+    assert model.nkey == 1 and model.nu == 18 and model.nbody == cfg["n_body"] and model.nq == 25
     xml_text = spec.to_xml()  # mesh paths relative to XML location via meshdir
 
     # Post-processing (both verified by assertions on reload below):
@@ -246,18 +297,39 @@ def main() -> None:
     xml_text, n_mesh = re.subn(
         r'(<mesh name="[^"]+"[^>]*?file="[^"]+)"\s*/>', r'\1" maxhullvert="64"/>',
         xml_text)
-    assert n_mesh == 25, f"mesh maxhullvert rewrite hit {n_mesh} elements, expected 25"
+    # the radome mesh is injected after this pass (see b2), so the URDF-import
+    # pipeline emits one fewer mesh than the final XML
+    n_mesh_imported = cfg["n_mesh"] - (1 if cfg["sensor_body"] else 0)
+    assert n_mesh == n_mesh_imported, (
+        f"mesh maxhullvert rewrite hit {n_mesh} elements, expected {n_mesh_imported}")
     xml_text, n_act = re.subn(
         r'<general (name="(\w+)" joint="\2") (ctrlrange="-80 80")/>',
         r'<motor \1 \3/>', xml_text)
     assert n_act == 18, f"motor rewrite hit {n_act} elements, expected 18"
 
-    XML_OUT.parent.mkdir(parents=True, exist_ok=True)
-    XML_OUT.write_text(xml_text)
-    print(f"[write] {XML_OUT}")
+    # Radome injection (radar variant only): see the b2 note — discardvisual
+    # makes MjSpec unable to carry a visual-only geom, so it is added here at
+    # the XML level: mesh asset + non-colliding group-1 geom on LIDAR_GLASS
+    # (the URDF gives the radome a <visual> element only, no <collision>).
+    if cfg["sensor_body"]:
+        mj_root = ET.fromstring(xml_text)
+        asset = mj_root.find("asset")
+        assert asset is not None, "no <asset> element in generated XML"
+        asset.append(ET.Element("mesh", {
+            "name": "LIDAR_GLASS", "file": "LIDAR_GLASS.STL", "maxhullvert": "64"}))
+        glass_body = next(b for b in mj_root.iter("body")
+                          if b.get("name") == "LIDAR_GLASS")
+        glass_body.append(ET.Element("geom", {
+            "name": "LIDAR_GLASS_visual", "type": "mesh", "mesh": "LIDAR_GLASS",
+            "contype": "0", "conaffinity": "0", "group": "1"}))
+        xml_text = ET.tostring(mj_root, encoding="unicode")
+
+    xml_out.parent.mkdir(parents=True, exist_ok=True)
+    xml_out.write_text(xml_text)
+    print(f"[write] {xml_out}")
 
     # --- G1 gate: reload from disk -------------------------------------------
-    m = mujoco.MjModel.from_xml_path(str(XML_OUT))
+    m = mujoco.MjModel.from_xml_path(str(xml_out))
     print(f"[G1] reload OK: nbody={m.nbody} njnt={m.njnt} ngeom={m.ngeom} "
           f"nu={m.nu} nq={m.nq} nkey={m.nkey} timestep={m.opt.timestep}")
 
@@ -295,8 +367,32 @@ def main() -> None:
                 assert body_name == f"{leg}_FOOT", (
                     f"{leg}_FOOT geom attached to {body_name}")
 
+    # --- radar-variant extras: fixed radar bodies + sensor site round-trip ---
+    if cfg["sensor_body"]:
+        for b in ("RADAR_BRACKET", "LIDAR_AIRY", "LIDAR_GLASS", "LIDAR_SENSOR"):
+            bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, b)
+            assert bid > 0, f"radar body {b} missing after XML round-trip"
+        sid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_SITE, "lidar_sensor")
+        assert sid >= 0, "lidar_sensor site missing after XML round-trip"
+        sensor_bid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_BODY, cfg["sensor_body"])
+        assert m.site_bodyid[sid] == sensor_bid, "lidar_sensor site on wrong body"
+        gid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_GEOM, "LIDAR_GLASS_visual")
+        assert gid >= 0, "LIDAR_GLASS_visual geom missing after XML round-trip"
+        assert m.geom_contype[gid] == 0 and m.geom_conaffinity[gid] == 0, (
+            "radome visual geom must not collide")
+        print(f"[G1] lidar_sensor site OK on body '{cfg['sensor_body']}' "
+              f"(body id {sensor_bid}, pos {np.asarray(m.site_pos[sid]).tolist()})")
+        print(f"[G1] LIDAR_GLASS_visual OK: visual-only radome geom (contype=0)")
+
     # --- joint table cross-check (G2) ----------------------------------------
-    table = build_joint_table(m, urdf, rev_joints)
+    if not cfg["write_joint_table"]:
+        # The variant adds no actuated joints, so the base joint table remains
+        # the single committed acceptance record for all variants.
+        print(f"[G2] joint table skipped for variant '{variant}' "
+              f"(18 revolute joints identical to base; "
+              f"tests/robot/joint_table.json stays bound to the base pair)")
+    else:
+        table = build_joint_table(m, urdf, rev_joints)
 
     # keyframe round-trip check
     key_qpos = m.key_qpos[0].copy()
@@ -313,35 +409,35 @@ def main() -> None:
         assert m.actuator_biastype[aid] == mujoco.mjtBias.mjBIAS_NONE
         assert np.allclose(m.actuator_ctrlrange[aid], [-j["effort"], j["effort"]])
         assert abs(m.actuator_gear[aid][0] - 1.0) < TOL
-    print(f"[G2] joint table: {len(table['joints'])} joints, all exact matches")
-
-    # --- collision audit ------------------------------------------------------
-    audit = collision_audit(m, urdf)
-
-    # --- deliverables ---------------------------------------------------------
-    JOINT_TABLE_JSON.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "generated_by": "scripts/urdf_to_mjcf.py",
-        "urdf": "src/hexapod_mjlab/assets/robots/el_4090/urdf/el_4090.urdf",
-        "mjcf": "src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090.xml",
-        "stand_keyframe": {
-            "name": "stand",
-            "base_pos": [0.0, 0.0, stand_height],
-            "base_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
-            "joint_angles": OLD_CONFIG["default_dof_pos"],
-            "exact_touch_height": exact_touch,
-            "foot_clearance_m": FOOT_CLEARANCE,
-        },
-        "old_config": OLD_CONFIG,
-        "joint_order": [j["name"] for j in rev_joints],
-        "joints": table["joints"],
-        "collision_audit": audit,
-        "notes": table["notes"],
-    }
-    JOINT_TABLE_JSON.write_text(json.dumps(payload, indent=2))
-    write_markdown_table(payload)
-    print(f"[write] {JOINT_TABLE_JSON}")
-    print(f"[write] {JOINT_TABLE_MD}")
+    # --- collision audit + deliverables ---------------------------------------
+    # The committed acceptance payload (tests/robot/joint_table.{json,md}) is
+    # bound to the base URDF↔MJCF pair; the radar variant delivers only its MJCF.
+    if cfg["write_joint_table"]:
+        print(f"[G2] joint table: {len(table['joints'])} joints, all exact matches")
+        audit = collision_audit(m, urdf)
+        JOINT_TABLE_JSON.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "generated_by": "scripts/tools/urdf_to_mjcf.py",
+            "urdf": "src/hexapod_mjlab/assets/robots/el_4090/urdf/el_4090.urdf",
+            "mjcf": "src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090.xml",
+            "stand_keyframe": {
+                "name": "stand",
+                "base_pos": [0.0, 0.0, stand_height],
+                "base_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+                "joint_angles": OLD_CONFIG["default_dof_pos"],
+                "exact_touch_height": exact_touch,
+                "foot_clearance_m": FOOT_CLEARANCE,
+            },
+            "old_config": OLD_CONFIG,
+            "joint_order": [j["name"] for j in rev_joints],
+            "joints": table["joints"],
+            "collision_audit": audit,
+            "notes": table["notes"],
+        }
+        JOINT_TABLE_JSON.write_text(json.dumps(payload, indent=2))
+        write_markdown_table(payload)
+        print(f"[write] {JOINT_TABLE_JSON}")
+        print(f"[write] {JOINT_TABLE_MD}")
 
 
 def build_joint_table(m: mujoco.MjModel, urdf: dict, rev_joints: list[dict]) -> dict:
@@ -500,4 +596,9 @@ def write_markdown_table(payload: dict) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    ap = argparse.ArgumentParser(
+        description="Convert an el_4090 robot-variant URDF to MJCF.")
+    ap.add_argument("--variant", choices=sorted(VARIANTS), default="base",
+                    help="robot variant to convert (default: base)")
+    main(ap.parse_args().variant)

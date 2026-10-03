@@ -20,9 +20,13 @@ from mjlab.rl.runner import MjlabOnPolicyRunner
 from hexapod_mjlab.tasks.el_4090_lidar.mdp.lidar import (
   LIDAR_MAX_RANGE,
   PROXIMAL_POINTS,
+  resolve_lidar_mount,
 )
 
-# LiDAR mount (old El4090LidarHeadCfg.lidar): head-front mount with pitch tilt.
+# LiDAR mount fallback (old El4090LidarHeadCfg.lidar): head-front mount with
+# pitch tilt. Single source of truth is the lidar_sensor site in the radar
+# variant MJCF (resolve_lidar_mount); these hand-written values apply only
+# when that site is absent (base variant).
 SENSOR_OFFSET_POS = (0.7, 0.0, -0.05)
 PITCH_TILT_DOWN_RAD = 0.1
 SENSOR_OFFSET_RPY = (0.0, math.pi / 2.0 + PITCH_TILT_DOWN_RAD, 0.0)
@@ -67,10 +71,20 @@ class El4090LidarRunner(MjlabOnPolicyRunner):
     # looks for these attributes on the env it receives).
     if not hasattr(env, "_sensor_offset_quat"):
       device_str = str(device)
-      env._sensor_offset_quat = _euler_xyz_to_quat_xyzw(*SENSOR_OFFSET_RPY).to(
-        device_str
-      )
-      env._sensor_translation = torch.tensor(
-        SENSOR_OFFSET_POS, dtype=torch.float32, device=device_str
-      ).view(1, 3)
+      mount = resolve_lidar_mount()
+      if mount is not None:
+        mount_pos, mount_quat_xyzw = mount
+        env._sensor_offset_quat = torch.tensor(
+          mount_quat_xyzw, dtype=torch.float32, device=device_str
+        ).view(1, 4)
+        env._sensor_translation = torch.tensor(
+          mount_pos, dtype=torch.float32, device=device_str
+        ).view(1, 3)
+      else:
+        env._sensor_offset_quat = _euler_xyz_to_quat_xyzw(*SENSOR_OFFSET_RPY).to(
+          device_str
+        )
+        env._sensor_translation = torch.tensor(
+          SENSOR_OFFSET_POS, dtype=torch.float32, device=device_str
+        ).view(1, 3)
     super().__init__(env, train_cfg, log_dir, device)

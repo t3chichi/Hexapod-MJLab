@@ -36,9 +36,12 @@ from . import mdp
 from .mdp.commands import El4090VelocityCommandCfg
 from .mdp.terrain import El4090PillarFieldCfg, make_el_4090_terrain_config
 
-# ── Robot (M1) ────────────────────────────────────────────────────────────
+# ── Robot (M1 + radar variant) ────────────────────────────────────────────
+# The radar variant MJCF (strict superset of the base: fixed radar links +
+# lidar_sensor site). The base el_4090.xml remains the M1 acceptance target
+# in tests/robot/.
 _EL4090_XML = (
-  Path(__file__).parents[2] / "assets" / "robots" / "el_4090" / "mjcf" / "el_4090.xml"
+  Path(__file__).parents[2] / "assets" / "robots" / "el_4090" / "mjcf" / "el_4090_lidar.xml"
 )
 
 JOINT_NAMES = (

@@ -5,8 +5,11 @@ semantics; see ``Lidar_legged_gym/.../pd_gru_lidar_head/el_4090_lidar_head.py``
 and ``rsl_rl/utils/lidar_wrapper.py``)::
 
     10 Hz tick (every 5th 50 Hz policy step, forced on any env reset):
-        sensor pose <- base pose (wxyz->xyzw) x mount (0.7, 0, -0.05;
-                       rpy (0, pi/2 + 0.1, 0))
+        sensor pose <- base pose (wxyz->xyzw) x mount — read from the model's
+                       lidar_sensor site (radar variant; sensor axis down at
+                       the head), falling back to the old hand-written
+                       (0.7, 0, -0.05; rpy (0, pi/2 + 0.1, 0)) on the base
+                       variant
         LidarSensor.update()          warp raycast, Airy 900 az x 96 el,
                                       vs the M2 terrain warp mesh (26x26 m
                                       field incl. border, world frame)
@@ -37,8 +40,10 @@ pool from their post-reset pose.  Both the tick and the wrap are guarded by
 
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 import warp as wp
@@ -64,6 +69,53 @@ DISTAL_DIM = DISTAL_HISTORY * DISTAL_POINTS * 3  # 1920
 PROPRIO_DIM = 66
 
 
+# ── Model-derived mount (single source of truth). ───────────────────────────
+EL4090_LIDAR_MJCF = (
+  Path(__file__).parents[3]
+  / "assets" / "robots" / "el_4090" / "mjcf" / "el_4090_lidar.xml"
+)
+
+
+@functools.lru_cache(maxsize=1)
+def resolve_lidar_mount(
+  mjcf_path: Path = EL4090_LIDAR_MJCF,
+  site_name: str = "lidar_sensor",
+  base_body: str = "BASE",
+) -> tuple[tuple[float, float, float], tuple[float, float, float, float]] | None:
+  """Constant BASE→sensor transform read from the model's ``lidar_sensor`` site.
+
+  The site is rigidly fixed to BASE, so the transform is one constant per
+  model: evaluated once at the ``stand`` keyframe (identity base quat, so
+  base frame == world frame up to translation). Returns ((x, y, z),
+  (x, y, z, w) quat) in the BASE body frame, or None when the MJCF or the
+  site does not exist (base variant → callers fall back to hand-written
+  cfg values).
+  """
+  if not mjcf_path.exists():
+    return None
+  import mujoco
+  import numpy as np
+
+  model = mujoco.MjModel.from_xml_path(str(mjcf_path))
+  sid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site_name)
+  bid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, base_body)
+  if sid < 0 or bid < 0:
+    return None
+  data = mujoco.MjData(model)
+  mujoco.mj_resetDataKeyframe(model, data, 0)
+  mujoco.mj_forward(model, data)
+  r_base_t = np.asarray(data.xmat[bid]).reshape(3, 3).T
+  p_rel = r_base_t @ (np.asarray(data.site_xpos[sid]) - np.asarray(data.xpos[bid]))
+  r_rel = r_base_t @ np.asarray(data.site_xmat[sid]).reshape(3, 3)
+  q_wxyz = np.zeros(4)
+  mujoco.mju_mat2Quat(q_wxyz, r_rel.flatten())
+  if q_wxyz[0] < 0:
+    q_wxyz = -q_wxyz
+  pos = (float(p_rel[0]), float(p_rel[1]), float(p_rel[2]))
+  quat_xyzw = (float(q_wxyz[1]), float(q_wxyz[2]), float(q_wxyz[3]), float(q_wxyz[0]))
+  return pos, quat_xyzw
+
+
 @dataclass(frozen=True)
 class El4090LidarCfg:
   """Old ``cfg.lidar`` + ``cfg.pool`` + ``cfg.pd_risknet`` + LiDAR DR fields."""
@@ -79,10 +131,15 @@ class El4090LidarCfg:
   pixel_std_dev_multiplier: float = 0.02
   pixel_dropout_prob: float = 0.02
 
-  # Mount (old cfg.lidar offset_pos / sensor_offset_rpy, isaacgym [x,y,z,w]).
+  # Mount. Single source of truth is the lidar_sensor site in the radar
+  # variant MJCF (mount_from_model=True; sensor axis points down at the
+  # head, user-confirmed 2026-10-02). The hand-written values below are the
+  # fallback for the base variant (no site) — old cfg.lidar offset_pos /
+  # sensor_offset_rpy, isaacgym [x,y,z,w].
   offset_pos: tuple[float, float, float] = (0.7, 0.0, -0.05)
   pitch_tilt_down_rad: float = 0.1
   sensor_offset_rpy: tuple[float, float, float] = (0.0, math.pi / 2 + 0.1, 0.0)
+  mount_from_model: bool = True
 
   # Pool (old cfg.pool: angle_stride).
   pool_strategy: str = "angle_stride"
@@ -218,11 +275,23 @@ class El4090LidarPipeline:
     )
     self.num_rays = raw_num_rays
 
-    # ── Mount transform (xyzw). ────────────────────────────────────────────
-    self._mount_t = torch.tensor(
-      c.offset_pos, dtype=torch.float32, device=self.device
-    ).view(1, 3)
-    self._mount_q = _quat_from_euler_xyz(*c.sensor_offset_rpy).to(self.device)
+    # ── Mount transform (xyzw). Model-derived when the lidar_sensor site
+    #    exists (radar variant); falls back to the hand-written cfg values
+    #    for the base variant. ──────────────────────────────────────────────
+    mount = resolve_lidar_mount() if c.mount_from_model else None
+    if mount is not None:
+      mount_pos, mount_quat_xyzw = mount
+      self._mount_t = torch.tensor(
+        mount_pos, dtype=torch.float32, device=self.device
+      ).view(1, 3)
+      self._mount_q = torch.tensor(
+        mount_quat_xyzw, dtype=torch.float32, device=self.device
+      ).view(1, 4)
+    else:
+      self._mount_t = torch.tensor(
+        c.offset_pos, dtype=torch.float32, device=self.device
+      ).view(1, 3)
+      self._mount_q = _quat_from_euler_xyz(*c.sensor_offset_rpy).to(self.device)
     self._sensor_translation = self._mount_t.expand(self.num_envs, 3)
     self._sensor_offset_quat = self._mount_q.expand(self.num_envs, 4)
 
@@ -466,27 +535,33 @@ class _PoolCfgShim:
   azimuth_stride: int = 30
 
 
-def get_lidar_pipeline(env) -> El4090LidarPipeline:
-  """Fetch (and cache on the env) the shared LiDAR pipeline."""
+def get_lidar_pipeline(env, cfg: El4090LidarCfg | None = None) -> El4090LidarPipeline:
+  """Fetch (and cache on the env) the shared LiDAR pipeline.
+
+  ``cfg`` is only consumed on first creation; the default keeps the legacy
+  randomized sensor configuration (old task behavior unchanged). The T0 flat
+  variant pre-creates the pipeline with a noise-free ``El4090LidarCfg``
+  through the observation-term ``params`` before any obs is computed.
+  """
   pipeline = env.__dict__.get("_el_4090_lidar_pipeline")
   if pipeline is None:
-    pipeline = El4090LidarPipeline(env)
+    pipeline = El4090LidarPipeline(env, cfg)
     env._el_4090_lidar_pipeline = pipeline
   return pipeline
 
 
-def lidar_prox_obs(env) -> torch.Tensor:
+def lidar_prox_obs(env, lidar_cfg: El4090LidarCfg | None = None) -> torch.Tensor:
   """Proximal point block, ``(B, 768)`` (old: FPS 256 + angular-key sort)."""
-  get_lidar_pipeline(env).ensure_current()
+  get_lidar_pipeline(env, lidar_cfg).ensure_current()
   return get_lidar_pipeline(env)._prox_block
 
 
-def lidar_distal_obs(env) -> torch.Tensor:
+def lidar_distal_obs(env, lidar_cfg: El4090LidarCfg | None = None) -> torch.Tensor:
   """Distal history block, ``(B, 1920)`` (old: ring buffer + sort).
 
   The done-env zeroing happens INSIDE the production step (old runner called
   wrap_obs with this step's dones and zeroed the windows after assembly), so
   this term just returns the freshly produced block.
   """
-  get_lidar_pipeline(env).ensure_current()
+  get_lidar_pipeline(env, lidar_cfg).ensure_current()
   return get_lidar_pipeline(env)._distal_block

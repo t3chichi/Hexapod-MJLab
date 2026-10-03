@@ -190,20 +190,18 @@ def main() -> int:
 
   # ── 6: symmetry wiring (mirror function + mount binding) ────────────────
   from hexapod_mjlab.rl.symmetry_adapter import make_el_4090_symmetry_func
-  from hexapod_mjlab.tasks.el_4090_lidar.rl.runner import (
-    PITCH_TILT_DOWN_RAD,
-    SENSOR_OFFSET_POS,
-    _euler_xyz_to_quat_xyzw,
-  )
+  from hexapod_mjlab.tasks.el_4090_lidar.mdp.lidar import resolve_lidar_mount
 
-  import math
-
-  sensor_quat = _euler_xyz_to_quat_xyzw(
-    0.0, math.pi / 2.0 + PITCH_TILT_DOWN_RAD, 0.0
-  ).to(args.device)
+  # The runner exposes exactly resolve_lidar_mount() to the mirror function;
+  # the pipeline's mount (what the raycaster actually used) must equal it.
+  mount_ref = resolve_lidar_mount()
+  assert mount_ref is not None, "lidar_sensor site missing (radar variant MJCF)"
   sensor_trans = torch.tensor(
-    SENSOR_OFFSET_POS, dtype=torch.float32, device=args.device
+    mount_ref[0], dtype=torch.float32, device=args.device
   ).view(1, 3)
+  sensor_quat = torch.tensor(
+    mount_ref[1], dtype=torch.float32, device=args.device
+  ).view(1, 4)
   # The pipeline's mount (what the raycaster actually used) must equal the
   # runner-exposed mount (what the mirror function will be bound to).
   mount_q_err = (pipeline._mount_q - sensor_quat).abs().max().item()
