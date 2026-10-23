@@ -1,0 +1,12 @@
+# 基线验收证据
+
+本目录只保存可随Git交付的精简结果；完整日志、checkpoint和wheel留在开发机的 `logs/maintenance/20261023_pretrain_baseline/`。日期跨2026-10-23至24，不回写此前冻结实验。
+
+- `acceptance.json`：各检查的通过状态、GPU恢复边界与限制。
+- `environment.json`：本次实际使用的Python、主要依赖和CUDA runtime；不是5090环境验收。
+- `package_check.json`：隔离wheel资源加载、45个资产逐字节一致、21个选集校验与固定T1 catalog身份。
+- `runtime_files.json`：交付源码包中283个源码/模型/数据/任务说明文件的SHA256，路径相对于仓库根目录；不包含本目录，避免自引用。
+
+源码快照不含被Git忽略的日志、虚拟环境或缓存。临时venv复用了开发机已有依赖，实际待交付包使用wheel安装并以Python隔离模式加载；测试断言模块来自该安装路径。未重新从网络求解一套全新的conda环境。
+
+GPU检查的精确接受门是恢复边界和相同保留输入的优化器重放。报告中的未来轨迹逐位一致字段为诊断，存在浮点差异；`passed`不代表这一能力或学习效果通过。

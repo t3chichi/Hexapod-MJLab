@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-04",
+  "installed_bridge_version": "0.1.5",
+  "loaded_desktop_mcp_version_observed": "0.1.0",
+  "desktop_mcp_reconnect_required": true,
+  "skill_validation": "PASS",
+  "offline_behavior_checks": {
+    "passed": 16,
+    "total": 16,
+    "model_or_network_used": false
+  },
+  "fresh_stdio_mcp_checks": "PASS: initialize, tools/list, health, wait, progress; existing completed GLM job only",
+  "new_model_calls": 0,
+  "global_bridge_config_sha256": "9a7da0dd91aed61faa596a5434d6adfa6849d76dea4b29473e1258478b78388a",
+  "installed_files": {
+    "SKILL.md": "80704071c9040f0de89d4dcdaf042591759a337dc3d70748a1401ebddc5b0445",
+    "scripts/zcode_bridge.py": "1197eb636ede2327afbac3b499f1cf091e2a266a88484b7d6c33867559bf03a6",
+    "scripts/zcode_progress.py": "94fc8d32072c125502f9e763adb48cfada734914fb74f2a900039b366a8dd853",
+    "scripts/test_zcode_bridge.py": "c4ee808b944c19dee8716996d86d6e75773296a3932d6bb4f6fc5190a4b732e9",
+    "scripts/bridge_config.json": "9a7da0dd91aed61faa596a5434d6adfa6849d76dea4b29473e1258478b78388a"
+  },
+  "scope": [
+    "No credentials or desktop preferences modified.",
+    "Global roots unchanged; authorized worktree uses task-local config.",
+    "Accepted experiment raw run and frozen source/input identities preserved."
+  ],
+  "experiment_recheck": {
+    "passed": 262,
+    "total": 262,
+    "raw_run_identity_preserved": true
+  },
+  "raw_artifacts": {
+    "logs/maintenance/zcode-refinement-20261004/acceptance.json": "412c3d40e22b7f9d377c969c2d6c5b43d26fa13b801ec232e2540770b5432c50",
+    "logs/maintenance/zcode-refinement-20261004/experiment-verification.json": "5344577c80239f347d505c8747a6c6d6fc105d2ef8deb377d013d66f195edd79",
+    "logs/maintenance/zcode-refinement-20261004/fresh-mcp.json": "190e588b087c54ff7e5dfaf3d4449dd638181c7c080efea0590b1afd8ac0b081"
+  }
+}

@@ -1,0 +1,3 @@
+# Channel catalogs and strict checkpoints hash source/model bytes. Preserve
+# those bytes on checkout even when a client enables core.autocrlf.
+src/** -text

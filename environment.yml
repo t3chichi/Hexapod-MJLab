@@ -1,7 +1,8 @@
 # Hexapod-MJLab 开发环境一键复现（conda env 名：hp_mjlab）。
 # 版本为开发验证时的锁定组合；宽松约束见 pyproject.toml。
-# 注：开发机 torch 为 cu128 wheel（2.11.0+cu128）；此处 pin 2.11.0 在
-# Linux 上会从 PyPI 安装默认 CUDA 构建，功能等价。
+# 本次基线验证环境实际为 torch 2.11.0+cu130 / CUDA runtime 13.0。
+# 此处锁定发行版本，不锁定 CUDA wheel 变体；安装后须核对 torch.__version__、
+# torch.version.cuda，并在目标 GPU 上运行有限工程检查。
 name: hp_mjlab
 channels:
   - defaults
@@ -19,3 +20,4 @@ dependencies:
       - mjlab==1.6.0
       - rsl-rl-lib==5.4.2
       - tensorboard==2.21.0
+      - viser==1.1.1

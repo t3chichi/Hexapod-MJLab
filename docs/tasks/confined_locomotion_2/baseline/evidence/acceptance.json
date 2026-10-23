@@ -1,0 +1,210 @@
+{
+  "repository_cpu": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "verification_runner",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_partial_reset_cpu",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "lidar_mount",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "lidar_optical_alignment",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "lidar_mesh_geometry",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "lidar_sampling",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "lidar_symmetry",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "terrain_parity",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "robot_stance",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "policy_parity",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "envelope_geometry",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "envelope_supervision",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "t0_contracts",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "morphology_geometry",
+        "state": "PASS",
+        "returncode": 0
+      }
+    ],
+    "raw_report_sha256": "1afa1cdc4376d9456e1de78baac30867daa36a0d5bb17170b15fccc126d51a3d"
+  },
+  "confined_cpu": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "confined_runtime",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_transition",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_scanner",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_ground",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_visualization",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_policy",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_training_collection",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_training_update",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_checkpoint",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_perturbations",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_play",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_symmetry",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_symmetry_update",
+        "state": "PASS",
+        "returncode": 0
+      },
+      {
+        "name": "confined_training_entry",
+        "state": "PASS",
+        "returncode": 0
+      }
+    ],
+    "raw_report_sha256": "59c78102f1a2cc64e338725ca9a3c26f6dcc9b0859ef1010070e56d2dcfa83ee"
+  },
+  "confined_2_cpu": {
+    "passed": true,
+    "checks": 98,
+    "log_sha256": "f5345bb6c7a18c7748af0cb6c0359a8d6837adb740c6acb2d82c3548014957fb",
+    "input": "clean source export without ignored logs/environments"
+  },
+  "isolated_wheel_gpu": {
+    "scan_shapes": true,
+    "no_ground_dependencies": true,
+    "mirror_enabled": true,
+    "one_24_step_20_optimizer_iteration": true,
+    "checkpoint_written": true,
+    "both_histories_restored": true,
+    "restore_boundary_bit_exact": true,
+    "restore_boundary_differences": [],
+    "episode_metrics_restored": true,
+    "resume_actions_bit_exact": false,
+    "resume_rewards_bit_exact": false,
+    "resume_observations_bit_exact": false,
+    "resume_histories_bit_exact": false,
+    "same_rollout_optimizer_replay_bit_exact": true,
+    "optimizer_replay_differences": [],
+    "timeout_fixture_reset": true,
+    "timeout_hidden_zero": true,
+    "timeout_bootstrap_finite": true,
+    "periodic_first_boundary": true,
+    "final_reuses_periodic_storage": true,
+    "periodic_resume_cumulative_boundary": true,
+    "learning_metrics_finite": true,
+    "learning_metrics_reward_reconstruction": true,
+    "no_invented_completed_episode_mean": true,
+    "tensorboard_learning_tags": true,
+    "passed": true,
+    "elapsed_s": 55.86913439299997,
+    "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+    "peak_allocated_MiB": 114.29541015625,
+    "raw_report_sha256": "66d0da33634eba1272fcd887bf3c889dca24960bca352ef58e925f1cca195b8b",
+    "execution": "installed wheel in temporary venv with system-site dependencies; Python -I; actual package path asserted",
+    "scope": "2 environments; 2 trained iterations separated by checkpoint load; additional bounded collection and optimizer replay checks; save interval 1"
+  },
+  "sampling": {
+    "raycast_mode": "sparse",
+    "far_sampling": "hit_only_10m",
+    "near_multiplier": 6,
+    "far_multiplier": 10,
+    "ray_count": 2816
+  },
+  "default_save_interval": 50,
+  "limitations": [
+    "RTX5090 not tested",
+    "existing dependency environment reused; no clean conda solve",
+    "no learning-effect or large-scale throughput claim",
+    "future physical trajectories are not bit-exact after restore",
+    "historical raw logs and checkpoints remain local"
+  ],
+  "package_check": "package_check.json"
+}

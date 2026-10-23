@@ -6,8 +6,8 @@ and ``rsl_rl/utils/lidar_wrapper.py``)::
 
     10 Hz tick (every 5th 50 Hz policy step, forced on any env reset):
         sensor pose <- base pose (wxyz->xyzw) x mount — read from the model's
-                       lidar_sensor site (radar variant; sensor axis down at
-                       the head), falling back to the old hand-written
+                       lidar_sensor optical site (radar variant; scan +z
+                       faces forward, slightly down), falling back to the old hand-written
                        (0.7, 0, -0.05; rpy (0, pi/2 + 0.1, 0)) on the base
                        variant
         LidarSensor.update()          warp raycast, Airy 900 az x 96 el,
@@ -82,7 +82,11 @@ def resolve_lidar_mount(
   site_name: str = "lidar_sensor",
   base_body: str = "BASE",
 ) -> tuple[tuple[float, float, float], tuple[float, float, float, float]] | None:
-  """Constant BASE→sensor transform read from the model's ``lidar_sensor`` site.
+  """Constant BASE→optical transform read from the model's ``lidar_sensor`` site.
+
+  The optical +z scan pole is aligned to housing +y by the empty URDF/MJCF
+  sensor frame. Do not add another 90-degree correction here. Optical +x
+  stays housing +x; this azimuth origin is not a hardware calibration.
 
   The site is rigidly fixed to BASE, so the transform is one constant per
   model: evaluated once at the ``stand`` keyframe (identity base quat, so
@@ -132,8 +136,8 @@ class El4090LidarCfg:
   pixel_dropout_prob: float = 0.02
 
   # Mount. Single source of truth is the lidar_sensor site in the radar
-  # variant MJCF (mount_from_model=True; sensor axis points down at the
-  # head, user-confirmed 2026-10-02). The hand-written values below are the
+  # variant MJCF (mount_from_model=True; optical +z points forward/down at the
+  # head; optical-frame alignment corrected 2026-10-05). The values below are the
   # fallback for the base variant (no site) — old cfg.lidar offset_pos /
   # sensor_offset_rpy, isaacgym [x,y,z,w].
   offset_pos: tuple[float, float, float] = (0.7, 0.0, -0.05)

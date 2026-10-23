@@ -161,7 +161,7 @@
           <inertial pos="5.8e-07 0.0192751 -0.00020841" quat="0.707111 -0.0150095 0.00579148 0.706919" mass="0.24" diaginertia="0.000107704 8.34219e-05 8.20477e-05" />
           <geom type="mesh" rgba="0.85 0.1 0.1 1" mesh="LIDAR_AIRY" />
           <body name="LIDAR_GLASS"><geom name="LIDAR_GLASS_visual" type="mesh" mesh="LIDAR_GLASS" contype="0" conaffinity="0" group="1" /></body>
-          <body name="LIDAR_SENSOR" pos="0 0.0453 0">
+          <body name="LIDAR_SENSOR" pos="0 0.0453 0" quat="0.7071067811865476 -0.7071067811865476 0 0">
             <site name="lidar_sensor" pos="0 0 0" size="0.01" />
           </body>
         </body>

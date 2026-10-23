@@ -21,7 +21,8 @@ python tests/run.py --profile cpu --only envelope_geometry envelope_supervision
 | 功能 | 实现 | 主要覆盖 |
 |---|---|---|
 | 运行器 | `tests/test_runner.py` | 失败/超时传播、无空选择、无重复、输出不可覆盖 |
-| 雷达挂载 | `tests/lidar_sensor/mount_check.py` | AIRY通道、挂载旋转、扫描几何 |
+| 雷达挂载参考 | `tests/lidar_sensor/mount_check.py` | AIRY通道与旧fallback解析旋转；不检查实际模型site |
+| 雷达光学对齐 | `tests/joint_passage/lidar_setup/test_alignment.py` | 实际URDF/MJCF光学三轴、真实挂载函数、非单位BASE变换与35快照的实体物理不变性 |
 | 雷达采样 | `tests/lidar_sensor/pool_sampler_check.py` | 形状、固定种子、索引、轮转覆盖 |
 | 雷达镜像 | `tests/lidar_sensor/symmetry_check.py` | 本体状态、动作与点云镜像 |
 | 地形 | `tests/terrain/test_terrain_parity.py` | 与冻结高度场逐位一致 |
@@ -33,6 +34,36 @@ python tests/run.py --profile cpu --only envelope_geometry envelope_supervision
 | 形态测量 | `scripts/tools/morphology/run_checks.py` | 18项完整碰撞体、实际足底/支撑、根平衡、归一化反例 |
 
 CPU组不需要原团队仓库，也不执行任务级PPO训练。监督单元包含极小合成数据上的优化与保存重载，以检查真实梯度和数据生命周期；不能解释为模型性能验收。
+
+## 受限空间当前源码回归与验收
+
+当前回归入口由`tests/run.py`维护。`--help`列出`confined_cpu`和`confined_gpu`。2026-10-12整理批的14入口/170项见[CPU迁移记录](../logs/maintenance/20261011_confined_final_cleanup/execution/cpu_test_migration.md)；2026-10-13点云特征复用的最终CPU14入口/178项通过，默认零次`optimizer.step()`。当前结果和原始证据统一见[工程验收](../docs/tasks/confined_locomotion/training/工程验收与复现.md)。
+
+```bash
+python tests/run.py --profile confined_cpu
+python tests/run.py --profile confined_gpu --list
+```
+
+第二条只列出GPU门，不执行测试。本次由根代理独立通过15种相关GPU模式，范围与命令见[工程验收与复现](../docs/tasks/confined_locomotion/training/工程验收与复现.md)；不是全部26种profile的重验。任务play使用单独CLI，必须显式给`--checkpoint`；其六种实际GPU检查独立记录，不以profile列表或CLI帮助代替PASS。
+
+点云特征复用的CPU边界继续在`confined_policy`/`confined_checkpoint`中维护；真实计数、逐行reset、同快照输出和GPU分项耗时由`confined_collection_feature_cache`模式检查，已注册到`confined_gpu`。该模式最多2环境、每个缓存开关分支24控制步、零optimizer，无固定速度门限；先以`tests/run.py --profile confined_gpu --list`定位入口。缓存改变调用入口后，Play暂停/快照检查直接核对缓存策略调用计数。当前验收、原始失败及性能范围统一见[工程验收](../docs/tasks/confined_locomotion/training/工程验收与复现.md#2026-10-13点云特征复用验收)。
+
+2026-10-05纯计算快照的106项CPU检查与21项独立输入/梯度复核是历史证据；它们不替代当前源码profile或真实GPU门。当前接口和历史边界见[接口与约定](../docs/tasks/confined_locomotion/framework/接口与约定.md)，旧详细证据按[精简证据索引](../logs/maintenance/20261012_confined_archive_retirement/README.md)查证，未保留原件不再承诺恢复。
+
+## 独立时间记忆任务 _2
+
+`_2` 使用独立入口，不包含在原任务的 `confined_cpu`/`confined_gpu` profile中：
+
+```bash
+python -B tests/confined_locomotion_2/run_checks.py
+# 构建wheel后，验证包资源、45个通道文件及21个选集
+python -m pip wheel --no-deps . -w /tmp/hexapod-wheels
+python -B tests/confined_locomotion_2/check_package.py \
+  /tmp/hexapod-wheels/hexapod_mjlab-0.1.0-py3-none-any.whl \
+  --output logs/verification/confined_locomotion_2/package_check.json
+```
+
+真实GPU部署检查、固定配置及验收范围见[部署与基线](../docs/tasks/confined_locomotion_2/training/部署与基线.md)。Play与采集切换检查显式传入匹配sampling的checkpoint；历史 `logs/` 模型不随仓库交付。有限工程更新不构成学习效果验收。
 
 ## 日常GPU组
 
@@ -63,7 +94,7 @@ python tests/run.py --profile optional --only ppo_learning
 
 原项目默认`~/el4090_legged_gym`，可用`EA2_LEGACY_ROOT`指定另一路径。参考文件先核对`tests/data/ea2/source_manifest.json`；运行时任务和日常回归不依赖该项目。
 
-`hfield_contacts`曾出现GPU HFIELD–BOX抖动，历史现象见[MIGRATION.md](../MIGRATION.md)。失败必须保留并分析，不用重跑PASS覆盖之前FAIL。合成PPO回归属于较长检查，默认CPU/GPU组均不包含它；它也不能替代真实机器人学习行走。
+`hfield_contacts`曾出现GPU HFIELD–BOX抖动，历史现象见[平台迁移历史](../docs/development/history/平台迁移.md)。失败必须保留并分析，不用重跑PASS覆盖之前FAIL。合成PPO回归属于较长检查，默认CPU/GPU组均不包含它；它也不能替代真实机器人学习行走。
 
 ## 科学实验与完整任务验收
 
@@ -71,6 +102,8 @@ python tests/run.py --profile optional --only ppo_learning
 - EA2采集/训练/评估/导出/play：使用[任务说明](../docs/tasks/envelope_adaptive_2/使用说明.md)中的公共CLI；一次性固定名称发布脚本已删除。
 - T0-A完整固定预算验收：`python scripts/tools/t0/run_acceptance.py`。它包含真实5迭代训练和64条评测，范围与结果见[使用与验收](../docs/tasks/el_4090_lidar/T0-A使用与验收.md)。GPU回归通过不等于重新完成这套科学验收。
 - T1完整测量、分层库和冻结复验：见[形态测量](../docs/research/morphology/形态可达性测量.md)。
+- 雷达光学坐标、当前全帧采样与地面查询边界见[受限空间当前雷达配置](../docs/tasks/confined_locomotion/lidar_setup/配置与边界.md)。历史固定35构型×五静态场景×四采样配方、175次CPU扫描、700组采样及原始STL表面核查结果位于对应logs；候选没有自动采用，不作为动态净空或学习验收。`lidar_mesh_geometry`日常回归用解析/独立凸优化验证诊断几何，不依赖logs或整套STL扫描。
+- 圆锥参数比较用`replay_cone_tilt.py`重放相同原始扫描及精确池输入，`verify_cone_tilt.py`独立复核空间统计和既有配置逐点一致性。原始分类边界的浮点并列逐条记录；输入身份、固定查询和候选分母保持不变。复现与范围见同一核查文档，不属于日常小型回归。
 
 2026-10-04整理前源码/文档保存在`logs/maintenance/stage-cleanup-20261004/source_snapshot/`和Git提交`f9b907a`中。历史证据的源码/模型SHA不改写；源码身份改变后使用该run的冻结实现重放，不绕过身份守卫。
 

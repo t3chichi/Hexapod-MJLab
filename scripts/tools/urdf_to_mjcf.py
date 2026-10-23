@@ -247,7 +247,7 @@ def main(variant: str = "base") -> None:
     base.add_joint(type=mujoco.mjtJoint.mjJNT_FREE, name="root")
 
     # (b2) sensor mount frame — the radar variant's empty LIDAR_SENSOR URDF
-    # link is the mechanical LiDAR frame; expose it as a site so the sensor
+    # link defines the optical frame (scan +z = housing +y); expose it as a site so the sensor
     # stack can read the mount pose from the model instead of hand-written
     # offsets (site sits at the body origin; the body carries no geoms).
     # NOTE: the radome (LIDAR_GLASS) is visual-only in the URDF by design and

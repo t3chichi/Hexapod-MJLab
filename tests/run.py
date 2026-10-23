@@ -27,7 +27,14 @@ class Check:
 
 CPU = (
     Check("verification_runner", "tests/test_runner.py"),
+    Check(
+        "confined_partial_reset_cpu",
+        "tests/confined_locomotion/test_runtime.py",
+        timeout_s=120,
+    ),
     Check("lidar_mount", "tests/lidar_sensor/mount_check.py"),
+    Check("lidar_optical_alignment", "tests/joint_passage/lidar_setup/test_alignment.py"),
+    Check("lidar_mesh_geometry", "tests/joint_passage/lidar_setup/test_mesh_relations.py"),
     Check("lidar_sampling", "tests/lidar_sensor/pool_sampler_check.py"),
     Check("lidar_symmetry", "tests/lidar_sensor/symmetry_check.py"),
     Check("terrain_parity", "tests/terrain/test_terrain_parity.py"),
@@ -59,7 +66,46 @@ OPTIONAL = (
     Check("hfield_contacts", "tests/terrain/hfield_check.py"),
     Check("ppo_learning", "tests/rl_parity/test_dummy_train.py", timeout_s=1200),
 )
-PROFILES = {"cpu": CPU, "gpu": GPU, "legacy": LEGACY, "optional": OPTIONAL}
+CONFINED_CPU = tuple(
+    Check(
+        "confined_" + name,
+        "tests/confined_locomotion/test_" + name + ".py",
+        ("--cpu",) if name in {"training_collection", "training_update"} else (),
+    )
+    for name in (
+        "runtime", "transition", "scanner", "ground", "visualization", "policy",
+        "training_collection", "training_update", "checkpoint", "perturbations",
+        "play", "symmetry", "symmetry_update", "training_entry",
+    )
+)
+CONFINED_GPU = tuple(
+    Check(
+        "confined_" + feature + "_" + mode,
+        "tests/confined_locomotion/gpu/check_" + feature + ".py",
+        ("--mode", mode, "--gpu", "0", "--seed", "20261008", "--num-envs", "2"),
+        "--output",
+        timeout_s=1800 if mode in {"cycle", "command_period", "schedule"} else 600,
+    )
+    for feature, modes in (
+        ("runtime", ("transition", "partial_reset", "persistent_low", "persistent_tilt",
+                     "input_fault", "action_clip", "command_period")),
+        ("collection", ("natural_rollout", "raw_action_log_prob", "value_fault", "timeout_bootstrap",
+                        "feature_cache")),
+        ("update", ("joint_update", "mirror_update")),
+        ("entry", ("official_formal",)),
+        ("checkpoint", ("cycle",)),
+        ("perturbations", ("observation_reuse", "schedule")),
+        ("symmetry", ("mapping", "window_rotation")),
+        ("lifecycle", ("runtime_failure", "ppo_failure", "final_save_failure",
+                       "record_log_failure", "postcommit", "close_failure")),
+    )
+    for mode in modes
+)
+PROFILES = {
+    "cpu": CPU, "gpu": GPU, "legacy": LEGACY, "optional": OPTIONAL,
+    "confined_cpu": CONFINED_CPU,
+    "confined_gpu": CONFINED_GPU,
+}
 
 
 def validate_checks(checks):

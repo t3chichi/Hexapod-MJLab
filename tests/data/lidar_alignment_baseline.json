@@ -1,0 +1,6 @@
+{
+  "scope": "Physical XML identity before optical-only rotation; current reference frame rotation is deliberately excluded. Old failure can be reconstructed without depending on ignored logs.",
+  "mjcf_physical_tree_sha256": "f4d3e5864eb24191c6447eceab98e4e3f3b37fe79250a7017d562f5d6eeb8884",
+  "urdf_physical_tree_sha256": "cb797ee00ccf9cb1211485910a9845ae08ca6dc93ae993c7e773bd34b624eaf3",
+  "canonicalization": "ElementTree canonical XML, strip_text=True; comments excluded; optical-frame rotation excluded."
+}

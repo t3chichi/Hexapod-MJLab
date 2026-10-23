@@ -1,0 +1,296 @@
+# MIGRATION — M0: Lidar_legged_gym → lidar-mjlab
+
+## 布局对齐重构（repo layout refactor，2026-09-29）
+
+对齐 mjlab 官方包约定（`mjlab/src/mjlab/` 的域包组织）与官方输出目录
+约定，消除三个单文件顶层包与双输出根（`runs/` + `logs/`）。
+
+### 模块搬家（old → new，附官方依据）
+
+| 旧路径 | 新路径 | 官方约定依据（mjlab 源码证据） |
+|---|---|---|
+| `src/hexapod_mjlab/pd/pool_samplers.py` | `src/hexapod_mjlab/utils/lidar/pool_samplers.py` | 传感器侧计算与传感器域共置：mjlab `sensor/` 为平铺域模块（`raycast_sensor.py`、`terrain_height_sensor.py` 内含各自采样/计算逻辑）。本模块唯一消费方是 LiDAR 观测 tick（`tasks/el_4090_lidar/mdp/lidar.py`：raycast → DR → body frame → pool），属传感器域；`pd/`（旧 pd_gru 头部命名）在 mjlab 词汇表中无对应域 |
+| `src/hexapod_mjlab/geometry/pointcloud_geometry.py` | `src/hexapod_mjlab/utils/pointcloud_geometry.py`（新建 `utils/`，空 `__init__.py`，同官方） | mjlab `utils/` 收纯函数辅助模块——既有通用（`torch.py`、`mujoco.py`、`xml.py`、`string.py`）也有域风味（`actuator.py`、`noise/`、`buffers/`）；本模块无状态、仅依赖 torch、跨传感器/RL 两域共享（对称增强 + LidarWrapper），符合 utils 定位 |
+| `src/hexapod_mjlab/symmetry/el_4090_lidar_symmetry.py` | `src/hexapod_mjlab/rl/el_4090_lidar_symmetry.py` | RL 侧计算与 RL 域共置：官方先例 `rl/spatial_softmax.py`（网络侧计算模块平铺于 `rl/`）。本模块唯一 src 消费方是 `rl/symmetry_adapter.py`（rsl-rl 5.x Symmetry 适配） |
+
+外部任务包结构（`tasks/el_4090_lidar/{mdp,config,rl}` + entry point）经与
+官方 `mjlab/tasks/velocity/` 及外部实例（GitHub BrainCoTech/Revo-MjLab 的
+`brainco_mjlab_tasks`：域包 + `config/` + `mdp/`）比对确认已合规，未改。
+
+### 输出目录统一（runs/ 退役，单一 logs/ 根）
+
+官方约定（证据）：`mjlab/src/mjlab/scripts/train.py::TrainConfig.log_root`
+默认 `"logs/rsl_rl"`（`--log-root` 可覆盖）；`mjlab/src/mjlab/rl/config.py`
+L97-100 与 `docs/source/training/rsl_rl.rst` "Checkpoints and logging"：
+训练产物在 `logs/rsl_rl/{experiment_name}/{timestamp}/`
+（`model_{iteration}.pt` + `params/{env,agent}.yaml`），resume/play 均扫描
+该位置。
+
+新约定（单一顶层 `logs/` 根）：
+
+| 位置 | 内容 |
+|---|---|
+| `logs/rsl_rl/{experiment}/{ts}/` | mjlab 训练产物（官方默认结构；m5 harness 经 `--log-root` 显式指向，免受 CWD 影响） |
+| `logs/m5/baseline_new/<ts>/` | m5 新栈 harness 元数据：`run_meta.json`（含 `mjlab_log_dir` 指向上行）、`train_stdout.log`、`per_iteration.csv` |
+| `logs/m5/baseline_old/<ts>/` | m5 旧栈 harness（旧 runner 的 `log_root` 直接指向此目录，TB 事件同址） |
+| `tests/<组>/logs/` | 测试本地验收产物（JSON/PNG 等），随 `logs/` gitignore 模式忽略 |
+
+配套改动：`runs/` 目录整体迁入 `logs/m5/`（历史产物原样保留）、
+`.gitignore` 移除 `runs/` 条目、`baseline_compare.py` 支持经 `run_meta.json::
+mjlab_log_dir` 定位新栈 TB 事件、`tests/data/m5/baseline_comparison.*` 的
+`run_dirs` 更新为迁移后路径（`cmd` 字段保留 as-run 原值）。
+
+## M5a — 吞吐基准 + 摩擦语义探针 + 基线对照 harness（2026-09-29）
+
+### 交付物
+
+| 文件 | 说明 |
+|---|---|
+| `scripts/throughput_bench.py` | G5 方法论移植：ON（M3b 全量 LiDAR：10 Hz tick 86400 射线 + 每步 wrap_obs）vs OFF（M3a 零占位路径，obs 维度不变）整步墙钟差 = LiDAR 栈成本（≙ 旧 bench 低分辨率 vs 全量的差值口径）；分项 tick_raw/wrap 与旧 G5 同名指标对齐；`torch.cuda.synchronize()` 包夹计时（旧 bench 依赖 isaacgym 内部同步点）。16/128/256/512/1024 env 子进程隔离，OOM 干净捕获跳过 |
+| `tests/data/m5/throughput_new.json` | 实测结果 + 旧 G5 参考数值嵌入 |
+| `scripts/friction_probe.py` | Isaac/PhysX 平均 vs MuJoCo max-mix 数值表；MuJoCo 规则双重实证（引擎合成的 `data.contact.friction[0]` 逐对 = max；扁盒拉力二分找摩擦锥边界）+ priority 覆盖验证；产出 `tests/data/m5/friction_semantics.{md,json}` 供 M5 标定 |
+| `scripts/run_baseline_mjlab.sh` | 新栈官方 CLI 训练启动器（TB 日志 + stdout tee + `run_meta.json` + TB→`per_iteration.csv`）；GPU 空闲等待守卫 |
+| `scripts/run_baseline_isaacgym.sh` | 旧栈 `el4090_lidar_head` 启动器：复刻 train.py 流程但 `make_alg_runner(log_root=<本仓 run dir>)`，**不写旧仓**；isaacgym 先于 torch、`--headless`、editable 安装无需 PYTHONPATH |
+| `scripts/baseline_compare.py` | 两 run 目录 TB 标量匹配提取（含 `Policy/mean_std`↔`Policy/mean_noise_std` 别名、`Perf/collection_time` 空格差异）→ `tests/data/m5/baseline_comparison.{json,md}` + `--extract` 单目录 CSV 化 |
+
+### 吞吐结果（RTX 4050 6GB 笔记本，零动作 env-only，60 步/点，预热 10 步排除）
+
+| envs | ON ms/步 | OFF ms/步 | ON/OFF | policy steps/s | env steps/s | LiDAR 占比 | torch 峰值 |
+|---|---|---|---|---|---|---|---|
+| 16 | 41.7 | 30.3 | 1.38 | 24.0 | 383 | 27.4% | 145 MB |
+| 128 | 76.2 | 50.3 | 1.52 | 13.1 | 1,679 | 34.0% | 1,141 MB |
+| 256 | 114.8 | 66.7 | 1.72 | 8.7 | 2,230 | 41.9% | 2,287 MB |
+| 512 | OOM（设备分配失败） | | | | | | |
+| 1024 | OOM | | | | | | |
+
+对照旧 G5（同机、16 envs）：旧 IsaacGym 整步 14.22 ms（≈70 policy steps/s、1,125 env steps/s）vs 新栈 41.7 ms（24.0 / 383）——新栈在少量 env 下整步约 2.9× 慢，主因 mujoco-warp 物理小批量固定开销与 obs 管线，而非 LiDAR 本身；分项看 LiDAR 栈反而更快/持平：tick_raw 6.8 ms vs 旧真实 tick ≈10 ms（旧 G5 `tick_ms_mean` 4.25 为 1/5 门控平均，实际 tick ≈ 4.25×5−4×0.2 ≈ 10 ms），wrap 9.5 vs 9.79 ms。LiDAR 栈成本占比随 env 数上升（27%→42%），env 吞吐峰值在 128–256 envs（1.7k–2.2k env steps/s）。注意 512+ env OOM 是本 6GB 卡限制（num_envs 默认 4096 面向 RTX 5090 训练机）。
+
+### 摩擦语义（MIGRATION.md M3 偏差 2 的定量化）
+
+| robot μ | terrain μ | Isaac 平均 | MuJoCo max | MuJoCo 实测（contact.friction） |
+|---|---|---|---|---|
+| 0.3 | 1.0 | 0.650 | 1.000 | 1.0000 |
+| 0.4 | 1.0 | 0.700 | 1.000 | 1.0000 |
+| 0.65 | 1.0 | 0.825 | 1.000 | 1.0000 |
+| 1.125 | 1.0 | 1.063 | 1.125 | 1.1250 |
+| 1.25 | 1.0 | 1.125 | 1.250 | 1.2500 |
+
+旧栈有效摩擦 ~U[0.65, 1.125]，新栈被地形 1.0 托底为 [1.00, 1.25]。复原方案（M5 标定可选）：地形 geom `priority=1` + 地形摩擦随机化 U[0.65, 1.125]（priority 已验证使地形值完全生效）。基线对照默认接受 max-mix 并在对照报告中注明。
+
+### 基线预算（本 GPU，双方同 env 数/迭代数/种子才可比）
+
+* 旧栈 VRAM 硬约束：Isaac/PhysX GPU 固定池 ~4.8 GB（与 env 数无关）→ 6GB 卡上 128 env 在 LiDAR 缓冲 OOM、64 env 在 PPO 更新 OOM、**32 env 端到端可训**（实测 collection 0.91 s + learning 3.63 s/迭代）。
+* 新栈 32 env：6.6 s/迭代（1.62 s rollout + 4.99 s 更新，梯度检查点 distal GRU 占大头）。
+* **推荐预算：32 envs × 200 iters × seed 1，双栈**（新 ≈22 min、旧 ≈15 min，均落在 15–40 min 窗口；153,600 env steps；两 harness 默认值已设此）。
+* 冒烟验证（已过）：`run_baseline_mjlab.sh 32 2 1` / `run_baseline_isaacgym.sh 32 2 1` 均 2 迭代跑通、奖励/损失行出现、TB→CSV 提取成功、`baseline_compare.py` 在两 dry-run 输出上产出 11 标量匹配表（`tests/data/m5/baseline_comparison.md`，正式数值待编排者长跑覆盖）。
+
+## M3 — el_4090_lidar 任务落地 mjlab（2026-09-29，M3a + M3b）
+
+### 任务树 ↔ 官方 mjlab 对照（layout audit）
+
+| 本仓库（`src/hexapod_mjlab/tasks/`） | 官方 `mjlab/tasks/velocity/` 对应物 | 说明 |
+|---|---|---|
+| `el_4090_lidar/__init__.py` | `velocity/__init__.py` | 包 docstring + 导入 config 注册 |
+| `el_4090_lidar/el_4090_lidar_env_cfg.py` | `velocity/velocity_env_cfg.py` | 环境工厂（sensor/obs/action/command/event/reward/termination/curriculum/sim 组装） |
+| `el_4090_lidar/mdp/__init__.py` | `velocity/mdp/__init__.py` | star-import `mjlab.envs.mdp` + 本任务 terms |
+| `el_4090_lidar/mdp/actions.py` | （官方动作项在 `mjlab.envs.mdp.actions`） | 自定义 `JointPDTorqueAction`：18 目标角 → torch PD（kp 130 / kd 2，scale 0.25）→ clip ±80 Nm → motor ctrl；官方无此类型（官方用 position actuator），故入任务包 |
+| `el_4090_lidar/mdp/commands.py` | `velocity/mdp/velocity_command.py` | `El4090VelocityCommand(UniformVelocityCommand)` + 旧死区（norm ≤ 0.2 置零） |
+| `el_4090_lidar/mdp/curriculums.py` | `velocity/mdp/curriculums.py` | 多阶段奖励权重切换 + 旧 lin_vel_x 指令课程 |
+| `el_4090_lidar/mdp/events.py` | （官方 events 在 `mjlab.envs.mdp.events/dr`） | `push_by_overwriting_velocity`（旧语义覆盖 x/y，非官方的增量式） |
+| `el_4090_lidar/mdp/observations.py` | `velocity/mdp/observations.py` | proprio 66 维旧布局常量 + `height_grid`（17×11 min-of-3 采样） |
+| `el_4090_lidar/mdp/rewards.py` | `velocity/mdp/rewards.py` | 19 项旧奖励逐项移植 + `_El4090StepState`（旧 post_physics_step 计时器状态） |
+| `el_4090_lidar/mdp/terminations.py` | `velocity/mdp/terminations.py` | `fell_over`（重力 z > −0.1 或 base < 0.12 m） |
+| `el_4090_lidar/mdp/terrain.py` | `velocity/mdp/terrain_utils.py`（+ 官方 `terrains/heightfield_terrains.py` 模式） | `El4090PillarFieldCfg(SubTerrainCfg)`：M2 TerrainBuilder 场地按官方 generator 补丁机制切片注入 |
+| `el_4090_lidar/mdp/lidar.py` | （官方无对应；raycast 传感器在 `mjlab.sensor`，未用） | `El4090LidarPipeline`：warp LidarSensor + 10 Hz tick + 池采样 + prox/distal 生产 |
+| `el_4090_lidar/config/{__init__,env_cfgs,rl_cfg}.py` | `velocity/config/go1/...` | 任务注册（`register_mjlab_task`）+ `LidarPPO5x` rl_cfg |
+| `el_4090_lidar/rl/runner.py` | `velocity/rl/runner.py` | `El4090LidarRunner(MjlabOnPolicyRunner)`：把安装变换挂到 VecEnv wrapper 供 symmetry 绑定 |
+| `tasks/__init__.py` + `pyproject.toml` entry point | 官方任务随 `mjlab.tasks` 包内注册 | 外部任务发现走 **`[project.entry-points."mjlab.tasks"]`**（`mjlab/__init__.py::_import_registered_packages`，`import mjlab` 即自动导入本包完成注册；train CLI `import mjlab.tasks` 后从 registry 按名选择） |
+
+### 语义移植笔记（old → new）
+
+* **本体感知 66 维**：`lin_vel×2 | ang_vel×0.25 | gravity | cmd[:3]×(2,2,0.25) | (dof_pos−def)×1 | dof_vel×0.05 | last_action`，逐项 ObservationTermCfg；噪声次序差异：mjlab 先加噪后缩放 → 原始噪声幅值 = 旧有效幅值 ÷ scale（如 lin_vel ±0.3/2 = ±0.15）。
+* **动作**：旧 `_compute_torques('P')` 在 decimation 循环内每物理步重算 PD → `apply_actions()` 每子步重放同一目标角，等价；±80 Nm 双保险（clip + MJCF motor ctrlrange）。
+* **指令**：heading 模式下 ang_vel_z 由 heading 误差重构（stiffness 0.5）；`resampling_time_range=(20,20)`；死区在 `_resample_command` 尾部。
+* **事件**：`reset_root_state_uniform`（xy ±0.2、yaw ±3.14、六维速度 ±0.5）；推挤 = 覆盖 x/y 速度 U(−1,1) 每 3 s；摩擦 0.3–1.25（全 geom、每 env 单样本 `shared_random`）与基座附加质量 ±10 kg（`dr.body_mass` add，COM 点质量模型 ≙ 旧 props[0].mass）。
+* **奖励**：19 项（含 gait_2_step 同步/异步组、stand_still2、shank_perp2ground 等），足序 = 字母序（LB,LF,LM,RB,RF,RM → 重排 permutation）；足接触力 z 取负号对齐 IsaacGym 受力方向（netforce 传感器对主刚体取反；Gate A 实测站立足底 z ≈ +64 N）。
+* **课程**：`reward_stage`（均值原始（非 dt 缩放）回合总奖励 > 2.0 → 阶段 1）+ `command_vel`（tracking_lin_vel 回均 > 0.8×w×dt → ±0.5 扩展至 ±2.5）。
+* **LiDAR（M3b）**：S2 配方 —— `wp.init()` 最先；M2 全场（26×26 m 含边界）warp mesh 平移到 mjlab 世界系（`field − (border+extent/2)`）；warp 自有内存（`wp.from_numpy`+device，防 `from_torch` 别名回收）；tick 前后三处同步（物理→torch 位姿、torch 写→warp 核、warp 输出→torch）；**四元数约定实测**：`wp.quat_rotate` 按 xyzw（w=q[3]）解释，mjlab `root_link_quat_w` 为 wxyz → 显式 `[:, [1,2,3,0]]` 重排；10 Hz tick 挂在 obs 计算处（`common_step_counter` 守卫，env 复位当步强制 tick ≙ 旧 `_reset_lidar_buffers`）；prox/distal 由移植版 `LidarWrapper` 生产（FPS 256 + 球键排序；64 点均匀降采样写 10 帧环，**每策略步**写一次 ≙ 旧 runner 每步 wrap_obs，完成 env 的环在 obs 装配后清零）。
+
+### 偏差（与旧栈的已知差异）
+
+1. **地形边界**：MuJoCo 碰撞地形 = 2×2 补丁（16×16 m），M2 的 5 m 平边只在 LiDAR mesh 与 numpy 高度场中存在（旧栈 trimesh 碰撞含边界）。机器人走出补丁会坠落并触发 low_base 终止；训练内 20 s 回合 + 柱场约束下影响可忽略。
+2. **摩擦合成**：MuJoCo 接触摩擦默认取两 geom 的逐维 max（地形 1.0 会下托 0.3–1.25 的随机值 → 有效 ~[1.0, 1.25]）；旧 IsaacGym 为平均（有效 ~[0.65, 1.125]）。如需复原可在地形 geom 上设 priority 或随机化地形摩擦（未做，记录在案）。
+3. **heading 指令裁剪**：官方实现裁到 ang_vel_z 范围 (−1.2, 1.2)，旧栈裁 (−1, 1)。
+4. **课程检查点**：mjlab curriculum 在 reset 批次执行（旧 reward_stage 每训练迭代、command 课程每 max_episode_length 步）；单调量不受影响。
+5. **DR 时机**：摩擦/质量为 `mode="startup"`（旧栈 `_create_envs` 时一次性每 env 随机，非每回合重抽——继承草案误作 mode="reset"，已改；per-reset 的 add 质量还会漂移累积）。
+6. **LiDAR tick 驱动位置**：旧在 post_physics_step、wrap 在 runner；新统一在 obs 计算（同一策略步、复位后 forward() 之后的位姿，语义等价；手工调用 `env.reset(env_ids=...)` 不步进 counter，不触发强制 tick——训练路径不走该分支）。
+7. **num_envs 默认 4096** 保持（RTX 5090 目标）；6 GB 开发机上 CLI 覆盖。实测 VRAM：128 envs torch 峰值 1140 MB / 进程 1426 MB；256 envs 2284 / 2592 MB（≈8.9 MB/env，含传感器噪声临时量与 mujoco-warp）。
+8. **hfield 数据布局**沿用 M2 实测的“转置后注入”约定（MuJoCo 行沿本地 y）；官方 `HfInversePyramidSlopedTerrainCfg` 未转置——其补丁方形且地形近似对称故未暴露。Gate A 的 mj_ray vs numpy 对齐（柱顶 1.155 m 精确一致）实证本任务布局正确。
+
+### Gate 结果
+
+* **Gate A（M3a，`tests/env/gate_a.py`）**：注册发现 ✓（官方 train CLI 按名启动）；obs 2754/187、action 18 ✓；PD 站立（base z 0.461，足力 z ≈ +64 N/足，接触率 1.00，60 步无终止/NaN）✓；|ctrl| 峰值 15.5 « 80 ✓；hfield vs M2 numpy 对齐：出生点 0.000/0.000，柱顶 1.155/1.155 ✓；逐项奖励均值全部有限非平凡 ✓；布局审计（上表）✓；冒烟训练 32 envs × 12 iters：损失有限，symmetry 7e-4、aux 0.237 激活 ✓。
+* **Gate B（M3b，`tests/env/gate_b.py`）**：池命中率 0.71–0.79 ∈ (0,1) ✓；点云全有限 ✓；prox 256 / distal 10×64 环、跨 tick 帧差异 > 0 ✓；tick 节拍 12/12 间隔恰为 5 策略步（10 Hz）✓；官方 CLI 真实 LiDAR 冒烟 128 envs × 10 iters exit 0，损失有限，symmetry 0.0036→0.0009，~140 steps/s ✓；VRAM（偏差 7）✓；对称接线：安装变换绑定 err=0、对合性 err=0、探针点镜像位移 1.0 m（非单位安装）、镜像损失通路有限 ✓。
+
+## M2 — numpy-only 地形系统（2026-09-28）
+
+### 交付物
+
+| 文件 | 说明 |
+|---|---|
+| `src/hexapod_mjlab/terrains/_isaacgym_vendored.py` | 自 isaacgym 1.0rc4 `terrain_utils.py` vendore 的子集（`SubTerrain`、`convert_heightfield_to_trimesh`、`pyramid_sloped/random_uniform/pyramid_stairs/discrete_obstacles/stepping_stones` —— grep 核实为旧 `Terrain` 类实际使用的全部符号），保留 NVIDIA BSD-3 头 + 出处/修改清单 |
+| `src/hexapod_mjlab/terrains/builder.py` | 旧 `legged_gym/utils/terrain.py::Terrain` 的 numpy-only 移植：`TerrainConfig`（默认值 = `El4090LidarHeadCfg.terrain` 解析结果）、`TerrainBuilder(cfg).build(seed) -> TerrainData`（heightfield float32/int16、vertices float32、triangles int32 + 供 `wp.Mesh` 用的 1-D 扁平副本、mujoco hfield 字段/数据/size/placement、env_origins）、`make_warp_mesh()`（先 `wp.init()`） |
+| `scripts/golden_terrain_gen.py` | 在 `li_leggym` env 内以旧 `Terrain` + 真实旧 config 类生成 golden（CPU-only import，一次性溯源脚本） |
+| `tests/data/golden_terrain/` | `heightfield_seed42.npy`（int16 260×260）+ `golden_config_seed42.json`（解析后参数 + 源 git 状态） |
+| `tests/terrain/test_terrain_parity.py` | G2 parity 测试（mjlab env，无 isaacgym） |
+| `tests/terrain/hfield_check.py` | G3 物理检查：hfield MJCF + freejoint box 落柱顶，CPU `mujoco` 对照 + `mujoco_warp` nworld=64 × 300 步 |
+
+### Gate 结果
+
+* **G1** vendored 模块在 mjlab env 导入且 `random_uniform_terrain` 实跑通过（interp2d 替换生效）；另在 li_leggym（scipy 1.10，尚有 interp2d）验证替换在 rint+int16 后**逐位一致**（0/16384 差异）。
+* **G2** parity：`TerrainBuilder(TerrainConfig()).build(42)` 与 golden **int16 逐位相等**（`np.array_equal`），float32 米制 max_diff = 0.0；对 float64 参考乘积的差异 3.6e-8 m（纯 float32 存储舍入，见测试内说明）。柱场不经过 interp2d，无需放宽容差（atol=1e-9 rtol=0 保持）。
+* **G3** hfield 物理：CPU 与 GPU(64 worlds) 方块均停在最高柱顶（z=1.2048 ≈ 1.155+0.05），全部有限，GPU |z−CPU| ≤ 3.2e-4 m，300 步内静止。
+* **G4** `grep -rnE "^\s*(import|from)\s+(isaacgym|legged_gym|rsl_rl)" src/hexapod_mjlab/terrains/` 无匹配（仅剩注释/出处文字）。
+
+### 决策与偏差（M2）
+
+1. **RNG 调用顺序逐行保留**（`randomized_terrain`→`np.random.uniform`→`np.random.choice`→`pillar_field_terrain` 全部抽样次序不变）；`build(seed)` 内先 `np.random.seed(seed)`，legacy `RandomState` 流被 NumPy 冻结（NEP 19），故跨 numpy 1.24→2.5 逐位复现。
+2. interp2d → `RectBivariateSpline(x, y, z, kx=1, ky=1)`（scipy≥1.14 移除 interp2d；等价双线性插值，参数顺序差异已在注释中说明）。
+3. 死代码不迁移：旧文件中 `curved_corridor_terrain`/`trapezoid_corridor_terrain`/`_draw_circle`（`make_terrain` 分支不引用）。
+4. `selected_terrain` 的 `eval()` 改为注册表查找，并修复原潜在 bug（`self.vertical_scale` 未定义、`length=` 误用 width）；`none`/`plane` mesh_type 改为抛错（旧类静默返回残缺对象）；不再回写 `cfg.num_sub_terrains`。
+5. **MuJoCo hfield 语义（3.11 实测定）**：loader 自行 min-max 归一化；世界高度 = `pos_z + 值×elevation_z`（geom 原点置于场地最低点）；`base_z` 仅为正向裙边深度（MJCF 要求 4 个 size 全正，取常数 1.0）；**数据第一维沿 y（与我们 axis0=x 相反）→ 输出前转置**；.bin 格式 = 2×int32(nrow,ncol) 头 + float32 数据。G3 的 ray 交叉验证（mujoco 表面 vs numpy 双线性）确认布局正确。
+6. G3 用 0.2 m 落距：0.5 m 时 mujoco-warp 的 HFIELD-BOX 对（MULTICCD 下至多 1 触点）让方块弹跳滑出 1.0×1.8 m 柱顶（CPU 不滑出）；0.2 m 时 64/64 worlds 与 CPU 一致停在柱顶。已记录为 mujoco-warp hfield 保真度观察项。
+7. `make_warp_mesh` 内部先 `wp.init()`（幂等）；warp 1.17 `wp.Mesh` 要求 points 为 `wp.vec3` float32、indices 为**一维** int32（二维 (M,3) 会被拒绝，实测确认）。
+
+## 源信息
+
+* 源仓库：`/home/t3chichi/Lidar_legged_gym`
+* 源 HEAD commit：`888e4932227714990c24ad2e82513a4f35574677`（已在源仓库打
+  标签 `migration-source`）
+* **迁移基线是迁移时刻的 DIRTY working tree，不是 HEAD。** 迁移时刻
+  `git status --short`（16 条）：
+
+```
+ D legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/diagnostics/geometry_probe.py
+ D legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/diagnostics/terrain_probe.py
+ M legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/el_4090_lidar_head.py
+ M legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/el_4090_lidar_head_config.py
+ M legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/pool_samplers.py
+RM legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/diagnostics/mount_check.py -> legged_gym/legged_gym/tests/pd_gru_lidar_head/mount_check.py
+RM legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/diagnostics/pool_sampler_check.py -> legged_gym/legged_gym/tests/pd_gru_lidar_head/pool_sampler_check.py
+RM legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/diagnostics/sensor_smoke.py -> legged_gym/legged_gym/tests/pd_gru_lidar_head/sensor_smoke.py
+RM legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/diagnostics/split_classification_check.py -> legged_gym/legged_gym/tests/pd_gru_lidar_head/split_classification_check.py
+RM legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/diagnostics/symmetry_check.py -> legged_gym/legged_gym/tests/pd_gru_lidar_head/symmetry_check.py
+RM legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/diagnostics/throughput_bench.py -> legged_gym/legged_gym/tests/pd_gru_lidar_head/throughput_bench.py
+ M rsl_rl/rsl_rl/runners/on_policy_runner.py
+ M rsl_rl/rsl_rl/utils/lidar_wrapper.py
+?? legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/README.md
+?? legged_gym/legged_gym/scripts/play_keyboard.py
+```
+
+## 旧 → 新文件映射
+
+| 旧路径（Lidar_legged_gym 内） | 新路径（Lidar_mjlab 内） |
+|---|---|
+| `legged_gym/legged_gym/utils/LidarSensor/`（整树：`__init__.py`, `base_sensor.py`, `lidar_sensor.py`, `.gitignore`, `sensor_config/`, `sensor_kernels/`, `sensor_pattern/` 及 `.npy` 数据） | `src/hexapod_mjlab/utils/lidar/`（子包结构原样保留） |
+| `legged_gym/legged_gym/envs/el_4090/pd_gru_lidar_head/pool_samplers.py` | `src/hexapod_mjlab/utils/lidar/pool_samplers.py`（M0 时为 `pd/`，布局对齐后迁入 `lidar/`） |
+| `legged_gym/legged_gym/utils/pointcloud_geometry.py` | `src/hexapod_mjlab/utils/pointcloud_geometry.py`（M0 时为 `geometry/`，布局对齐后迁入 `utils/`） |
+| `legged_gym/legged_gym/envs/el_4090/pd_gru_lidar/el_4090_lidar_symmetry.py` | `src/hexapod_mjlab/rl/el_4090_lidar_symmetry.py`（M0 时为 `symmetry/`，布局对齐后迁入 `rl/`） |
+| `rsl_rl/rsl_rl/utils/lidar_wrapper.py` | `src/hexapod_mjlab/rl/lidar_wrapper.py` |
+| `rsl_rl/rsl_rl/modules/lidar_pd_actor_critic.py` | `src/hexapod_mjlab/rl/lidar_pd_actor_critic.py` |
+| `legged_gym/legged_gym/tests/pd_gru_lidar_head/mount_check.py` | `tests/lidar_sensor/mount_check.py`（适配） |
+| `legged_gym/legged_gym/tests/pd_gru_lidar_head/pool_sampler_check.py` | `tests/lidar_sensor/pool_sampler_check.py`（适配） |
+| `legged_gym/legged_gym/tests/pd_gru_lidar_head/symmetry_check.py` | `tests/lidar_sensor/symmetry_check.py`（适配） |
+
+`.npy` 扫描模式数据（7 个，共约 44 MB）随包迁移：
+`src/hexapod_mjlab/utils/lidar/sensor_pattern/sensor_lidar/scan_mode/` 下的
+`avia.npy`、`HAP.npy`、`horizon.npy`、`mid360.npy`、`mid40.npy`、
+`mid70.npy`、`tele.npy`，已通过 setuptools package-data 纳入 wheel。
+
+## Decisions（迁移决策）
+
+1. **num_envs 默认保持 4096**（与旧仓库 `el_4090` 配置族一致），环境/
+   训练配置迁移到 mjlab 时默认不改；允许按设备覆盖（6 GB RTX 4050 笔记本
+   用于开发/冒烟，最终训练目标是 RTX 5090），覆盖仅作为运行时参数而非
+   仓库默认值变更。
+2. **rsl-rl 路线 B**：保留旧算法语义（LidarWrapper 观测装配 +
+   LidarPDActorCritic 双 GRU + 对称增强 + 高度监督），但为 rsl-rl 5.x
+   原生重写接入层（不 vend rsl_rl 旧源码、不做 monkey-patch）；
+   **语义一致性审计（semantic parity audit）是硬性交付物**，后续里程碑
+   必须逐项核对旧/新 runner、buffer、wrapper 行为等价。
+3. 环境层（Isaac Gym `el_4090` env/config）不在 M0 范围，M0 只迁纯
+   torch/warp 的可复用模块 + 验收测试。
+
+## 迁移时修改清单（port-time modifications）
+
+1. **打包修复（隐式命名空间包）**：为 `sensor_kernels/`、
+   `sensor_config/`、`sensor_pattern/sensor_lidar/scan_mode/` 补零字节
+   `__init__.py`（原为隐式命名空间包，`find_packages()` 会漏掉）；
+   同时为新的 `pd/`、`geometry/`、`symmetry/`、`rl/` 子包补
+   `__init__.py`，并新建 `src/hexapod_mjlab/__init__.py`
+   （`__version__ = "0.1.0"`）。
+2. **`lidar/__init__.py`**：删除死常量 `RESOURCES_DIR`（指向不存在的
+   `resources/` 目录，且全树无引用）。
+3. **`lidar/lidar_sensor.py`**：`def tensor_indices_to_slice(idx)` 补
+   `self`（原方法缺 `self`，`self.tensor_indices_to_slice(env_ids)` 调用
+   会 TypeError；调用点位于 `reset()` 中，签名修正后调用无需改动）。
+4. **`symmetry/el_4090_lidar_symmetry.py`**（M0 时路径；现 `rl/`）：
+   `from legged_gym.utils.pointcloud_geometry import ...` 重写为
+   `from lidar_mjlab.utils.pointcloud_geometry import ...`
+   （M0 时为 `lidar_mjlab.geometry....`，布局对齐后改现值）。
+5. **导入审计**：`pool_samplers.py`、`lidar_wrapper.py`、
+   `lidar_pd_actor_critic.py`、`pointcloud_geometry.py` 无其他旧仓库内部
+   绝对导入；`lidar_pd_actor_critic.py` 的
+   `from rsl_rl.utils import resolve_nn_activation, unpad_trajectories`
+   为外部依赖（rsl-rl-lib 5.4.2 已提供），保持原样。
+6. **测试适配**：三个验收脚本的路径常量改指新家
+   （`SRC = .../src/hexapod_mjlab`；`genera_lidar_scan_pattern.py` →
+   `SRC/lidar/...`，`pool_samplers` → `SRC/lidar/...`（布局对齐后，
+   M0 时 `SRC/pd/`），`el_4090_lidar_symmetry` → `SRC/rl/...`
+   （布局对齐后，M0 时 `SRC/symmetry/`））；
+   `symmetry_check.py` 移除 `sys.modules["legged_gym.utils.pointcloud_geometry"]`
+   预注入（对称模块现直接导入已 editable 安装的 `lidar_mjlab.*`）；
+   `mount_check.py` 的 EA2 通道文件由硬编码绝对路径参数化为环境变量
+   `LIDAR_MJLAB_EA2_CHANNELS`（默认空 → 保持原“文件未找到即跳过”行为）。
+   测试产物仍写 `tests/lidar_sensor/logs/acceptance/`（gitignored）。
+7. **文档路径引用**：`pool_samplers.py` docstring 中的旧测试路径、
+   `pointcloud_geometry.py` 首行旧路径注释更新为新路径（仅注释/文档，
+   无代码影响）。
+
+## 环境
+
+conda env `hp_mjlab`：python 3.12, torch 2.11.0+cu128, warp-lang 1.17.0,
+mujoco 3.11.0, mujoco-warp 3.11.0, mjlab 1.6.0, rsl-rl-lib 5.4.2,
+numpy 2.5.3, scipy 1.18.1, trimesh 5.1.0。
+
+## S1 排障与审查记录（r2）
+
+**G2 门排障定案**：stub 上 PPO 对 obs→动作映射收敛慢并非缺陷——四组配置
+（lr 1e-3/1e-4/3e-4、epochs 1/2/4、std 0.1/0.5）下冻结探针 track 均近零
+移动；结构验证证明优化器连通全部 actor 参数、update 后权重确实变化、
+∇μJ = -2(μ-t) 方向正确且与 σ 无关；官方 mjlab G1 任务在本机训练 100 迭代
+奖励 -1.23→-0.37（官方链路健康）。定案：管道正确，映射收敛速度是 PPO 在
+60 迭代 stub 预算上的固有属性。**门设计据此重构**：G2 断言机制健康（奖励
+改善≥5%、value 有界≤3×、aux 下降、mirror<5e-3、无 NaN），新增 **G2b 监督
+回归子门**直接证明通路可训练性（同 actor+Adam，300 步 MSE(μ,t)：探针
+track 0.0836→0.00039）。真实任务上的 PPO 学习由 M4/M5 验收。
+
+**镜像一致 stub 设计**：目标 = 2.0·tanh(镜像不变本体特征 @ P 对称投影)
+（对合性仅点云重排序不严格——既有设计；等变性实测 5.96e-08）。
+
+**最终门状态**：G1 parity 全零差异 / G2+G2b+G3 PASS（GPU ~8 分钟）。
+
+## M5 结果记录（本机 4050 6GB，32 envs × 200 iters × seed 1，双栈同规格）
+
+- **吞吐门：达标**。v1 99 fps / v2（摩擦校准后）116 fps vs 旧栈 140 fps = **83%**
+  （门槛 ≥50%）。本机驱动 535 禁用 CUDA 图（需 ≥12.4）、mujoco-warp 小批量
+  物理固定开销为主因；高 env 数（5090/4096 envs）下预计显著收窄。
+- **摩擦语义校准：已实施并验证排除**。地形 priority=1 + 地形摩擦 U[0.65,1.125]
+  （events.terrain_friction）精确复现旧栈 PhysX 平均有效摩擦；校准后奖励差距
+  未收窄（-196→-260 vs 旧 -75）→ 摩擦非主因。
+- **奖励曲线门：未达（行为级差异，非迁移缺陷）**。新栈 46% episode fell_over
+  （旧栈 0%），罚分集中：feet_contact_forces -4.1 / collision -1.9 /
+  ang_vel_xy -1.5 / torques -1.5 / gait_2_step -1.4。Gate A 零动作 PD 站立
+  稳定（64N/脚）→ 问题在探索动作下 MuJoCo 软接触响应与 PhysX 的行为差异。
+  **下一步**（目标机/后续）：逐项奖励双栈对齐提取（旧栈 TB 标签口径需修）→
+  接触参数（solref/solimp）与终止裕度校准 → 更长训练对比。

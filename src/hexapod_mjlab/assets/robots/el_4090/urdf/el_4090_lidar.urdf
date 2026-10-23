@@ -1436,8 +1436,8 @@
   <!-- Mount fix corrected 2026-10-02 (user-confirmed): the CAD export had the
        radar assembly head/tail reversed. The chain below is the original
        rotated 180 deg about the BASE z axis, which places RADAR_BRACKET and
-       the LiDAR at the head (+x) with the sensor axis pointing down, as on
-       the real robot. -->
+       the LiDAR at the head (+x). The housing +y (radome side) points
+       forward with a 0.1 rad downward tilt; housing +z points down. -->
   <joint name="RADAR_BRACKET_FIX" type="fixed">
     <origin xyz="0 0.2 -0.1988" rpy="0 -0 -1.57079633" />
     <parent link="BASE" />
@@ -1491,8 +1491,12 @@
     <parent link="LIDAR_AIRY" /><child link="LIDAR_GLASS" />
   </joint>
   <link name="LIDAR_SENSOR" />
+  <!-- Optical frame: +x = housing +x; +y = -housing +z;
+       +z = housing +y, so the scan hemisphere pole faces the radome.
+       This rotates an empty reference frame only, not the assembly.
+       The azimuth origin is a simulation convention, not hardware calibration. -->
   <joint name="LIDAR_SENSOR_FIX" type="fixed">
-    <origin xyz="0 0.0453 0" rpy="0 0 0" />
+    <origin xyz="0 0.0453 0" rpy="-1.5707963267948966 0 0" />
     <parent link="LIDAR_AIRY" />
     <child link="LIDAR_SENSOR" />
   </joint>
