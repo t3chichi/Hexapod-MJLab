@@ -3,6 +3,7 @@
 本目录只保存可随Git交付的精简结果；完整日志、checkpoint和wheel留在开发机的 `logs/maintenance/20261023_pretrain_baseline/`。日期跨2026-10-23至24，不回写此前冻结实验。
 
 - `acceptance.json`：各检查的通过状态、GPU恢复边界与限制。
+- `clean_git_check.json`：实际Git干净克隆、editable隔离导入、98项CPU检查及换行转换下283文件身份一致；后续提交仅补充这些验收元数据。
 - `environment.json`：本次实际使用的Python、主要依赖和CUDA runtime；不是5090环境验收。
 - `package_check.json`：隔离wheel资源加载、45个资产逐字节一致、21个选集校验与固定T1 catalog身份。
 - `runtime_files.json`：交付源码包中283个源码/模型/数据/任务说明文件的SHA256，路径相对于仓库根目录；不包含本目录，避免自引用。

@@ -206,5 +206,11 @@
     "future physical trajectories are not bit-exact after restore",
     "historical raw logs and checkpoints remain local"
   ],
-  "package_check": "package_check.json"
+  "package_check": "package_check.json",
+  "clean_git_check": "clean_git_check.json",
+  "document_links": {
+    "checked_links": 95,
+    "historical_local_logs_links": 92,
+    "missing": []
+  }
 }

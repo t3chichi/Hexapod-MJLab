@@ -1,0 +1,14 @@
+{
+  "passed": true,
+  "tested_commit": "deff6393a00665d85bcac094f9b4c962e415c958",
+  "isolated_editable_import": true,
+  "cpu_checks": 98,
+  "initial_logs_absent": true,
+  "git_worktree_clean_after_checks": true,
+  "core_autocrlf": "true",
+  "runtime_files_matched": 283,
+  "runtime_manifest_sha256": "8b0623cc58bf31814a01ff1c8fefe594069c1d6712e0ac3e88ac64188b38a637",
+  "cpu_log_sha256": "950b138ace2a4b52b4d64cb9d78b39a80e792a902b847358a6fdecbf9b5167c2",
+  "dependency_scope": "temporary venv with development system-site dependencies; no new conda solve",
+  "release_scope": "following commit adds verification metadata only; runtime files remain identical"
+}
