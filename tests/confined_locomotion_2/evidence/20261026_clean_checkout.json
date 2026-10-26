@@ -1,0 +1,66 @@
+{
+  "schema": "confined_locomotion_2.clean_checkout_deployment/v1",
+  "date": "2026-10-26",
+  "passed": true,
+  "tested_source_commit": "4d88c42638e9b047b4861a9cd70751502d683d1d",
+  "branch": "codex/confined-flat-2-pretrain-baseline",
+  "clean_git_clone": true,
+  "editable_import_from_clone": true,
+  "dependencies_reused_from_existing_environment": true,
+  "fresh_network_conda_resolution_tested": false,
+  "runtime_source_files": 128,
+  "runtime_source_manifest_sha256": "93f7374a42c29033cecc77b528f71b954f6621aa388f52b99fafa5cd9f67ad40",
+  "cpu_checks": 148,
+  "wheel": {
+    "passed": true,
+    "asset_count": 45,
+    "asset_bytes_equal": true,
+    "selection_count": 21,
+    "isolated_wheel_import": true
+  },
+  "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+  "torch": "2.11.0+cu130",
+  "cuda_runtime": "13.0",
+  "flat_gpu": {
+    "passed": true,
+    "restore_boundary_bit_exact": true,
+    "same_rollout_optimizer_replay_bit_exact": true,
+    "periodic_save_and_cumulative_resume": true,
+    "tensorboard_learning_tags": true
+  },
+  "future_physics_trajectory_diagnostics": {
+    "resume_actions_bit_exact": false,
+    "resume_rewards_bit_exact": false,
+    "resume_observations_bit_exact": false,
+    "resume_histories_bit_exact": false
+  },
+  "terrain_checkpoint_boundary": {
+    "passed": true,
+    "strict_boundary_bit_exact": true,
+    "changed_weight_rejected": true,
+    "labels_regenerated_after_restore": true,
+    "subsequent_collection_steps": 24,
+    "optimizer_updates_after_restore": 0
+  },
+  "terrain_cli_train_and_resume": {
+    "iteration": 2,
+    "optimizer_steps": 40,
+    "environment_closed": true
+  },
+  "headless_play": {
+    "flat": {
+      "passed": true,
+      "steps": 2
+    },
+    "terrain_memory": {
+      "passed": true,
+      "steps": 2
+    }
+  },
+  "limitations": [
+    "Validated on RTX4050, not RTX5090; no target capacity or learning result",
+    "Isolated editable install reused existing tested dependency packages; not a new network-resolved conda environment",
+    "Future physics trajectories are not bit-exact; accepted exact checks concern restore boundary and fixed-rollout optimizer replay",
+    "Raw logs and checkpoints remain local and are not runtime dependencies"
+  ]
+}
