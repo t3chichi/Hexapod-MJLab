@@ -1,4 +1,8 @@
-"""Explicit recipes for the independent recurrent confined-locomotion task."""
+"""Flat Baseline environment factories and explicit RL recipes.
+
+Environment construction and execution stay in the existing task modules;
+this module is the task-specific configuration entry point.
+"""
 
 from dataclasses import dataclass, field
 from typing import ClassVar
@@ -11,6 +15,9 @@ from hexapod_mjlab.tasks.confined_locomotion.perturbations import (
     ALL_THREE_PRESET, ObservationPerturbationCfg,
 )
 
+from ..flat_env_cfg import TASK_ID, make_flat_env_cfg, make_training_env_cfg
+from ..play import make_play_env_cfg
+
 
 @dataclass
 class ConfinedLocomotionRlCfg(RslRlBaseRunnerCfg):
@@ -21,6 +28,7 @@ class ConfinedLocomotionRlCfg(RslRlBaseRunnerCfg):
     num_steps_per_env: int = 24
     clip_actions: float | None = None
     save_interval: int = 50
+    execution_mode: str = "low_memory"
     logger: str = "tensorboard"
     upload_model: bool = False
     engineering_enabled: bool = False

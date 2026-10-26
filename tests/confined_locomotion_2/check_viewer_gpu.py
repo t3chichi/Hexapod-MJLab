@@ -299,7 +299,7 @@ def main():
         for _ in range(3):
             snapshot = session.build_display_snapshot(0, paused=True)
             viewer.render(snapshot)
-        for view in ("WORLD", "BASE"):
+        for view in ("世界", "机器人"):
             viewer._view.value = view
             viewer.render(snapshot)
         for control in (viewer._near, viewer._far, viewer._pool, viewer._cone, viewer._envelope):

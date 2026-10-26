@@ -21,6 +21,7 @@ from hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint import (
 
 SCHEMA = "confined_locomotion_2.full/v1"
 TASK_ID = "El-4090-Confined-Locomotion-Flat_2"
+TERRAIN_TASK_ID = "El-4090-Confined-Locomotion-Terrain-Memory_2"
 
 
 def cpu_tree(value):
@@ -50,13 +51,17 @@ def require_finite(value):
             require_finite(item)
 
 
-def architecture_identity(far_sampling="all_endpoints"):
-    return {"task": TASK_ID, "near": 256, "far": 128, "window": 1,
+def architecture_identity(far_sampling="all_endpoints", *, terrain_memory=False):
+    result = {"task": TASK_ID, "near": 256, "far": 128, "window": 1,
             "grouping": "fixed_t1_channels/v1",
             "frame_gru": [3, 187], "temporal_gru": [196, 187],
             "envelope_heads": [6], "ground_head": False,
             "scan_age": False, "control_hz": 50, "scan_hz": 10,
             "sampling": sampling_identity(far_sampling)}
+    if terrain_memory:
+        result.update(task=TERRAIN_TASK_ID, ground_head=[187, 187],
+                      height_grid_shape=[11, 17], height_prediction_to_actor=False)
+    return result
 
 
 def identity(runner):
@@ -67,7 +72,7 @@ def identity(runner):
                       root.parent / "utils" / "lidar", root / "el_4090_lidar"):
         for path in sorted(directory.rglob("*.py")):
             source[str(path.relative_to(root.parent))] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return {"architecture": architecture_identity(runner.runtime.lidar_cfg.far_sampling), "seed": runner.seed,
+    return {"architecture": runner.recipe_identity["architecture"], "seed": runner.seed,
             "num_envs": runner.num_envs, "device": str(runner.device),
             "cuda_name": torch.cuda.get_device_name(runner.device) if runner.device.type == "cuda" else None,
             "torch": torch.__version__, "recipe": runner.recipe_identity,
@@ -105,7 +110,7 @@ def save_full_checkpoint(runner, path, *, infos=None):
     env_fields = ("episode_length_buf", "_manual_reset_pending", "reset_terminated",
                   "reset_time_outs", "reset_buf", "reward_buf")
     payload = {
-        "schema": SCHEMA, "task": TASK_ID, "kind": "full", "resumable": True,
+        "schema": SCHEMA, "task": runner.task_id, "kind": "full", "resumable": True,
         "identity": identity(runner), "infos": infos,
         "network": runner.network.state_dict(), "provider": runner.provider.state_dict(),
         "trainer": runner.trainer.state_dict(), "runtime": runner.runtime.state_dict(),
@@ -139,9 +144,11 @@ def save_full_checkpoint(runner, path, *, infos=None):
     return target
 
 
-def read_checkpoint(path, *, expected_far_sampling=None):
+def read_checkpoint(path, *, expected_far_sampling=None, expected_task_id=TASK_ID):
     payload = torch.load(path, map_location="cpu", weights_only=False)
-    if not isinstance(payload, dict) or payload.get("schema") != SCHEMA or payload.get("task") != TASK_ID:
+    if expected_task_id not in (TASK_ID, TERRAIN_TASK_ID):
+        raise ValueError("unsupported checkpoint task")
+    if not isinstance(payload, dict) or payload.get("schema") != SCHEMA or payload.get("task") != expected_task_id:
         raise ValueError("checkpoint is not a confined_locomotion_2 full checkpoint")
     if payload.get("kind") != "full" or payload.get("resumable") is not True:
         raise ValueError("checkpoint is not resumable")
@@ -150,10 +157,10 @@ def read_checkpoint(path, *, expected_far_sampling=None):
     if expected_far_sampling is not None:
         if expected_far_sampling not in supported_sampling:
             raise ValueError("unsupported expected far sampling mode")
-        expected_architecture = architecture_identity(expected_far_sampling)
+        expected_architecture = architecture_identity(expected_far_sampling, terrain_memory=expected_task_id == TERRAIN_TASK_ID)
         if saved_architecture != expected_architecture:
             raise ValueError("checkpoint architecture does not match this task/far sampling mode")
-    elif not any(saved_architecture == architecture_identity(mode) for mode in supported_sampling):
+    elif not any(saved_architecture == architecture_identity(mode, terrain_memory=expected_task_id == TERRAIN_TASK_ID) for mode in supported_sampling):
         raise ValueError("checkpoint architecture does not match a supported task/far sampling mode")
     require_finite(payload)
     return payload
@@ -172,7 +179,7 @@ def load_full_checkpoint(runner, path):
     if runner.phase not in ("fresh", "ready") or runner._active_buffer is not None:
         raise RuntimeError("load requires a fresh or stable runner")
     payload = read_checkpoint(
-        path, expected_far_sampling=runner.runtime.lidar_cfg.far_sampling
+        path, expected_far_sampling=runner.runtime.lidar_cfg.far_sampling, expected_task_id=runner.task_id
     )
     if payload["identity"] != identity(runner):
         raise ValueError("full resume identity differs (task/source/recipe/model/device)")
@@ -229,8 +236,8 @@ def load_full_checkpoint(runner, path):
     return payload.get("infos")
 
 
-def load_weights(network, path, *, expected_far_sampling=None):
+def load_weights(network, path, *, expected_far_sampling=None, expected_task_id=TASK_ID):
     """Play starts a new episode, with zero history; it is not full resume."""
-    payload = read_checkpoint(path, expected_far_sampling=expected_far_sampling)
+    payload = read_checkpoint(path, expected_far_sampling=expected_far_sampling, expected_task_id=expected_task_id)
     network.load_state_dict(payload["network"], strict=True)
     return payload

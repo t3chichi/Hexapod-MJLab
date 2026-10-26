@@ -63,6 +63,7 @@ __all__ = [
     "landing_air_reward",
     "motion_gate",
     "plane_world_z",
+    "ground_world_z",
     "read_current_foot_support",
     "reward_foot_air",
     "pen_action_rate",
@@ -152,14 +153,28 @@ def _plane_world_z(env) -> float:
 plane_world_z = _plane_world_z
 
 
+def ground_world_z(env, positions_w: torch.Tensor):
+    """MDP ground reference only; independent of the 11x17 auxiliary labels."""
+    context = getattr(env, "_confined_transition_context", None)
+    query = getattr(context, "terrain_query", None)
+    if query is None:
+        return _plane_world_z(env)
+    rows = torch.arange(env.num_envs, dtype=torch.long, device=positions_w.device)
+    heights, valid = query.world_heights(rows, positions_w[..., :2].reshape(env.num_envs, -1, 2))
+    if not bool(valid.all()):
+        raise RuntimeError("MDP ground query outside the valid Heightfield")
+    return heights.reshape(positions_w.shape[:-1])
+
+
 def root_height_above_plane(env, root_pos_w: torch.Tensor) -> torch.Tensor:
-    """World-VERTICAL root height relative to the real ground plane.
+    """World-VERTICAL root clearance using the task's real ground reference.
 
     h_actual = (p_root − p_ground)·u_W with u_W the unit world-up vector
     (authority: 平地固定高度验证) — for the validated horizontal plane this
-    is the z difference against the plane's real world position.
+    is the z difference against the plane's real world position. Terrain
+    Memory alone uses its bound Heightfield query at the root XY.
     """
-    return root_pos_w[:, 2] - _plane_world_z(env)
+    return root_pos_w[:, 2] - ground_world_z(env, root_pos_w)
 
 
 def motion_gate(command: torch.Tensor) -> torch.Tensor:
@@ -260,7 +275,7 @@ def read_current_foot_support(context) -> torch.Tensor:
     """REAL foot support from the CURRENT solver state (reset init path).
 
     Same qualification as the context boundary support (foot body vs the
-    actual plane geom, per-contact dist <= 0 and force norm > 0.1 N), read
+    actual ground geom, per-contact dist <= 0 and force norm > 0.1 N), read
     from the live contact table after a reset's forward — used to seed the
     air-time state truthfully (the lifted T1 reset yields no contacts, but
     the value is measured, not assumed).
@@ -415,7 +430,7 @@ def reward_foot_air(env, *, weight: float) -> torch.Tensor:
 
 def pen_foot_clearance(env, *, weight: float) -> torch.Tensor:
     record = get_transition_context(env).ensure_ready()
-    plane_z = _plane_world_z(env)
+    plane_z = ground_world_z(env, record["foot_pos_w"])
     h_foot = record["foot_pos_w"][:, :, 2] - plane_z
     raw = torch.where(
         motion_gate(record["command"]),

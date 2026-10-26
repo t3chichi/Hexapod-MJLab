@@ -29,7 +29,7 @@ class LearningMetrics:
 
     SCHEMA = 1
 
-    def __init__(self, num_envs: int, device, plane_world_z: float = 0.0):
+    def __init__(self, num_envs: int, device, plane_world_z: float = 0.0, *, terrain_query=None):
         if isinstance(num_envs, bool) or not isinstance(num_envs, int) or num_envs < 1:
             raise ValueError("num_envs must be a positive integer")
         if not torch.isfinite(torch.tensor(float(plane_world_z))):
@@ -37,6 +37,7 @@ class LearningMetrics:
         self.num_envs = num_envs
         self.device = torch.device(device)
         self.plane_world_z = float(plane_world_z)
+        self.terrain_query = terrain_query
         self.episode_return = torch.zeros(num_envs, device=self.device, dtype=torch.float64)
         self.episode_length = torch.zeros(num_envs, device=self.device, dtype=torch.float64)
         self._active = False
@@ -94,7 +95,13 @@ class LearningMetrics:
             self._add("Proprio/tilt_deg", tilt_deg)
             self._add("Proprio/angular_velocity_xy_norm_radps", torch.linalg.vector_norm(omega[:, :2], dim=1))
 
-        height = self._batch(rec["root_pos_w"], (b, 3), "root_pos_w")[:, 2] - self.plane_world_z
+        root_pos = self._batch(rec["root_pos_w"], (b, 3), "root_pos_w")
+        if self.terrain_query is None:
+            root_ground = self.plane_world_z
+        else:
+            from ..mdp.rewards import ground_world_z
+            root_ground = ground_world_z(self.terrain_query.env, root_pos)
+        height = root_pos[:, 2] - root_ground
         self._add("Proprio/root_height_error_abs_m", (height - ROOT_HEIGHT_TARGET_M).abs())
         self._add("Proprio/root_height_m", height)
 
@@ -137,7 +144,10 @@ class LearningMetrics:
             foot_pos = self._batch(rec["foot_pos_w"], (b, 6, 3), "foot_pos_w")
             foot_vel = self._batch(rec["foot_vel_w"], (b, 6, 3), "foot_vel_w")
             swing = ~support
-            foot_height = foot_pos[:, :, 2] - self.plane_world_z
+            foot_ground = self.plane_world_z
+            if self.terrain_query is not None:
+                foot_ground = ground_world_z(self.terrain_query.env, foot_pos)
+            foot_height = foot_pos[:, :, 2] - foot_ground
             tangential_speed = torch.linalg.vector_norm(foot_vel[:, :, :2], dim=2)
             self._add("Feet/swing_link_origin_clearance_m", foot_height * swing)
             self._add("Feet/swing_foot_count", swing.to(torch.float32))

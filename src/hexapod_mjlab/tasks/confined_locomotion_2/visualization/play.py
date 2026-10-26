@@ -20,15 +20,14 @@ import numpy as np
 from hexapod_mjlab.tasks.confined_locomotion.visualization.geometry import (
     cone_axis_base,
     cone_wireframe,
-    hex_vertices,
     quat_wxyz_to_matrix,
-    root_height_marker_world,
-    world_to_base,
 )
 from hexapod_mjlab.tasks.confined_locomotion.visualization.play import (
     PendingControls,
     robot_meshes_at_qpos,
 )
+
+from .envelope import envelope_prism_base
 
 PLAY_SNAPSHOT_SCHEMA = "confined_locomotion_2.play_snapshot/v1"
 
@@ -175,7 +174,7 @@ class PlayViewer:
         self._last_pick_identity = None
         self._camera_focused = False
         self._closed = False
-        self.server = viser.ViserServer(host=host, port=self.port, label="confined_locomotion_2 play")
+        self.server = viser.ViserServer(host=host, port=self.port, label="机器人运动预览")
         try:
             actual_port = int(self.server.get_port())
             if actual_port != self.port:
@@ -190,32 +189,35 @@ class PlayViewer:
 
     def _setup_gui(self):
         gui = self.server.gui
-        choices = [f"env {i}" for i in range(self.num_envs)]
-        self._env = gui.add_dropdown("Environment", choices, initial_value=choices[0])
-        self._view = gui.add_dropdown("View", ["BASE", "WORLD"], initial_value="BASE")
-        self._near = gui.add_checkbox("Near 256", True)
-        self._far = gui.add_checkbox("Far 128 (current scan)", True)
-        self._pool = gui.add_checkbox("Pool candidates", False)
-        self._cone = gui.add_checkbox("Fixed near-channel boundary rays", True)
-        self._envelope = gui.add_checkbox("Envelope hexagon + root-height target", True)
-        self._command = [
-            gui.add_slider("vx m/s", -1.5, 1.5, step=0.05, initial_value=0.0),
-            gui.add_slider("vy m/s", -1.0, 1.0, step=0.05, initial_value=0.0),
-            gui.add_slider("wz rad/s", -1.0, 1.0, step=0.05, initial_value=0.0),
-        ]
-        self._apply = gui.add_button("Apply command")
-        self._zero = gui.add_button("Zero command")
-        self._pause = gui.add_button("Pause / continue")
-        self._step = gui.add_button("Single step")
-        self._reset = gui.add_button("Reset episode")
-        self._exit = gui.add_button("Exit")
-        self._pick_kind = gui.add_dropdown("Pick cloud", ["near", "far"], initial_value="near")
-        self._pick_near_index = gui.add_number("Near input index", 0, min=0, max=255, step=1)
-        self._pick_far_index = gui.add_number("Far input index", 0, min=0, max=127, step=1)
-        self._pick_button = gui.add_button("Query raw source")
-        self._status = gui.add_markdown("")
-        self._pick_panel = gui.add_markdown("")
-        self._acquisition_status = gui.add_markdown("")
+        with gui.add_folder("运行控制", order=0):
+            choices = [f"环境 {i}" for i in range(self.num_envs)]
+            self._env = gui.add_dropdown("环境", choices, initial_value=choices[0])
+            self._playback = gui.add_button_group("播放", ["运行/暂停", "单步", "重置", "退出"])
+            self._command_actions = gui.add_button_group("指令", ["应用", "清零"])
+            self._command = [
+                gui.add_slider("前进 (m/s)", -1.5, 1.5, step=0.05, initial_value=0.0),
+                gui.add_slider("侧移 (m/s)", -1.0, 1.0, step=0.05, initial_value=0.0),
+                gui.add_slider("转向 (rad/s)", -1.0, 1.0, step=0.05, initial_value=0.0),
+            ]
+        self._layers_folder = gui.add_folder("显示图层", order=1)
+        with self._layers_folder:
+            self._view = gui.add_dropdown("坐标系", ["机器人", "世界"], initial_value="机器人")
+            self._near = gui.add_checkbox("近端点云（256）", True)
+            self._far = gui.add_checkbox("远端点云（128）", True)
+            self._envelope = gui.add_checkbox("预测包络（绿）", True)
+            self._pool = gui.add_checkbox("采样候选点", False)
+            self._cone = gui.add_checkbox("近端圆锥线", False)
+        with gui.add_folder("点源查询", order=4, expand_by_default=False):
+            self._pick_kind = gui.add_dropdown("点云", ["近端", "远端"], initial_value="近端")
+            self._pick_near_index = gui.add_number("近端序号", 0, min=0, max=255, step=1)
+            self._pick_far_index = gui.add_number("远端序号", 0, min=0, max=127, step=1)
+            self._pick_button = gui.add_button("查询")
+            self._pick_panel = gui.add_markdown("")
+        self._status_folder = gui.add_folder("状态信息", order=5)
+        with self._status_folder:
+            self._status = gui.add_markdown("")
+            with gui.add_folder("模型与扫描详情", expand_by_default=False):
+                self._details = gui.add_markdown("")
 
         self._acquisition_mode = None
         self._acquisition_near = None
@@ -223,60 +225,73 @@ class PlayViewer:
         self._acquisition_custom_selection = None
         self._acquisition_custom_active = False
         self._acquisition_apply = None
-        if self.acquisition_options:
-            scan_identity = getattr(self.pipeline, "scan_identity", {}) or {}
-            mode = scan_identity.get("mode", "full")
-            mode = mode if mode in ("full", "sparse") else "full"
-            self._acquisition_mode = gui.add_dropdown(
-                "Raycast mode", ["full", "sparse"], initial_value=mode
-            )
-            current_path = getattr(getattr(self.pipeline, "cfg", None), "sparse_selection_path", None)
-            near, far = self._initial_multipliers(
-                scan_identity, current_path if mode == "sparse" else None
-            )
-            near_choices = self._multiplier_choices(0)
-            far_choices = self._multiplier_choices(1)
-            self._acquisition_near = gui.add_dropdown(
-                "Near candidate multiplier", near_choices, initial_value=near
-            )
-            self._acquisition_far = gui.add_dropdown(
-                "Far candidate multiplier", far_choices, initial_value=far
-            )
-            custom_labels = self._custom_selection_labels()
-            if custom_labels:
-                custom_initial = self._initial_custom_selection(scan_identity, current_path, custom_labels)
-                self._acquisition_custom_selection = gui.add_dropdown(
-                    "Custom selection", custom_labels, initial_value=custom_initial
+        with gui.add_folder("扫描设置", order=3, expand_by_default=False):
+            gui.add_markdown("应用后重置回合，并保持暂停。")
+            self._acquisition_status = gui.add_markdown("")
+            if self.acquisition_options:
+                scan_identity = getattr(self.pipeline, "scan_identity", {}) or {}
+                mode = scan_identity.get("mode", "full")
+                mode = mode if mode in ("full", "sparse") else "full"
+                self._acquisition_mode = gui.add_dropdown(
+                    "扫描模式", ["全量", "稀疏"], initial_value={"full": "全量", "sparse": "稀疏"}[mode]
                 )
-            self._acquisition_apply = gui.add_button("Apply acquisition + reset")
-            self._acquisition_apply.on_click(self._submit_acquisition)
-            self._acquisition_mode.on_update(lambda _event: self._update_acquisition_controls())
-            self._acquisition_near.on_update(lambda _event: self._multiplier_selection_changed())
-            self._acquisition_far.on_update(lambda _event: self._multiplier_selection_changed())
-            if self._acquisition_custom_selection is not None:
-                self._acquisition_custom_selection.on_update(lambda _event: self._custom_selection_changed())
-                self._acquisition_custom_active = (
-                    self._acquisition_custom_selection.value in self._custom_selection_labels()
-                    and self._path_is_custom(current_path)
+                current_path = getattr(getattr(self.pipeline, "cfg", None), "sparse_selection_path", None)
+                near, far = self._initial_multipliers(
+                    scan_identity, current_path if mode == "sparse" else None
                 )
-            self._update_acquisition_controls()
+                near_choices = self._multiplier_choices(0)
+                far_choices = self._multiplier_choices(1)
+                self._acquisition_near = gui.add_dropdown(
+                    "近端倍率", near_choices, initial_value=near
+                )
+                self._acquisition_far = gui.add_dropdown(
+                    "远端倍率", far_choices, initial_value=far
+                )
+                custom_labels = self._custom_selection_labels()
+                if custom_labels:
+                    custom_initial = self._initial_custom_selection(scan_identity, current_path, custom_labels)
+                    self._acquisition_custom_selection = gui.add_dropdown(
+                        "自定义选集", custom_labels, initial_value=custom_initial
+                    )
+                self._acquisition_apply = gui.add_button("应用并重置")
+                self._acquisition_apply.on_click(self._submit_acquisition)
+                self._acquisition_mode.on_update(lambda _event: self._update_acquisition_controls())
+                self._acquisition_near.on_update(lambda _event: self._multiplier_selection_changed())
+                self._acquisition_far.on_update(lambda _event: self._multiplier_selection_changed())
+                if self._acquisition_custom_selection is not None:
+                    self._acquisition_custom_selection.on_update(lambda _event: self._custom_selection_changed())
+                    self._acquisition_custom_active = (
+                        self._acquisition_custom_selection.value in self._custom_selection_labels()
+                        and self._path_is_custom(current_path)
+                    )
+                self._update_acquisition_controls()
 
-        self._apply.on_click(lambda _event: self.pending.submit_command(*(float(x.value) for x in self._command)))
-        self._zero.on_click(lambda _event: self.pending.submit_zero_command())
-        self._pause.on_click(lambda _event: self.pending.submit_pause_toggle())
-        self._step.on_click(lambda _event: self.pending.submit_step())
-        self._reset.on_click(lambda _event: self.pending.submit_reset())
-        self._exit.on_click(lambda _event: self.pending.submit_exit())
+
+        self._playback.on_click(self._submit_playback)
+        self._command_actions.on_click(self._submit_command_action)
         self._pick_button.on_click(
             lambda _event: self.pending.submit_pick(
-                str(self._pick_kind.value),
-                int(self._pick_near_index.value if str(self._pick_kind.value) == "near"
+                {"近端": "near", "远端": "far"}[self._pick_kind.value],
+                int(self._pick_near_index.value if self._pick_kind.value == "近端"
                     else self._pick_far_index.value),
             )
         )
         self._env.on_update(lambda _event: self.pending.submit_env_row(self.selected_env_row))
         for control in (self._view, self._near, self._far, self._pool, self._cone, self._envelope):
             control.on_update(lambda _event: self.pending.submit_rerender())
+
+    def _submit_playback(self, _event):
+        {"运行/暂停": self.pending.submit_pause_toggle, "单步": self.pending.submit_step,
+         "重置": self.pending.submit_reset, "退出": self.pending.submit_exit}[self._playback.value]()
+
+    def _submit_command_action(self, _event):
+        if self._command_actions.value == "应用":
+            self.pending.submit_command(*(float(x.value) for x in self._command))
+        else:
+            self.pending.submit_zero_command()
+
+    def _selected_acquisition_mode(self):
+        return {"全量": "full", "稀疏": "sparse"}[self._acquisition_mode.value]
 
     @staticmethod
     def _selection_pair(label):
@@ -368,24 +383,23 @@ class PlayViewer:
     def _update_acquisition_controls(self):
         if self._acquisition_apply is None:
             return
-        mode = str(self._acquisition_mode.value)
+        mode = self._selected_acquisition_mode()
         path = self._selected_sparse_path() if mode == "sparse" else None
         self._acquisition_apply.disabled = mode == "sparse" and path is None
         if mode == "sparse" and path is None:
-            status = (f"No offline selection exists for near x{self._acquisition_near.value} / "
-                      f"far x{self._acquisition_far.value}; choose an available pair.")
+            status = (f"未找到近端×{self._acquisition_near.value}、远端×{self._acquisition_far.value}的选集，请更换倍率。")
         elif mode == "sparse" and self._acquisition_custom_active:
             custom = str(self._acquisition_custom_selection.value)
-            status = (f"Sparse selection: {custom}" if custom in self._custom_selection_labels()
-                      else f"Sparse selection: near x{self._acquisition_near.value} / far x{self._acquisition_far.value}")
+            status = (f"自定义选集：{custom}" if custom in self._custom_selection_labels()
+                      else f"稀疏扫描：近端×{self._acquisition_near.value}，远端×{self._acquisition_far.value}")
         elif mode == "sparse":
-            status = f"Sparse selection: near x{self._acquisition_near.value} / far x{self._acquisition_far.value}"
+            status = f"稀疏扫描：近端×{self._acquisition_near.value}，远端×{self._acquisition_far.value}"
         else:
-            status = "Full raycast mode."
+            status = "全量扫描。"
         self._acquisition_status.content = status
 
     def _submit_acquisition(self, _event):
-        mode = str(self._acquisition_mode.value)
+        mode = self._selected_acquisition_mode()
         path = self._selected_sparse_path() if mode == "sparse" else None
         if mode == "sparse" and path is None:
             self._update_acquisition_controls()
@@ -418,10 +432,10 @@ class PlayViewer:
             if self._acquisition_mode is not None:
                 scan_identity = getattr(pipeline, "scan_identity", {}) or {}
                 mode = scan_identity.get("mode", "full")
-                self._acquisition_mode.value = mode if mode in ("full", "sparse") else "full"
+                self._acquisition_mode.value = {"full": "全量", "sparse": "稀疏"}.get(mode, "全量")
                 current_path = getattr(getattr(pipeline, "cfg", None), "sparse_selection_path", None)
                 near, far = self._initial_multipliers(
-                    scan_identity, current_path if self._acquisition_mode.value == "sparse" else None
+                    scan_identity, current_path if self._selected_acquisition_mode() == "sparse" else None
                 )
                 self._acquisition_near.value = near
                 self._acquisition_far.value = far
@@ -446,7 +460,7 @@ class PlayViewer:
 
     @property
     def view_mode(self):
-        return str(self._view.value).lower()
+        return {"机器人": "base", "世界": "world"}[self._view.value]
 
     def set_command_inputs(self, values):
         """Update displayed sliders only; do not submit a command intent."""
@@ -548,16 +562,7 @@ class PlayViewer:
                     name, vertices, faces, color=(168, 175, 185), side="double"
                 ))
 
-            # Physical plane reference only; never a prediction/label surface.
-            floor = np.asarray(self.pipeline.mesh_record["vertices"], dtype=np.float64).reshape(-1, 3)
-            floor_faces = np.asarray(self.pipeline.mesh_record["triangles"], dtype=np.int32).reshape(-1, 3)
-            if self.view_mode == "base":
-                rot = quat_wxyz_to_matrix(pose["root_quat_wxyz"])
-                floor = (floor - np.asarray(pose["root_pos_w"], dtype=np.float64)) @ rot
-            floor = floor.astype(np.float32)
-            self._swap("/physical_plane", lambda: scene.add_mesh_simple(
-                "/physical_plane", floor, floor_faces, color=(115, 125, 115), side="double"
-            ))
+            self._draw_ground(snapshot)
 
             inp = snapshot["input"]
             provenance = snapshot["provenance"]
@@ -602,45 +607,41 @@ class PlayViewer:
             if self._envelope.value:
                 self._draw_envelope(snapshot)
             else:
-                self._drop("/envelope/hex")
-                self._drop("/envelope/root_height_target")
+                self._drop("/envelope/prism")
+            self._draw_task_layers(snapshot)
             self._render_pick_highlight()
             self._update_panels(snapshot)
             self._focus_camera_once(snapshot)
 
-    def _draw_envelope(self, snapshot):
+    def _draw_ground(self, snapshot):
         scene = self.server.scene
-        envelope = np.asarray(snapshot["prediction"]["envelope"], dtype=np.float64)
-        vertices = hex_vertices(envelope)
-        labels = ("B", "D", "F", "E", "C", "A")
-        # The footprint is shown in the root BASE plane. It visualizes the
-        # predicted horizontal envelope; no ground surface is inferred.
-        points = np.asarray([(vertices[k][0], vertices[k][1], 0.0) for k in labels + (labels[0],)])
-        points = self._display_points(points, snapshot).astype(np.float32)
-        lines = np.stack((points[:-1], points[1:]), axis=1)
-        self._swap("/envelope/hex", lambda: scene.add_line_segments(
-            "/envelope/hex", lines, colors=(60, 245, 160), thickness=2.0,
-            thickness_units="screen"
-        ))
-        root = np.asarray(snapshot["pose"]["root_pos_w"], dtype=np.float64)
-        physical_ground_z = float(snapshot["pose"].get("ground_z_m", _plane_z(self.pipeline)))
-        target = root_height_marker_world(root, physical_ground_z, envelope)
-        half = 0.14
-        corners_w = np.asarray([
-            [root[0] - half, root[1] - half, target[2]],
-            [root[0] + half, root[1] - half, target[2]],
-            [root[0] + half, root[1] + half, target[2]],
-            [root[0] - half, root[1] + half, target[2]],
-        ])
+        # Physical plane reference only; never a prediction/label surface.
+        floor = np.asarray(self.pipeline.mesh_record["vertices"], dtype=np.float64).reshape(-1, 3)
+        floor_faces = np.asarray(self.pipeline.mesh_record["triangles"], dtype=np.int32).reshape(-1, 3)
         if self.view_mode == "base":
-            corners = np.asarray([world_to_base(p, root, snapshot["pose"]["root_quat_wxyz"]) for p in corners_w])
-        else:
-            corners = corners_w
-        corners = corners.astype(np.float32)
-        marker = np.stack((corners, np.roll(corners, -1, axis=0)), axis=1)
-        self._swap("/envelope/root_height_target", lambda: scene.add_line_segments(
-            "/envelope/root_height_target", marker, colors=(255, 80, 220),
-            thickness=2.0, thickness_units="screen"
+            rot = quat_wxyz_to_matrix(snapshot["pose"]["root_quat_wxyz"])
+            floor = (floor - np.asarray(snapshot["pose"]["root_pos_w"], dtype=np.float64)) @ rot
+        floor = floor.astype(np.float32)
+        self._swap("/physical_plane", lambda: scene.add_mesh_simple(
+            "/physical_plane", floor, floor_faces, color=(115, 125, 115), side="double"
+        ))
+
+    def _draw_task_layers(self, snapshot):
+        pass
+
+    def _draw_envelope(self, snapshot):
+        self._draw_envelope_values(snapshot, snapshot["prediction"]["envelope"])
+
+    def _draw_envelope_values(self, snapshot, envelope, *, prefix="/envelope",
+                              color=(60, 245, 160)):
+        # Attach the retained six values to the DISPLAYED robot's full Root
+        # frame, including roll/pitch. Height-map diagnostics use their own
+        # pre-action yaw-only world frame and are not changed here.
+        lines_base = envelope_prism_base(envelope)
+        lines = self._display_points(lines_base.reshape(-1, 3), snapshot).reshape(18, 2, 3).astype(np.float32)
+        self._swap(prefix + "/prism", lambda: self.server.scene.add_line_segments(
+            prefix + "/prism", lines, colors=color, thickness=2.0,
+            thickness_units="screen"
         ))
 
     def _render_pick_highlight(self):
@@ -675,70 +676,76 @@ class PlayViewer:
 
     def _update_panels(self, snapshot):
         ident, inp, status = snapshot["identity"], snapshot["input"], snapshot["status"]
-        p = snapshot["prediction"]
+        prediction = snapshot["prediction"]
         evaluation = snapshot.get("scan_evaluation", {}) or {}
-        cross_configuration = bool(evaluation.get("cross_configuration", False))
-        checkpoint_identity = evaluation.get("checkpoint_scan_identity") or {}
-        checkpoint_mode = checkpoint_identity.get("mode", "unknown") if isinstance(checkpoint_identity, dict) else "unknown"
-        runtime_identity = evaluation.get("runtime_scan_identity") or getattr(self.pipeline, "scan_identity", {}) or {}
-        runtime_mode = runtime_identity.get("mode", "unknown") if isinstance(runtime_identity, dict) else "unknown"
-        selection_status = self._selection_status(runtime_mode, runtime_identity)
-        far_sampling = getattr(getattr(self.pipeline, "cfg", None), "far_sampling", "all_endpoints")
+        trained = evaluation.get("checkpoint_scan_identity") or {}
+        actual = evaluation.get("runtime_scan_identity") or getattr(self.pipeline, "scan_identity", {}) or {}
+        mode_names = {"full": "全量", "sparse": "稀疏"}
+        trained_mode = mode_names.get(trained.get("mode"), "未记录")
+        actual_mode = mode_names.get(actual.get("mode"), "未记录")
+        sampling = getattr(getattr(self.pipeline, "cfg", None), "far_sampling", "all_endpoints")
+        sampling_text = {"hit_only_10m": "仅命中且不超过10米", "all_endpoints": "全部端点"}.get(sampling, sampling)
         far_count = int(np.asarray(inp["far"]["valid"], dtype=bool).sum())
+        height = snapshot["pose"]["root_height_m"]
+        height_text = f"{height:.3f} m" if height is not None else "超出地形"
+        state = ("故障停止" if status["faulted"] else "跌倒暂停" if status["stopped"]
+                 else "已暂停" if status["paused"] else "运行中")
+        task_id = self.identity_header.get("task", "")
+        task_name = "地形记忆" if "Terrain-Memory" in task_id else "平地基线"
         self._status.content = (
-            f"**Task** confined_locomotion_2 · {self.identity_header.get('task', '')} · "
-            f"env {snapshot['env']} · "
-            f"episode {ident['input_episode_id']} step {ident['input_step_in_episode']} · "
-            f"input control {ident['input_control_step']} / pose control {ident['pose_control_step']}\n\n"
-            f"**Raycast** trained={checkpoint_mode} · actual={runtime_mode}"
-            f" · cross-configuration={cross_configuration}"
-            f" · {selection_status} · fixed T1 channel groups"
-            f" · far sampling={far_sampling} · far valid={far_count}/128\n\n"
-            f"**Scans** near {inp['near']['scan_id']} @ {inp['near']['time_s']:.3f}s, "
-            f"far {inp['far']['scan_id']} @ {inp['far']['time_s']:.3f}s (single current scan)\n\n"
-            f"**Command** {np.asarray(status['command']).tolist()} · root height "
-            f"{snapshot['pose']['root_height_m']:.3f}m · paused={status['paused']} "
-            f"stopped={status['stopped']} faulted={status['faulted']}\n\n"
-            f"**Prediction** envelope={np.asarray(p['envelope']).round(3).tolist()} · "
-            f"preview={p['preview']} · {status.get('reason', '')}\n\n"
-            f"**Checkpoint** {snapshot.get('checkpoint', {}).get('path', '')}\n\n"
-            "Source xyz is acquisition-time BASE. WORLD view applies the current pose "
-            "for display only; far points are uncompensated."
+            f"**{state}** · {task_name} · 环境 {snapshot['env']}\n\n"
+            f"回合 {ident['input_episode_id']} · 步 {ident['input_step_in_episode']} · 离地 {height_text}\n\n"
+            f"指令 {np.asarray(status['command']).round(2).tolist()}\n\n"
+            f"控制步：输入 {ident['input_control_step']} / 姿态 {ident['pose_control_step']}"
+        )
+        self._details.content = (
+            f"**任务** {task_id}\n\n"
+            f"**模型** `{snapshot.get('checkpoint', {}).get('path', '')}`\n\n"
+            f"**扫描** 模型：{trained_mode}；当前：{actual_mode}；"
+            f"配置变更：{'是' if evaluation.get('cross_configuration', False) else '否'}\n\n"
+            f"{self._selection_status(actual.get('mode'), actual)}；远端规则：{sampling_text}；有效 {far_count}/128。\n\n"
+            f"近端帧 {inp['near']['scan_id']} @ {inp['near']['time_s']:.3f} s；"
+            f"远端帧 {inp['far']['scan_id']} @ {inp['far']['time_s']:.3f} s。\n\n"
+            f"六维预测 {np.asarray(prediction['envelope']).round(3).tolist()}。\n\n"
+            "点云保留采集时的机器人坐标；世界视图按当前姿态显示，不做运动补偿。"
         )
         pick = self._last_pick
         if pick is None:
-            self._pick_panel.content = "No point selected."
-        elif pick.get("valid"):
-            self._pick_panel.content = (
-                f"{pick['kind']}[{pick['index']}] → raw ray {pick['raw_ray_id']} · "
-                f"no-hit={pick['no_hit']} · scan={pick['scan_id']} @ {pick['time_s']:.3f}s · "
-                f"episode={pick['episode_id']} · BASE xyz={np.asarray(pick['xyz_base']).round(4).tolist()}"
-            )
+            self._pick_panel.content = "选择点云和序号后点击“查询”。"
         else:
-            self._pick_panel.content = f"{pick['kind']}[{pick['index']}] is padding/invalid."
+            kind = {"near": "近端", "far": "远端"}.get(pick['kind'], pick['kind'])
+            if pick.get("valid"):
+                self._pick_panel.content = (
+                    f"**{kind}[{pick['index']}]** · 原始射线 {pick['raw_ray_id']}\n\n"
+                    f"{'未命中' if pick['no_hit'] else '命中'} · 帧 {pick['scan_id']} @ {pick['time_s']:.3f} s · "
+                    f"回合 {pick['episode_id']}\n\n"
+                    f"机器人坐标 {np.asarray(pick['xyz_base']).round(4).tolist()}"
+                )
+            else:
+                self._pick_panel.content = f"{kind}[{pick['index']}] 为填充点或无效点。"
 
     @staticmethod
     def _selection_status(mode, runtime_identity):
         if mode != "sparse" or not isinstance(runtime_identity, dict):
-            return "full selection"
+            return "全量扫描"
         selection_identity = runtime_identity.get("selection")
         if not isinstance(selection_identity, dict):
-            return "sparse selection unknown"
+            return "稀疏选集未记录"
         metadata = selection_identity.get("selection", {})
         if isinstance(metadata, dict):
             near = metadata.get("near_multiplier")
             far = metadata.get("far_multiplier")
             if near is not None and far is not None:
-                return f"selection near x{near} / far x{far}"
+                return f"近端×{near}，远端×{far}"
             ray_count = metadata.get("total_count")
         else:
             ray_count = None
         digest = str(selection_identity.get("npz_sha256", ""))[:8]
-        parts = ["sparse selection"]
+        parts = ["稀疏选集"]
         if digest:
             parts.append(f"sha256={digest}")
         if ray_count is not None:
-            parts.append(f"rays={ray_count}")
+            parts.append(f"射线数={ray_count}")
         return " · ".join(parts)
 
     def set_pick_result(self, pick):
@@ -784,10 +791,6 @@ class PlayViewer:
                     stop()
                 except Exception:
                     pass
-
-
-def _plane_z(pipeline):
-    return float(pipeline.mesh_record.get("z", 0.0))
 
 
 def _clip_cone_x(segments, xmax):
@@ -854,7 +857,13 @@ def export_snapshot_manifest(snapshot, viewer, path):
         ),
         "ground_semantics": "no ground prediction, label, candidate rectangle, or ground panel is present",
         "data_source": "owner-loop snapshot only; viewer does not step runtime or run network",
+        "envelope_display": "18-edge prism attached to displayed Root frame including roll/pitch; local bottom_z=0.02-0.46, top_z=delta_z; not collision clearance",
     }
+    if "terrain" in snapshot:
+        data = snapshot["terrain"]
+        manifest["terrain"] = {key: (value.tolist() if isinstance(value, np.ndarray) else value)
+                               for key, value in data.items()}
+        manifest["ground_semantics"] = "pre-action yaw-only XY; world_z=root_z+signed_height; geometry mask independent of visibility; diagnostic only"
     if path is not None:
         Path(path).write_text(json.dumps(manifest, indent=2, ensure_ascii=False, default=str))
     return manifest

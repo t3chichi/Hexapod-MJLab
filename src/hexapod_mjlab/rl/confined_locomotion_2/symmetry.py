@@ -17,6 +17,13 @@ class SymmetryError(ValueError):
     pass
 
 
+def mirror_height_targets(heights, valid):
+    """Reflect root-yaw-frame targets across Y=0; preserve signed Z values."""
+    if heights.shape[-2:] != (11, 17) or valid.shape != heights.shape or valid.dtype != torch.bool:
+        raise SymmetryError("height targets and mask must have matching [...,11,17] shapes")
+    return heights.flip(-2), valid.flip(-2)
+
+
 def mirror_prepared(prepared: Any, joint_permutation: JointPermutation, *, mount_quat_xyzw: torch.Tensor) -> Any:
     """Mirror one prepared frame with source-ray-aware optical resorting.
 
@@ -64,5 +71,5 @@ def mirror_prepared(prepared: Any, joint_permutation: JointPermutation, *, mount
 __all__ = [
     "JointPermutation", "MirrorMappingError", "SymmetryError", "mirror_action_distribution",
     "mirror_envelope_values", "mirror_mean_mse", "mirror_observation", "mirror_point_block",
-    "mirror_prepared",
+    "mirror_prepared", "mirror_height_targets",
 ]

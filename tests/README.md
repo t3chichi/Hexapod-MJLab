@@ -16,6 +16,10 @@ python tests/run.py --profile cpu --only envelope_geometry envelope_supervision
 
 运行器按顺序为每项检查启动独立进程；失败和超时返回非零状态，仍执行同组其余检查。新目录下保存逐项日志、命令、耗时和`summary.json`；已有输出目录拒绝覆盖。默认位置为`logs/verification/<组>-<时间>/`。不得使用`python -O`关闭断言。
 
+## confined_locomotion_2
+
+Flat Baseline与Terrain Memory的CPU、GPU和资源打包检查见[任务测试](confined_locomotion_2/README.md)。
+
 ## 日常CPU组
 
 | 功能 | 实现 | 主要覆盖 |

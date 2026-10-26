@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Sequence
 
 import torch
 from torch import nn
+from torch.nn.utils.rnn import PackedSequence, pack_padded_sequence, pad_packed_sequence
 
 from ..confined_locomotion.mapping import H_REF_STARTUP, P0_STARTUP, EnvelopeSoftplusMapping
 from ..confined_locomotion.network import (
@@ -39,7 +40,7 @@ __all__ = [
     "FRAME_GRU_HIDDEN", "ConfinedLocomotionNetwork", "MLPHead",
     "MORPHOLOGY_HIDDEN_DIMS", "MorphologyHead", "NetworkOutput",
     "PROPRIO_FIELD_SCALE", "TEMPORAL_GRU_HIDDEN", "TEMPORAL_GRU_INPUT",
-    "build_proprio_scale",
+    "build_proprio_scale", "TerrainMemoryNetwork",
 ]
 
 MORPHOLOGY_HIDDEN_DIMS = (128, 64)
@@ -55,6 +56,7 @@ class NetworkOutput:
     envelope: torch.Tensor
     action_mean: torch.Tensor
     value: torch.Tensor
+    height_prediction: torch.Tensor | None = None
 
 
 class ConfinedLocomotionNetwork(nn.Module):
@@ -128,7 +130,7 @@ class ConfinedLocomotionNetwork(nn.Module):
         observation.validate()
         return int(observation.env_ids.shape[0]), observation.env_ids.device
 
-    def encode_points(
+    def _ordered_point_inputs(
         self,
         near: torch.Tensor,
         nvalid: torch.Tensor,
@@ -137,8 +139,8 @@ class ConfinedLocomotionNetwork(nn.Module):
         *,
         near_angle_keys: torch.Tensor | None = None,
         far_angle_keys: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        """Merge and encode current near/far points in stable global angle order."""
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Validate and merge near/far points in stable global angle order."""
         validate_point_block(near, nvalid, n_points=NEAR_POINTS, name="near_points")
         validate_point_block(far, fvalid, n_points=FAR_POINTS_PER_SCAN, name="far_points")
         if near.shape[0] != far.shape[0] or near.device != far.device:
@@ -163,7 +165,49 @@ class ConfinedLocomotionNetwork(nn.Module):
             keys = torch.cat((near_angle_keys, far_angle_keys), dim=1)
             ordered = sort_points_by_angle_keys(points, valid, keys)
             points, valid = ordered.points, ordered.valid
+        return points, valid
+
+    def encode_points(self, near, nvalid, far, fvalid, *, near_angle_keys=None,
+                      far_angle_keys=None) -> torch.Tensor:
+        points, valid = self._ordered_point_inputs(
+            near, nvalid, far, fvalid, near_angle_keys=near_angle_keys,
+            far_angle_keys=far_angle_keys)
         return self.frame_encoder(points, valid)
+
+    def prepare_point_sequence(self, near, nvalid, far, fvalid, *, near_angle_keys=None,
+                               far_angle_keys=None):
+        """Prepare fixed rollout data once; retain no trainable frame features.
+
+        Use the same stable compaction/packing as MaskedPointSequenceGRU. Only
+        replay calls this path; the online encoder keeps its existing contract.
+        """
+        points, valid = self._ordered_point_inputs(
+            near, nvalid, far, fvalid, near_angle_keys=near_angle_keys,
+            far_angle_keys=far_angle_keys)
+        lengths = valid.sum(dim=1)
+        rows = (lengths > 0).nonzero(as_tuple=False).flatten()
+        batch = len(points)
+        if rows.numel() == 0:
+            return None, rows, batch
+        sub_points = points.index_select(0, rows)
+        sub_valid = valid.index_select(0, rows)
+        sub_lengths = lengths.index_select(0, rows)
+        order = torch.argsort((~sub_valid).to(torch.int64), dim=1, stable=True)
+        compacted = torch.gather(sub_points, 1, order.unsqueeze(-1).expand_as(sub_points)).contiguous()
+        packed = pack_padded_sequence(
+            compacted[:, :int(sub_lengths.max())].contiguous(), sub_lengths.cpu(),
+            batch_first=True, enforce_sorted=False)
+        # Plain tensors avoid PackedSequence namedtuple reconstruction by checkpoint.
+        return tuple(packed), rows, batch
+
+    def encode_point_sequence(self, sequence) -> torch.Tensor:
+        """Recompute the existing point GRU at current weights, from fixed inputs."""
+        packed, rows, batch = sequence
+        features = self.frame_encoder.gru.weight_ih_l0.new_zeros(batch, FRAME_GRU_HIDDEN)
+        if packed is None:
+            return features
+        _, hidden = self.frame_encoder.gru(PackedSequence(*packed))
+        return features.index_copy(0, rows, hidden[0])
 
     def forward(
         self,
@@ -210,6 +254,11 @@ class ConfinedLocomotionNetwork(nn.Module):
         temporal_feature = temporal_sequence[:, 0]
         next_hidden = hidden_out[0]
 
+        return self._output_from_temporal(
+            frame_feature, temporal_feature, next_hidden, proprio, command)
+
+    def _output_from_temporal(self, frame_feature, temporal_feature, next_hidden, proprio, command):
+        """Shared stateless heads for online steps and batched training replay."""
         morphology_input = torch.cat((temporal_feature, proprio), dim=1)
         envelope = self.mapping(self.morphology_head(morphology_input))
         control = torch.cat((temporal_feature, proprio, command, envelope.detach()), dim=1)
@@ -224,8 +273,61 @@ class ConfinedLocomotionNetwork(nn.Module):
             value=value,
         )
 
+    def prepare_sequence_observations(self, observations):
+        """Validate and scale immutable rollout observations once per replay plan."""
+        proprio = torch.stack([obs.proprio_vector() for obs in observations]) * self.proprio_scale
+        command = torch.stack([obs.command for obs in observations]) * self.command_scale
+        return proprio, command
+
+    def forward_sequence_from_features(self, observations, frame_features, hidden, layout,
+                                       *, scaled_observations=None):
+        """Training replay: run independent episode segments, then batch the heads."""
+        time, batch, length = layout.shape
+        device = hidden.device
+        if (frame_features.shape != (time, batch, TEMPORAL_GRU_HIDDEN) or
+                frame_features.dtype != FLOAT_DTYPE or frame_features.device != device or
+                hidden.shape != (batch, TEMPORAL_GRU_HIDDEN) or hidden.dtype != FLOAT_DTYPE):
+            raise ContractError("sequence features/hidden shape, dtype or device mismatch")
+        if not bool(torch.isfinite(frame_features).all()) or not bool(torch.isfinite(hidden).all()):
+            raise ContractError("sequence features/hidden contain NaN/Inf")
+        proprio, command = (self.prepare_sequence_observations(observations)
+                             if scaled_observations is None else scaled_observations)
+        temporal_input = torch.cat((frame_features, proprio[:, :, :9]), dim=-1)
+        segments = temporal_input.reshape(time * batch, TEMPORAL_GRU_INPUT)[layout.gather]
+        h0 = hidden.detach().index_select(0, layout.rows)
+        h0 = torch.where(layout.starts_at_zero[:, None], h0, torch.zeros_like(h0)).unsqueeze(0)
+        packed = pack_padded_sequence(segments, layout.lengths, batch_first=True, enforce_sorted=False)
+        packed_output, _ = self.temporal_encoder(packed, h0)
+        output, _ = pad_packed_sequence(packed_output, batch_first=True, total_length=length)
+        temporal = output.reshape(-1, TEMPORAL_GRU_HIDDEN).index_select(0, layout.restore)
+        decoded = self._output_from_temporal(
+            frame_features.reshape(time * batch, TEMPORAL_GRU_HIDDEN), temporal, temporal,
+            proprio.reshape(time * batch, PROPRIO_DIM), command.reshape(time * batch, COMMAND_DIM))
+        temporal = temporal.reshape(time, batch, TEMPORAL_GRU_HIDDEN)
+        envelope = decoded.envelope.reshape(time, batch, ENVELOPE_DIM)
+        action = decoded.action_mean.reshape(time, batch, ACTION_DIM)
+        value = decoded.value.reshape(time, batch, 1)
+        height = (None if decoded.height_prediction is None else
+                  decoded.height_prediction.reshape(time, batch, 11, 17))
+        return [NetworkOutput(frame_features[t], temporal[t], temporal[t], envelope[t],
+                              action[t], value[t], None if height is None else height[t])
+                for t in range(time)]
+
     def unique_parameters(self) -> tuple[nn.Parameter, ...]:
         unique: dict[int, nn.Parameter] = {}
         for parameter in self.parameters():
             unique.setdefault(id(parameter), parameter)
         return tuple(unique.values())
+
+
+class TerrainMemoryNetwork(ConfinedLocomotionNetwork):
+    """Shared two-GRU policy with one training-only linear height decoder."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.height_head = nn.Linear(TEMPORAL_GRU_HIDDEN, 187)
+
+    def _output_from_temporal(self, frame_feature, temporal_feature, next_hidden, proprio, command):
+        output = super()._output_from_temporal(
+            frame_feature, temporal_feature, next_hidden, proprio, command)
+        return replace(output, height_prediction=self.height_head(output.temporal_feature).reshape(-1, 11, 17))

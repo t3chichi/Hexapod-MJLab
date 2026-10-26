@@ -33,7 +33,7 @@ def test_original_ray_flags_follow_sorted_source_ids_including_padding():
 
 
 def test_cli_owner_loop_paused_rerender_single_step_and_reset():
-    spec = importlib.util.spec_from_file_location("v2_play_cli", ROOT / "scripts/experiments/confined_locomotion_2/play.py")
+    spec = importlib.util.spec_from_file_location("v2_play_cli", ROOT / "scripts/experiments/confined_locomotion_2/play_flat.py")
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     from hexapod_mjlab.tasks.confined_locomotion.visualization.play import PendingControls
@@ -82,7 +82,7 @@ def test_cli_owner_loop_paused_rerender_single_step_and_reset():
 
 
 def test_cli_acquisition_switch_preserves_total_budget_and_drops_old_intents():
-    spec = importlib.util.spec_from_file_location("v2_play_switch_cli", ROOT / "scripts/experiments/confined_locomotion_2/play.py")
+    spec = importlib.util.spec_from_file_location("v2_play_switch_cli", ROOT / "scripts/experiments/confined_locomotion_2/play_flat.py")
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     from hexapod_mjlab.tasks.confined_locomotion.visualization.play import PendingControls
@@ -135,7 +135,7 @@ def test_cli_acquisition_switch_preserves_total_budget_and_drops_old_intents():
 
 
 def test_cli_discovers_independent_offline_combinations_without_replacing_v1():
-    spec = importlib.util.spec_from_file_location("v2_play_discovery", ROOT / "scripts/experiments/confined_locomotion_2/play.py")
+    spec = importlib.util.spec_from_file_location("v2_play_discovery", ROOT / "scripts/experiments/confined_locomotion_2/play_flat.py")
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     asset = ROOT / "src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels"
@@ -156,7 +156,7 @@ def test_cli_discovers_independent_offline_combinations_without_replacing_v1():
 def test_cli_discovery_rejects_incorrect_multiplier_metadata(tmp_path):
     import json
     import shutil
-    spec = importlib.util.spec_from_file_location("v2_play_discovery_reject", ROOT / "scripts/experiments/confined_locomotion_2/play.py")
+    spec = importlib.util.spec_from_file_location("v2_play_discovery_reject", ROOT / "scripts/experiments/confined_locomotion_2/play_flat.py")
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
     source = ROOT / "src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1/near_x4_far_x4.npz"

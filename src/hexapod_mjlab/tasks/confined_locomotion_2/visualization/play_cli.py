@@ -3,10 +3,7 @@
 import argparse
 import json
 from pathlib import Path
-import sys
 import time
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
 
 def parse_args(argv=None):
@@ -99,6 +96,10 @@ def discover_acquisition_options(directories, explicit_selection=None):
 class PlayOwner:
     """One active GPU session; GUI acquisition changes rebuild it at reset."""
 
+    task_id = "El-4090-Confined-Locomotion-Flat_2"
+    env_factory = None
+    session_class = None
+
     def __init__(self, args):
         import hashlib
         self.args = args
@@ -111,7 +112,7 @@ class PlayOwner:
         self.segment_index = 0
         self.weights_sha256 = None
         self._closed = False
-        asset_root = Path(__file__).resolve().parents[3] / "src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels"
+        asset_root = Path(__file__).resolve().parents[1] / "assets/fixed_channels"
         directories = [asset_root / "v1", asset_root / "v1_independent", asset_root / "v1_hit10"]
         directories.extend(getattr(args, "sparse_selection_dir", []))
         custom = args.sparse_selection_path
@@ -135,11 +136,13 @@ class PlayOwner:
         from hexapod_mjlab.tasks.confined_locomotion_2.play import PlaySession, make_play_env_cfg
         from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
         from hexapod_mjlab.tasks.confined_locomotion_2.perturbations import preset_by_name
-        env = ManagerBasedRlEnv(make_play_env_cfg(num_envs=self.args.num_envs, seed=self.args.seed),
+        env_factory = self.env_factory or make_play_env_cfg
+        session_class = self.session_class or PlaySession
+        env = ManagerBasedRlEnv(env_factory(num_envs=self.args.num_envs, seed=self.args.seed),
                                 device=f"cuda:{self.args.gpu}")
         session = None
         try:
-            session = PlaySession(
+            session = session_class(
                 wrapper=RslRlVecEnvWrapper(env, clip_actions=None),
                 checkpoint=self.checkpoint,
                 output_dir=self.output / f"segment_{self.segment_index:03d}_{mode}",
@@ -192,7 +195,7 @@ class PlayOwner:
         from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
         mode, path = request["mode"], request.get("selection_path")
         if self.viewer is not None:
-            self.viewer.set_acquisition_status("Checking acquisition configuration...")
+            self.viewer.set_acquisition_status("正在检查扫描设置…")
         try:
             cfg = ConfinedLidarCfg(raycast_mode=mode, sparse_selection_path=path,
                                   far_sampling=getattr(self.args, "far_sampling", "all_endpoints"))
@@ -205,11 +208,11 @@ class PlayOwner:
                 raise ValueError("checkpoint file changed; open a new play process")
         except (ValueError, TypeError, OSError) as error:
             if self.viewer is not None:
-                self.viewer.set_acquisition_status(f"Acquisition unchanged: {error}")
+                self.viewer.set_acquisition_status(f"设置未更改：{error}")
             return self.session
         self._finish_segment("acquisition_switch")
         if self.viewer is not None:
-            self.viewer.set_acquisition_status("Rebuilding acquisition; episode and GRU reset...")
+            self.viewer.set_acquisition_status("正在重建扫描并重置回合…")
             self.viewer.detach_session()
         old = self.session
         self.session = self.env = None
@@ -222,10 +225,10 @@ class PlayOwner:
         if self.viewer is not None:
             self.viewer.rebind_session(
                 self.env.sim.mj_model, self.session.runtime.pipeline,
-                identity_header={"task": "El-4090-Confined-Locomotion-Flat_2",
+                identity_header={"task": self.task_id,
                                  "preset": self.args.preset, "segment": self.segment_index})
             self.viewer.set_command_inputs((0, 0, 0))
-            self.viewer.set_acquisition_status("Acquisition applied; fresh episode and zero GRU; paused.")
+            self.viewer.set_acquisition_status("扫描已更新，回合已重置，当前暂停。")
         return self.session
 
     def close(self, reason="exit"):
@@ -235,7 +238,7 @@ class PlayOwner:
         try:
             self._finish_segment(reason)
             summary = {
-                "task": "El-4090-Confined-Locomotion-Flat_2", "checkpoint": str(self.checkpoint),
+                "task": self.task_id, "checkpoint": str(self.checkpoint),
                 "seed": self.args.seed, "requested_steps": self.args.steps,
                 "control_steps": sum(e["control_steps"] for e in self.segments),
                 "frame_encodings": sum(e["frame_encodings"] for e in self.segments),
@@ -357,15 +360,10 @@ def run_play(session, viewer, *, steps, start_running=False, switch_acquisition=
     return reason, snapshot
 
 
-def main():
+def main(*, owner_type=PlayOwner, viewer_type=None):
     args = parse_args()
     import torch
-    from mjlab.envs import ManagerBasedRlEnv
-    from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
     from mjlab.utils.torch import configure_torch_backends
-    from hexapod_mjlab.tasks.confined_locomotion_2.play import PlaySession, make_play_env_cfg
-    from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
-    from hexapod_mjlab.tasks.confined_locomotion_2.perturbations import preset_by_name
     configure_torch_backends(allow_tf32=False)
     rnn = getattr(torch.backends.cudnn, "rnn", None)
     if rnn is not None and hasattr(rnn, "fp32_precision"):
@@ -373,13 +371,13 @@ def main():
     owner = None
     reason = "initialization_failed"
     try:
-        owner = PlayOwner(args)
+        owner = owner_type(args)
         if not args.no_viewer:
             from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import PlayViewer
-            owner.viewer = PlayViewer(
+            owner.viewer = (viewer_type or PlayViewer)(
                 num_envs=owner.session.num_envs, mj_model=owner.env.sim.mj_model,
                 pipeline=owner.session.runtime.pipeline,
-                identity_header={"task": "El-4090-Confined-Locomotion-Flat_2", "preset": args.preset, "segment": 0},
+                identity_header={"task": owner.task_id, "preset": args.preset, "segment": 0},
                 acquisition_options=owner.acquisition_options, port=args.port)
             owner.viewer.set_command_inputs(args.command)
             print(f"Open http://127.0.0.1:{args.port} — {'running' if args.start_running else 'paused'}. Acquisition switches reset episode and GRU with the same weights.", flush=True)
@@ -396,6 +394,3 @@ def main():
             owner.close(reason)
             print(f"Controls: {sum(e['control_steps'] for e in owner.segments)}; frame encodings: {sum(e['frame_encodings'] for e in owner.segments)}; exit: {reason}", flush=True)
 
-
-if __name__ == "__main__":
-    main()

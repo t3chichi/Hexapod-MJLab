@@ -7,8 +7,7 @@ import uuid
 
 from mjlab.scripts.train import TrainConfig, launch_training
 
-from ..flat_env_cfg import TASK_ID
-from ..rl_cfg import confined_locomotion_formal_rl_cfg
+from ..config.flat_baseline import TASK_ID, confined_locomotion_formal_rl_cfg
 from .checkpoint import read_checkpoint
 from .runner import resolve_recipe
 
@@ -25,12 +24,13 @@ def build_formal_train_config(*, seed, num_envs, max_iterations,
                               log_root="logs/confined_locomotion_2", gpu_ids=(0,),
                               engineering_validation=False, resume_checkpoint=None,
                               raycast_mode="full", sparse_selection_path=None,
-                              far_sampling="all_endpoints", save_interval=50):
+                              far_sampling="all_endpoints", save_interval=50, execution_mode="low_memory"):
     if len(gpu_ids) != 1 or isinstance(gpu_ids[0], bool) or not isinstance(gpu_ids[0], int) or gpu_ids[0] < 0:
         raise ValueError("exactly one explicit nonnegative GPU id is required")
     agent = confined_locomotion_formal_rl_cfg(
         seed=seed, num_envs=num_envs, max_iterations=max_iterations)
     agent.save_interval = save_interval
+    agent.execution_mode = execution_mode
     # Let the task-local scanner own the mode/path contract, then keep the
     # serializable config as a plain mapping across mjlab's launch boundary.
     from ..scanner import ConfinedLidarCfg

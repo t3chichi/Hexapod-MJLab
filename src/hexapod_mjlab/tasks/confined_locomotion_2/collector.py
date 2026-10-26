@@ -40,27 +40,30 @@ class TrainingCollector:
         self._features.clear()
 
     def _frame(self, prepared, *, mirror=False):
-        """Row cache is inference-only and bounded to the latest scan per row."""
-        rows = []
-        for row in range(self.num_envs):
-            key = (mirror, row)
-            identity = (int(prepared.observation.episode_ids[row]),
-                        int(prepared.near_scan_ids[row]))
-            entry = self._features.get(key)
-            if entry is None or entry[0] != identity:
-                feature = self.network.encode_points(
-                    prepared.near_points[row:row+1], prepared.near_valid[row:row+1],
-                    prepared.far_points[row:row+1], prepared.far_valid[row:row+1],
-                    near_angle_keys=(None if prepared.near_angle_keys is None else
-                                     prepared.near_angle_keys[row:row+1]),
-                    far_angle_keys=(None if prepared.far_angle_keys is None else
-                                    prepared.far_angle_keys[row:row+1]),
-                )
-                entry = (identity, feature.detach())
-                self._features[key] = entry
-                self.frame_encoding_rows += 1
-            rows.append(entry[1])
-        return torch.cat(rows, dim=0)
+        """Batch new scans; retain one owned feature per environment and view."""
+        identities = torch.stack((prepared.observation.episode_ids, prepared.near_scan_ids), dim=1).cpu().tolist()
+        changed = []
+        for row, identity in enumerate(identities):
+            entry = self._features.get((mirror, row))
+            if entry is None or entry[0] != tuple(identity):
+                changed.append(row)
+        # Bound inference workspace as environment count grows; cached rows still
+        # own independent storage and preserve the original environment ordering.
+        for start in range(0, len(changed), 128):
+            rows = changed[start:start + 128]
+            indices = torch.tensor(rows, dtype=torch.long, device=self.device)
+            features = self.network.encode_points(
+                prepared.near_points.index_select(0, indices), prepared.near_valid.index_select(0, indices),
+                prepared.far_points.index_select(0, indices), prepared.far_valid.index_select(0, indices),
+                near_angle_keys=(None if prepared.near_angle_keys is None else
+                                 prepared.near_angle_keys.index_select(0, indices)),
+                far_angle_keys=(None if prepared.far_angle_keys is None else
+                                prepared.far_angle_keys.index_select(0, indices)),
+            )
+            for index, row in enumerate(rows):
+                self._features[mirror, row] = (tuple(identities[row]), features[index:index + 1].detach().clone())
+        self.frame_encoding_rows += len(changed)
+        return torch.cat([self._features[mirror, row][1] for row in range(self.num_envs)], dim=0)
 
     def _mirror(self, prepared):
         return mirror_prepared(prepared, self.joint_permutation,
@@ -81,6 +84,9 @@ class TrainingCollector:
             prepared = self.runtime.prepare()
             self._sync_episodes(prepared)
             labels = self.runtime.labels()
+            height_label = labels.get("height")
+            if height_label is not None:
+                height_label.validate(prepared.observation)
             hidden_before = self.hidden.clone()
             mirror_before = None if self.mirror_hidden is None else self.mirror_hidden.clone()
             output = self.network.forward_from_features(
@@ -117,6 +123,7 @@ class TrainingCollector:
                 next_value=next_value, hidden_before=hidden_before,
                 mirror_hidden_before=mirror_before,
                 envelope_label=labels["envelope"],
+                height_label=height_label,
             )
             done = transition.terminated | transition.truncated
             self.hidden[done] = 0

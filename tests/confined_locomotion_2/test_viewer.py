@@ -30,13 +30,23 @@ class _Control:
     def on_update(self, callback):
         self._update = callback
 
-    def click(self):
+    def click(self, value=None):
+        if value is not None:
+            self.value = value
         self._click(None)
 
     def update(self, value):
         self.value = value
         if self._update is not None:
             self._update(None)
+
+
+class _Folder:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
 
 
 class _Gui:
@@ -59,6 +69,12 @@ class _Gui:
 
     def add_number(self, name, initial_value=0, **_kwargs):
         return self._add(name, initial_value)
+
+    def add_folder(self, name, **kwargs):
+        return _Folder()
+
+    def add_button_group(self, name, options):
+        return self._add(name, options[0])
 
     def add_button(self, name):
         return self._add(name, False)
@@ -229,10 +245,10 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
         }
         viewer = PlayViewer(1, model, pipeline, {"checkpoint": "sample"},
                             acquisition_options=selections)
-        assert viewer._acquisition_mode.value == "sparse"
+        assert viewer._acquisition_mode.value == "稀疏"
         assert viewer._acquisition_near.value == "5"
         assert viewer._acquisition_far.value == "4"
-        assert viewer._selection_status("sparse", pipeline.scan_identity) == "selection near x5 / far x4"
+        assert viewer._selection_status("sparse", pipeline.scan_identity) == "近端×5，远端×4"
         viewer._acquisition_near.update("4")
         assert viewer._acquisition_far.value == "4"
         assert viewer.pending.take()["acquisition"] is None
@@ -246,7 +262,7 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
         assert viewer._acquisition_apply.disabled is True
         viewer._acquisition_apply.click()
         assert viewer.pending.take()["acquisition"] is None
-        assert "No offline selection exists" in viewer._acquisition_status.content
+        assert "未找到" in viewer._acquisition_status.content
         viewer._acquisition_far.update("6")
         assert viewer._acquisition_apply.disabled is False
         viewer._acquisition_apply.click()
@@ -256,8 +272,8 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
         assert "catalog_identity" not in str(viewer._selection_status("sparse", pipeline.scan_identity))
         assert viewer._selection_status("sparse", {
             "selection": {"npz_sha256": "abcdefgh1234", "selection": {"total_count": 1536}}
-        }) == "sparse selection · sha256=abcdefgh · rays=1536"
-        viewer._acquisition_mode.value = "full"
+        }) == "稀疏选集 · sha256=abcdefgh · 射线数=1536"
+        viewer._acquisition_mode.value = "全量"
         viewer._acquisition_apply.click()
         assert viewer.pending.take()["acquisition"] == {
             "mode": "full", "selection_path": None,
@@ -273,21 +289,26 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
         viewer._command[0].value = 0.25
         viewer._command[1].value = -0.1
         viewer._command[2].value = 0.2
-        viewer._apply.click()
+        viewer._command_actions.click("应用")
         intent = viewer.pending.take()
         assert intent["command"] == (0.25, -0.1, 0.2)
         viewer.set_command_inputs((0.3, 0.2, -0.4))
         assert [control.value for control in viewer._command] == [0.3, 0.2, -0.4]
         assert viewer.pending.take()["command"] is None
-        viewer._pause.click()
+        viewer._playback.click("运行/暂停")
         assert viewer.pending.take()["pause_toggle"] is True
 
         snapshot = _snapshot()
         viewer.render(snapshot)
         assert "/points/near" in viewer._handles
         assert "/points/far" in viewer._handles
+        assert viewer._cone.value is False
+        assert "/cone/b8" not in viewer._handles
+        viewer._cone.update(True)
+        assert viewer.pending.take()["rerender"] is True
+        viewer.render(snapshot)
         assert "/cone/b8" in viewer._handles
-        assert "/envelope/hex" in viewer._handles
+        assert "/envelope/prism" in viewer._handles
         assert "/physical_plane" in viewer._handles
         assert not any("ground" in name for name in viewer._handles)
         replacement = _Pipeline()
@@ -297,7 +318,7 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
         replacement.cfg.sparse_selection_path = "/selections/near_x8_far_x6.npz"
         viewer.rebind_session(model, replacement, {"checkpoint": "replacement"})
         assert viewer.pipeline is replacement
-        assert viewer._acquisition_mode.value == "sparse"
+        assert viewer._acquisition_mode.value == "稀疏"
         assert viewer._acquisition_near.value == "8"
         assert viewer._acquisition_far.value == "6"
         assert viewer.identity_header["checkpoint"] == "replacement"
@@ -319,7 +340,7 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
         viewer.server._connect_callback(client)
         assert np.allclose(client.camera.look_at, [0.0, 0.0, 0.1])
         assert np.allclose(client.camera.position, [2.4, -2.4, 1.4])
-        viewer._view.value = "WORLD"
+        viewer._view.value = "世界"
         world = viewer._display_points(np.array([[1.0, 0.0, 0.0]]), snapshot)
         assert np.allclose(world, [[4.0, 4.0, 0.46]])
         viewer.close()

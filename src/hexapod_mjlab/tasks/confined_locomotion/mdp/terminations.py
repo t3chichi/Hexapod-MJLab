@@ -34,7 +34,7 @@ from __future__ import annotations
 import torch
 
 from ..transition import get_transition_context
-from .rewards import plane_world_z
+from .rewards import root_height_above_plane
 
 __all__ = [
     "TRAINING_TERMINATION_TIME_OUT_FLAGS",
@@ -128,7 +128,7 @@ class TrainingTerminationState:
         if self.control_id == int(control_id):
             return
         record = get_transition_context(env).ensure_ready()
-        height = record["root_pos_w"][:, 2] - plane_world_z(env)
+        height = root_height_above_plane(env, record["root_pos_w"])
         up_dot = -record["gravity_b"][:, 2]
         advanced = advance_fall_state(
             height < LOW_HEIGHT_THRESHOLD_M,

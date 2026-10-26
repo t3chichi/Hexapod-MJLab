@@ -66,7 +66,7 @@ def _submit_viewer_request(viewer, mode, selection_path):
     """Run the same method registered as the Viser button's click callback."""
     if mode not in ("full", "sparse"):
         raise ValueError(mode)
-    viewer._acquisition_mode.value = mode
+    viewer._acquisition_mode.value = {"full": "全量", "sparse": "稀疏"}[mode]
     if selection_path is not None:
         requested = Path(selection_path).expanduser().resolve()
         label = next(
@@ -230,7 +230,7 @@ def main():
         _check(checkpoint.is_file(), f"checkpoint does not exist: {checkpoint}")
         _check(all(p.is_file() for p in (near4, near8, near4_far8, near8_far8)), "independent near/far selection files are required")
         torch.cuda.set_device(args.gpu)
-        play_path = ROOT / "scripts/experiments/confined_locomotion_2/play.py"
+        play_path = ROOT / "scripts/experiments/confined_locomotion_2/play_flat.py"
         spec = importlib.util.spec_from_file_location("confined_locomotion_2_play_gpu_check", play_path)
         play_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(play_module)

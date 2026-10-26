@@ -6,6 +6,8 @@ gap affects validity only, range noise affects consumed XYZ only. Both modes
 use the same physical Warp query and deterministic XYZ FPS256/FPS128. Sparse
 raw arrays are compact and carry raw_source_ids; selected indices always name
 original Airy channels. Runtime owns scan cadence, identities and resets.
+Flat uses its existing plane proxy. Explicit Terrain Memory collection uses
+native compiled Heightfield rays before the same consumption/FPS processing.
 """
 
 from __future__ import annotations
@@ -489,7 +491,7 @@ class ConfinedScanPipeline:
     their first scan), so a physical raycast is never launched for non-due envs.
     """
 
-    def __init__(self, env, cfg: ConfinedLidarCfg | None = None):
+    def __init__(self, env, cfg: ConfinedLidarCfg | None = None, *, terrain_query=None):
         self.env = env
         self.cfg = cfg or ConfinedLidarCfg()
         c = self.cfg
@@ -497,52 +499,56 @@ class ConfinedScanPipeline:
         device_str = str(self.device)
         self.num_envs = int(env.num_envs)
 
-        # ── 1. validate the ACTUAL physical plane + build the raycast mesh ──
-        self.plane_record = validate_single_horizontal_plane(
-            env.sim.mj_model, expected_friction=c.expected_plane_friction
-        )
-        px, py, pz = self.plane_record["world_pos"]
-        h = float(c.plane_mesh_half_extent_m)
-        self.mesh_bounds = (px - h, px + h, py - h, py + h)
-        verts = np.asarray(
-            [
-                [px - h, py - h, pz],
-                [px + h, py - h, pz],
-                [px + h, py + h, pz],
-                [px - h, py + h, pz],
-            ],
-            dtype=np.float32,
-        )
-        tris = np.asarray([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
-        wp.init()
-        with wp.ScopedDevice(device_str):
-            # Warp-OWNED copies (wp.from_torch aliases die with the torch
-            # tensor); the pipeline keeps strong refs to mesh + arrays + ids.
-            # Warp 1.17 wp.Mesh REQUIRES a flattened 1D int indices array —
-            # a 2D (2,3) triangle table is rejected at construction (first
-            # GPU attempt, logs/.../M2_short_attempt1). The 2x3 triangle
-            # TABLE itself is retained verbatim in mesh_record; only the
-            # warp array holds the row-major flattened copy.
-            self._wp_points = wp.array(np.ascontiguousarray(verts), dtype=wp.vec3)
-            self._wp_indices = wp.array(
-                np.ascontiguousarray(tris.reshape(-1)), dtype=wp.int32
+        self.terrain_query = terrain_query
+        if terrain_query is not None and terrain_query.env is not env:
+            raise ValueError("terrain query must own the same environment")
+        if terrain_query is None:
+            # ── 1. validate the ACTUAL physical plane + build the raycast mesh ──
+            self.plane_record = validate_single_horizontal_plane(
+                env.sim.mj_model, expected_friction=c.expected_plane_friction
             )
-            self._wp_mesh = wp.Mesh(points=self._wp_points, indices=self._wp_indices)
-            self.mesh_ids = wp.array([self._wp_mesh.id], dtype=wp.uint64)
-        self.mesh_record = {
-            "source": "compiled infinite horizontal mjGEOM_PLANE (scene geometry proxy)",
-            "half_extent_m": h,
-            "center_xy": [px, py],
-            "z": pz,
-            "vertices": verts.tolist(),
-            "triangles": tris.tolist(),
-            "contains_robot_geometry": False,
-            "note": (
-                "physical plane is infinite; mesh extent is an engineering "
-                "raycast parameter asserted to cover every scanned sensor's "
-                "entire max-range reachable ray-sphere projection"
-            ),
-        }
+            px, py, pz = self.plane_record["world_pos"]
+            h = float(c.plane_mesh_half_extent_m)
+            self.mesh_bounds = (px - h, px + h, py - h, py + h)
+            verts = np.asarray(
+                [
+                    [px - h, py - h, pz],
+                    [px + h, py - h, pz],
+                    [px + h, py + h, pz],
+                    [px - h, py + h, pz],
+                ],
+                dtype=np.float32,
+            )
+            tris = np.asarray([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
+            wp.init()
+            with wp.ScopedDevice(device_str):
+                # Warp-OWNED copies (wp.from_torch aliases die with the torch
+                # tensor); the pipeline keeps strong refs to mesh + arrays + ids.
+                # Warp 1.17 wp.Mesh REQUIRES a flattened 1D int indices array —
+                # a 2D (2,3) triangle table is rejected at construction (first
+                # GPU attempt, logs/.../M2_short_attempt1). The 2x3 triangle
+                # TABLE itself is retained verbatim in mesh_record; only the
+                # warp array holds the row-major flattened copy.
+                self._wp_points = wp.array(np.ascontiguousarray(verts), dtype=wp.vec3)
+                self._wp_indices = wp.array(
+                    np.ascontiguousarray(tris.reshape(-1)), dtype=wp.int32
+                )
+                self._wp_mesh = wp.Mesh(points=self._wp_points, indices=self._wp_indices)
+                self.mesh_ids = wp.array([self._wp_mesh.id], dtype=wp.uint64)
+            self.mesh_record = {
+                "source": "compiled infinite horizontal mjGEOM_PLANE (scene geometry proxy)",
+                "half_extent_m": h,
+                "center_xy": [px, py],
+                "z": pz,
+                "vertices": verts.tolist(),
+                "triangles": tris.tolist(),
+                "contains_robot_geometry": False,
+                "note": (
+                    "physical plane is infinite; mesh extent is an engineering "
+                    "raycast parameter asserted to cover every scanned sensor's "
+                    "entire max-range reachable ray-sphere projection"
+                ),
+            }
 
         # ── 2. corrected model-derived mount (fail if missing; no fallback) ─
         mount = resolve_lidar_mount()
@@ -589,6 +595,9 @@ class ConfinedScanPipeline:
             "grouping": "fixed_t1_channels/v1", "mode": c.raycast_mode,
             "catalog": self.catalog.identity, "selection": selection_identity,
         }
+        if terrain_query is not None:
+            self.scan_identity["terrain"] = terrain_query.surface.identity
+            self.scan_identity["backend"] = "compiled_hfield_bvh/v1"
         # Legacy identities stay readable for explicit all-endpoint baselines.
         # New candidate semantics are never silently treated as that baseline.
         if c.far_sampling != "all_endpoints":
@@ -614,13 +623,14 @@ class ConfinedScanPipeline:
         self._raw_azimuth_deg = (self.source_ray_ids // c.airy_n_elevation).double() * (360.0 / c.airy_n_azimuth)
         directions = self.full_ray_dirs.index_select(0, self.source_ray_ids).contiguous()
         self._sensors = []
-        for row in range(self.num_envs):
-            pos_t = torch.zeros(1, 3, device=self.device, dtype=torch.float32)
-            quat_t = torch.zeros(1, 4, device=self.device, dtype=torch.float32)
-            sensor = ChannelRaycaster(directions=directions, position=pos_t,
-                                      quaternion=quat_t, mesh_ids=self.mesh_ids,
-                                      max_range=c.max_range_m)
-            self._sensors.append(_SensorBundle(row, sensor, pos_t, quat_t, directions))
+        if terrain_query is None:
+            for row in range(self.num_envs):
+                pos_t = torch.zeros(1, 3, device=self.device, dtype=torch.float32)
+                quat_t = torch.zeros(1, 4, device=self.device, dtype=torch.float32)
+                sensor = ChannelRaycaster(directions=directions, position=pos_t,
+                                          quaternion=quat_t, mesh_ids=self.mesh_ids,
+                                          max_range=c.max_range_m)
+                self._sensors.append(_SensorBundle(row, sensor, pos_t, quat_t, directions))
 
         #: Full raw audit records (identity/time fields filled by the runtime).
         self.scan_records: list[dict] = []
@@ -678,18 +688,42 @@ class ConfinedScanPipeline:
             wp.synchronize_device()  # pending physics kernels -> pose reads
         base_pos = robot.data.root_link_pos_w          # (B,3)
         base_quat_wxyz = robot.data.root_link_quat_w   # (B,4) wxyz (mjlab)
+        if self.terrain_query is not None:
+            rows = [int(row) for row in rows]
+            if any(row < 0 or row >= self.num_envs for row in rows):
+                raise IndexError("terrain scan row outside environment batch")
+            if rows:
+                # Physics is unchanged throughout this scan boundary. Query only
+                # the due worlds together; P6 draws remain in per-world order below.
+                selected = torch.tensor(rows, dtype=torch.long, device=self.device)
+                base_q = base_quat_wxyz.index_select(0, selected)[:, [1, 2, 3, 0]]
+                sensor_quats = _quat_mul_xyzw(base_q, self._mount_q.expand(len(rows), 4))
+                sensor_positions = base_pos.index_select(0, selected) + _quat_apply_xyzw(
+                    base_q, self._mount_t.expand(len(rows), 3))
+                terrain_dirs = self.full_ray_dirs.index_select(0, self.source_ray_ids)
+                world_dirs = _quat_apply_xyzw(
+                    sensor_quats[:, None].expand(-1, self.num_raw_rays, -1),
+                    terrain_dirs[None].expand(len(rows), -1, -1))
+                raw, geom = self.terrain_query.raycast(
+                    selected, sensor_positions[:, None].expand_as(world_dirs), world_dirs)
+                hit = (geom >= 0) & (raw >= 0) & (raw < max_range)
+                terrain_distances = torch.where(hit, raw, torch.full_like(raw, max_range))
         frames: list[ScanFrame] = []
-        for row in rows:
+        for scan_row, row in enumerate(rows):
             row = int(row)
             if not (0 <= row < self.num_envs):
                 raise IndexError(f"env row {row} out of range [0, {self.num_envs})")
-            bundle = self._sensors[row]
+            bundle = self._sensors[row] if self.terrain_query is None else None
             base_p = base_pos[row].detach()
             base_q_xyzw = base_quat_wxyz[row].detach()[[1, 2, 3, 0]]  # wxyz→xyzw
-            sensor_q = _quat_mul_xyzw(base_q_xyzw.view(1, 4), self._mount_q)[0]
-            sensor_p = base_p + _quat_apply_xyzw(
-                base_q_xyzw.view(1, 4), self._mount_t
-            )[0]
+            if self.terrain_query is None:
+                sensor_q = _quat_mul_xyzw(base_q_xyzw.view(1, 4), self._mount_q)[0]
+                sensor_p = base_p + _quat_apply_xyzw(
+                    base_q_xyzw.view(1, 4), self._mount_t
+                )[0]
+            else:
+                sensor_q = sensor_quats[scan_row]
+                sensor_p = sensor_positions[scan_row]
             # P6 gap schedule advance happens in per-env persistent scan
             # order BEFORE any consumption processing (the event offset is
             # drawn/fixed before the earliest candidate frame per contract).
@@ -700,13 +734,21 @@ class ConfinedScanPipeline:
                         row, int(persistent_scan_numbers[row])
                     )
                 )
-            # COVERAGE FIRST: never let a finite mesh edge become a false miss.
-            self.assert_coverage(sensor_p)
-            bundle.pos_tensor.copy_(sensor_p.view(1, 3))
-            bundle.quat_tensor.copy_(sensor_q.view(1, 4))
-            points_sensor, dist = bundle.sensor.update()
-            points_backend = points_sensor.detach().view(-1, 3).clone()
-            dist = dist.detach().view(-1).clone()
+            if self.terrain_query is None:
+                # COVERAGE FIRST: never let a finite mesh edge become a false miss.
+                self.assert_coverage(sensor_p)
+                bundle.pos_tensor.copy_(sensor_p.view(1, 3))
+                bundle.quat_tensor.copy_(sensor_q.view(1, 4))
+                points_sensor, dist = bundle.sensor.update()
+                points_backend = points_sensor.detach().view(-1, 3).clone()
+                dist = dist.detach().view(-1).clone()
+
+            else:
+                unit_dirs = terrain_dirs
+                # Retained frames own each distance row, so a partial reset does
+                # not keep the entire old batched result alive through one row.
+                dist = terrain_distances[scan_row].clone()
+                points_backend = dist[:, None] * unit_dirs
 
             # Fault checks: NaN/Inf are faults EVEN IF they would be maskable;
             # never silently sanitized, never disguised as valid.
@@ -731,7 +773,8 @@ class ConfinedScanPipeline:
             # identity is dist == max_range. Real hits below max_range
             # (including 15−ε) stay REAL HITS — no near-range promotion, no ε
             # band. Any dist outside [0, max_range] is a fault, never clamped.
-            unit_dirs = bundle.ray_dirs
+            unit_dirs = (bundle.ray_dirs if bundle is not None else
+                         terrain_dirs)
             no_hit = dist == max_range
             if bool((dist < 0.0).any()) or bool((dist > max_range).any()):
                 n_low = int((dist < 0.0).sum().item())
@@ -911,7 +954,7 @@ class ConfinedScanPipeline:
     def _sample_frames(self, frames: list[ScanFrame]) -> None:
         """Sample only this call's due rows, preserving frame/source identities.
 
-        Raycasts and per-row perturbation draws stay in their original order.
+        Terrain raycasts run together; per-row perturbation draws keep their order.
         FPS for all resulting frames is independent per row and runs together;
         no non-due row is sampled, scanned or assigned a new identity here.
         """

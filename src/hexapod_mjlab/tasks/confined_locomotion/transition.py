@@ -56,7 +56,7 @@ class TransitionContext:
     close restores exact original bound methods. A fault freezes the context;
     reset is a separate runtime operation, never an implicit recovery.
     """
-    def __init__(self, env):
+    def __init__(self, env, *, terrain_query=None):
         if env.cfg.auto_reset or env.cfg.decimation != DECIMATION:
             raise ValueError('training seam requires auto_reset=False and four substeps')
         if abs(env.physics_dt - SIM_TIMESTEP_S) > 1e-12:
@@ -78,10 +78,18 @@ class TransitionContext:
         mm = env.sim.mj_model
         self.foot_global_ids = [next(i for i,n in enumerate(self.contact_reader.body_names)
                                     if n.split('/')[-1] == foot) for foot in FOOT_BODIES]
-        planes = np.flatnonzero(np.asarray(mm.geom_type) == 0)
-        if len(planes) != 1:
-            raise RuntimeError('expected exactly one actual ground plane')
-        self.plane_geom_id = int(planes[0])
+        self.terrain_query = terrain_query
+        if terrain_query is None:
+            planes = np.flatnonzero(np.asarray(mm.geom_type) == 0)
+            if len(planes) != 1:
+                raise RuntimeError('expected exactly one actual ground plane')
+            self.plane_geom_id = int(planes[0])
+        else:
+            if terrain_query.env is not env:
+                raise ValueError('terrain query must own the same environment')
+            # Existing support bookkeeping uses this field for the actual
+            # ground collider; Terrain Memory supplies the compiled HField.
+            self.plane_geom_id = terrain_query.surface.geom_id
         self.actuator_ids = []
         self.actuator_gears = []
         for name in self.action._target_names:

@@ -51,6 +51,9 @@ one initial first scan, and then owns the whole control-step lifecycle:
    (including play: a fault is never recoverable through reset).
 
 No network, optimizer, PPO sampling or value bootstrap is built here.
+Terrain Memory collection explicitly supplies ``height_grid``: only that
+path uses the compiled Heightfield scanner/MDP query and training-only labels.
+The default Flat path keeps its existing scanner and plane reference.
 ``close()`` restores the instance hooks via the context. The scan window,
 near-input identities are kept per env with the episode
 scan id and the PERSISTENT sensor scan count kept SEPARATE (the latter
@@ -107,7 +110,7 @@ from .mdp.rewards import (
     TRAINING_REWARD_WEIGHTS,
     FootAirTimeState,
     get_foot_air_state,
-    plane_world_z,
+    root_height_above_plane,
     read_current_foot_support,
 )
 from .mdp.terminations import get_termination_state
@@ -296,6 +299,7 @@ class TrainingRuntime:
         lidar_cfg: ConfinedLidarCfg | None = None,
         scan_audit_bound_per_env: int | None = _DEFAULT_SCAN_AUDIT_BOUND_PER_ENV,
         perturbation_cfg: ObservationPerturbationCfg | None = None,
+        height_grid=None,
     ) -> None:
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
 
@@ -432,12 +436,22 @@ class TrainingRuntime:
         self.window = ScanWindow(
             self.num_envs, episode_ids=[0] * self.num_envs, device=self.device
         )
-        self.pipeline = ConfinedScanPipeline(env, self.lidar_cfg)
+        self.height_grid = height_grid
+        self.terrain_query = None
+        self._height_label = None
+        if height_grid is not None:
+            from .terrain_geometry import HeightGridCfg, TerrainGeometryQuery
+            if not isinstance(height_grid, HeightGridCfg):
+                raise TypeError("height_grid must be HeightGridCfg or None")
+            self.terrain_query = TerrainGeometryQuery(env)
+        self.pipeline = (ConfinedScanPipeline(env, self.lidar_cfg) if self.terrain_query is None else
+                         ConfinedScanPipeline(env, self.lidar_cfg, terrain_query=self.terrain_query))
         self.scan_identity = copylib.deepcopy(self.pipeline.scan_identity)
         (self.output_dir / "runtime_recipe.json").write_text(
             json.dumps(
                 {
-                    "task": "El-4090-Confined-Locomotion-Flat_2/TrainingRuntime",
+                    "task": ("El-4090-Confined-Locomotion-Flat_2/TrainingRuntime" if height_grid is None else
+                             "El-4090-Confined-Locomotion-Terrain-Memory_2/CollectionRuntime"),
                     "mode": self.mode,
                     "seed": self.seed,
                     "num_envs": self.num_envs,
@@ -445,6 +459,7 @@ class TrainingRuntime:
                     "sampling": sampling_identity(self.lidar_cfg.far_sampling),
                     "lidar_rays": self.pipeline.num_raw_rays,
                     "scan_identity": self.scan_identity,
+                    **({} if height_grid is None else {"height_grid": height_grid.identity()}),
                     "observation_perturbations": (
                         None if perturbation_cfg is None
                         else perturbation_cfg.identity()
@@ -474,7 +489,8 @@ class TrainingRuntime:
         # scan, REAL foot-support initialization (no landing events), zero
         # termination counters. No env reset happens here — the wrapper's
         # initial reset already wrote the T1 state.
-        self._context = TransitionContext(env)
+        self._context = (TransitionContext(env) if self.terrain_query is None else
+                         TransitionContext(env, terrain_query=self.terrain_query))
         try:
             self._initialize_rows(
                 torch.arange(self.num_envs, dtype=torch.long, device=self.device),
@@ -517,6 +533,7 @@ class TrainingRuntime:
             "seed": self.seed,
             "num_envs": self.num_envs,
             "mode": self.mode,
+            **({} if self.height_grid is None else {"height_grid": self.height_grid.identity()}),
             "control_steps": int(self._control_steps),
             "episode_ids": clone(self.episode_ids),
             "step_in_episode": clone(self.step_in_episode),
@@ -574,6 +591,8 @@ class TrainingRuntime:
             raise RuntimeError("runtime checkpoint sampling identity mismatch")
         if state.get("mode") != self.mode:
             raise RuntimeError("runtime checkpoint mode mismatch")
+        if state.get("height_grid") != (None if self.height_grid is None else self.height_grid.identity()):
+            raise RuntimeError("runtime checkpoint height grid mismatch")
         if (state.get("perturbations") is None) != (self._perturbations is None):
             raise RuntimeError("runtime checkpoint perturbation mode mismatch")
 
@@ -632,6 +651,7 @@ class TrainingRuntime:
         termination.control_id = term_state["control_id"]
         self._stopped = bool(state["stopped"])
         self._play_source_scans = copylib.deepcopy(state["play_source_scans"])
+        self._height_label = None  # geometry labels are regenerated from restored physics
 
     @staticmethod
     def _move_dataclass_tensors(value, device):
@@ -748,7 +768,7 @@ class TrainingRuntime:
 
     @_freeze_failures("labels")
     def labels(self) -> dict:
-        """Fixed six-dimensional envelope label for the current pre-action input."""
+        """Current fixed envelope and optional cached, training-only height labels."""
         self._guard_usable("labels")
         prepared = self.prepare()
         observation = prepared.observation
@@ -764,7 +784,15 @@ class TrainingRuntime:
             valid=torch.ones(batch, dtype=torch.bool, device=self.device),
         )
         bind_envelope_label(observation, envelope)
-        return {"envelope": envelope}
+        labels = {"envelope": envelope}
+        if self.terrain_query is not None:
+            cached = self._height_label
+            if cached is None or not (torch.equal(cached.episode_ids, observation.episode_ids) and
+                                      torch.equal(cached.step_ids, observation.step_ids)):
+                self._height_label = self.terrain_query.height_labels(
+                    observation.env_ids, observation.episode_ids, observation.step_ids, self.height_grid)
+            labels["height"] = self._height_label
+        return labels
 
     # ── scanning ───────────────────────────────────────────────────────────
 
@@ -1192,7 +1220,7 @@ class TrainingRuntime:
             if air_state.landing is not None and air_state.consumed_air_s is not None:
                 diagnostics["foot_landing"] = air_state.landing.clone()
                 diagnostics["foot_landing_air_time_s"] = air_state.consumed_air_s.clone()
-            height = record["root_pos_w"][:, 2] - plane_world_z(self.env)
+            height = root_height_above_plane(self.env, record["root_pos_w"])
             up_dot = -record["gravity_b"][:, 2]
             engineering_fall = (height < ENGINEERING_FALL_HEIGHT_M) | (
                 up_dot < ENGINEERING_FALL_UP_DOT

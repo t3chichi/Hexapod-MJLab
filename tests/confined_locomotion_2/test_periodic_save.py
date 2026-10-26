@@ -1,7 +1,7 @@
 from dataclasses import asdict
 
 from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import checkpoint_due, resolve_recipe, optimizer_scalar_summary
-from hexapod_mjlab.tasks.confined_locomotion_2.rl_cfg import confined_locomotion_formal_rl_cfg
+from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import confined_locomotion_formal_rl_cfg
 
 
 def test_periodic_checkpoint_uses_50_completed_cumulative_iterations():

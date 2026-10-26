@@ -79,3 +79,36 @@ def test_hit10_formal_selection_is_the_frozen_6x10_experiment():
         with np.load(near_old, allow_pickle=False) as old:
             assert np.array_equal(data["designed_near_ids"], old["designed_near_ids"])
             assert np.array_equal(data["designed_far_ids"][:1024], old["designed_far_ids"])
+
+
+def test_terrain_scans_batch_only_due_worlds_and_retain_owned_distance_rows():
+    calls = []
+    count, rays = 3, 16
+    angles = torch.arange(rays).float() * (2 * torch.pi / rays)
+    directions = torch.stack((angles.cos(), angles.sin(), torch.zeros(rays)), dim=-1)
+    positions = torch.zeros(count, 3)
+    positions[:, 0] = torch.arange(count)
+    robot = SimpleNamespace(data=SimpleNamespace(
+        root_link_pos_w=positions,
+        root_link_quat_w=torch.tensor([[1., 0, 0, 0]]).repeat(count, 1)))
+    def raycast(rows, origins, dirs):
+        calls.append(rows.tolist())
+        torch.testing.assert_close(origins[:, :, 0], rows.float()[:, None].expand(-1, rays))
+        return origins[:, :, 0] + 5., torch.zeros(len(rows), rays, dtype=torch.int32)
+    pipe = object.__new__(ConfinedScanPipeline)
+    pipe.env = SimpleNamespace(scene={"robot": robot})
+    pipe.cfg = ConfinedLidarCfg(far_sampling="hit_only_10m")
+    pipe.device, pipe.num_envs = "cpu", count
+    pipe.terrain_query = SimpleNamespace(raycast=raycast)
+    pipe.full_ray_dirs, pipe.source_ray_ids = directions, torch.arange(rays)
+    pipe.num_raw_rays = rays
+    pipe._mount_q, pipe._mount_t = torch.tensor([[0., 0, 0, 1.]]), torch.zeros(1, 3)
+    pipe.pool_indices = torch.arange(rays)
+    pipe.fixed_near_mask = torch.arange(rays) < rays // 2
+    pipe.scan_records = []
+    frames = pipe.scan_rows([2, 0])
+    assert calls == [[2, 0]] and [frame.env_row for frame in frames] == [2, 0]
+    for frame in frames:
+        torch.testing.assert_close(frame.raw_dists, torch.full((rays,), 5. + frame.env_row))
+        assert frame.raw_dists.untyped_storage().nbytes() == rays * 4
+    assert pipe.scan_rows([]) == [] and calls == [[2, 0]]

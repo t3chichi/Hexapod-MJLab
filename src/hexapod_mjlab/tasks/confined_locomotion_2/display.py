@@ -95,7 +95,7 @@ def capture_inputs(session, prepared):
     return captured
 
 
-def retain_display(session, prepared, output, captured, *, preview, reason):
+def retain_display(session, prepared, output, captured, *, preview, reason, ground_z_w=None):
     """Pair retained action inputs with the current real boundary pose."""
     import warp as wp
 
@@ -104,10 +104,12 @@ def retain_display(session, prepared, output, captured, *, preview, reason):
     positions = array(robot.data.root_link_pos_w)
     quaternions = array(robot.data.root_link_quat_w)
     qpos = array(wp.to_torch(env.sim.wp_data.qpos)).reshape(session.num_envs, -1)
-    ground_z = float(np.asarray(runtime.pipeline.mesh_record["z"]).reshape(-1)[0])
+    if ground_z_w is None:
+        ground_z_w = np.full(session.num_envs, float(np.asarray(runtime.pipeline.mesh_record["z"]).reshape(-1)[0]))
     envelope, action = array(output.envelope), array(output.action_mean)
     rows = []
     for row, data in enumerate(captured):
+        ground_z = float(ground_z_w[row])
         identity = dict(data["identity"])
         identity.update({
             "pose_control_step": int(runtime.control_steps_taken),

@@ -14,6 +14,8 @@ def main():
     parser.add_argument("--iterations", type=int, required=True)
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--log-root", default="logs/confined_locomotion_2")
+    parser.add_argument("--execution-mode", choices=("low_memory", "speed"), default="low_memory",
+                        help="low_memory recomputes point-GRU activations; speed retains them")
     parser.add_argument("--resume-checkpoint")
     parser.add_argument("--save-interval", type=int, default=50,
                         help="save a full checkpoint every N cumulative completed PPO iterations")
@@ -32,7 +34,7 @@ def main():
         resume_checkpoint=args.resume_checkpoint,
         raycast_mode=args.raycast_mode,
         sparse_selection_path=args.sparse_selection_path, far_sampling=args.far_sampling,
-        save_interval=args.save_interval)
+        save_interval=args.save_interval, execution_mode=args.execution_mode)
     print(f"Checkpoint: {result.checkpoint_path}")
     print("Engineering completion does not establish walking or terrain-memory performance.")
 

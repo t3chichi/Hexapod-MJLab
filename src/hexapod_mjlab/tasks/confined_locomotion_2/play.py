@@ -21,6 +21,7 @@ from .flat_env_cfg import make_training_env_cfg
 from .runtime import TrainingRuntime, TrainingRuntimeFrozenError
 from .scanner import ConfinedLidarCfg
 from .rl.checkpoint import load_weights
+from . import display
 
 __all__ = ["PlayConfigError", "PlayStep", "PlaySession", "make_play_env_cfg"]
 
@@ -57,6 +58,11 @@ class PlaySession:
     ``confined_locomotion_2`` full checkpoint is loaded as weights only;
     simulation, recurrent state, and episode clocks always start fresh.
     """
+
+    task_id = "El-4090-Confined-Locomotion-Flat_2"
+    network_type = ConfinedLocomotionNetwork
+    display = display
+    height_grid = None
 
     def __init__(
         self,
@@ -110,7 +116,7 @@ class PlaySession:
         self.device = torch.device(target_device)
 
         if network is None:
-            network = ConfinedLocomotionNetwork(
+            network = self.network_type(
                 mlp_activation=nn.ELU(), init_fn=None, envelope_mode="raw"
             )
         if not isinstance(network, nn.Module):
@@ -127,6 +133,7 @@ class PlaySession:
             self.weight_load_report = load_weights(
                 self.network, self.checkpoint_path,
                 expected_far_sampling=far_sampling,
+                expected_task_id=self.task_id,
             )
         except Exception as error:
             # A caller-supplied runtime is already live at this point. Keep
@@ -150,6 +157,7 @@ class PlaySession:
                 lidar_cfg=lidar_cfg,
                 perturbation_cfg=perturbation_cfg,
                 scan_audit_bound_per_env=1,
+                **({"height_grid": self.height_grid} if self.height_grid is not None else {}),
             )
         self.runtime = runtime
         try:
@@ -259,8 +267,7 @@ class PlaySession:
             self._feature_identity = identity
             self.frame_encoding_count += 1
 
-        from .display import capture_inputs, retain_display
-        captured = capture_inputs(self, prepared) if self.env is not None else None
+        captured = self.display.capture_inputs(self, prepared) if self.env is not None else None
         try:
             output = self.network.forward_from_features(
                 prepared.observation, self._frame_feature, self.hidden
@@ -276,7 +283,7 @@ class PlaySession:
             self.forward_count += 1
             transition = runtime.step(action_mean)
             if captured is not None:
-                retain_display(self, prepared, output, captured, preview=False,
+                self.display.retain_display(self, prepared, output, captured, preview=False,
                                reason="last action inputs; post-step pose")
         except BaseException as error:
             save_fault = getattr(runtime, "_save_fault", None)
@@ -299,7 +306,6 @@ class PlaySession:
         """
         if self._closed or self.runtime._faulted or self.runtime._stopped:
             raise TrainingRuntimeFrozenError("cannot preview a closed, fallen or faulted session")
-        from .display import capture_inputs, retain_display
         prepared = self.runtime.prepare()
         identity = (prepared.observation.episode_ids.detach().clone(), prepared.near_scan_ids.detach().clone())
         same = (self._feature_identity is not None
@@ -313,8 +319,8 @@ class PlaySession:
             self.frame_encoding_count += 1
         output = self.network.forward_from_features(prepared.observation, self._frame_feature, self.hidden)
         self.preview_count += 1
-        captured = capture_inputs(self, prepared)
-        retain_display(self, prepared, output, captured, preview=True, reason=reason)
+        captured = self.display.capture_inputs(self, prepared)
+        self.display.retain_display(self, prepared, output, captured, preview=True, reason=reason)
 
     def build_display_snapshot(self, env_row=0, *, paused=True) -> dict:
         from .display import build_display_snapshot

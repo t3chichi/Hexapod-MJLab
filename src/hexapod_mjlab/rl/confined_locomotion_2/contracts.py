@@ -43,6 +43,41 @@ ACTION_DIM = 18
 CONTROL_INPUT_DIM = TEMPORAL_GRU_HIDDEN + PROPRIO_DIM + COMMAND_DIM + ENVELOPE_DIM
 
 
+@dataclass(frozen=True)
+class HeightLabels:
+    env_ids: torch.Tensor
+    episode_ids: torch.Tensor
+    step_ids: torch.Tensor
+    heights: torch.Tensor             # [B,11,17], metres, signed
+    valid: torch.Tensor               # [B,11,17], geometry only
+    query_xy_w: torch.Tensor          # [B,11,17,2], offline audit
+    root_pos_w: torch.Tensor          # [B,3], offline audit, never an observation
+    grid_identity: dict
+    terrain_identity: str
+
+    def validate(self, observation):
+        """Bind training-only labels to the exact pre-action observation."""
+        b, device = len(observation.env_ids), observation.env_ids.device
+        for name in ("env_ids", "episode_ids", "step_ids"):
+            value = getattr(self, name)
+            if (not isinstance(value, torch.Tensor) or value.dtype != torch.int64 or value.device != device or
+                    value.shape != (b,) or not torch.equal(value, getattr(observation, name))):
+                raise ContractError(f"height label {name} must match its pre-action observation")
+        for name, shape, dtype in (
+            ("heights", (b, 11, 17), torch.float32), ("valid", (b, 11, 17), torch.bool),
+            ("query_xy_w", (b, 11, 17, 2), torch.float32), ("root_pos_w", (b, 3), torch.float32),
+        ):
+            value = getattr(self, name)
+            if not isinstance(value, torch.Tensor) or value.shape != shape or value.dtype != dtype or value.device != device:
+                raise ContractError(f"height label {name} must be {shape} {dtype} on {device}")
+            if dtype.is_floating_point and not bool(torch.isfinite(value).all()):
+                raise ContractError(f"height label {name} contains NaN/Inf")
+        if bool((self.heights[~self.valid] != 0).any()):
+            raise ContractError("invalid height label slots must be zero")
+        if not isinstance(self.terrain_identity, str) or not self.terrain_identity or not self.grid_identity:
+            raise ContractError("height label requires terrain and grid identities")
+
+
 @dataclass
 class ScanWindowSnapshot:
     """Validated one-scan snapshot, with near and far data from the same scan."""
@@ -160,6 +195,6 @@ __all__ = [
     "JOINT_DIM", "NEAR_POINTS", "OnlineObservation", "EnvelopeLabel",
     "OrderedPoints", "POINT_CHANNELS", "PROPRIO_DIM", "PROPRIO_LAYOUT",
     "ScanWindowSnapshot", "TEMPORAL_GRU_HIDDEN", "TEMPORAL_GRU_INPUT",
-    "ContractError", "bind_envelope_label", "bind_window_to_observation",
+    "ContractError", "HeightLabels", "bind_envelope_label", "bind_window_to_observation",
     "flatten_far_window", "sort_points_by_angle_keys", "validate_point_block",
 ]

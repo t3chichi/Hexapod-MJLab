@@ -17,9 +17,20 @@ from hexapod_mjlab.rl.confined_locomotion.symmetry import (
     JointPermutation, mirror_action_distribution, mirror_envelope_values,
     mirror_mean_mse,
 )
-from .auxiliary import AuxiliaryResult, resolve_auxiliary
-from .symmetry import mirror_prepared
-from .training_rollout import SequenceRolloutBuffer, SequenceStep, ROLLOUT_STEPS
+from .auxiliary import AuxiliaryResult, HeightReconstructionAuxiliary, resolve_auxiliary
+from .training_rollout import (
+    PreparedSequenceReplay, prepare_sequence_replay, replay_sequence,
+    SequenceRolloutBuffer, SequenceStep, ROLLOUT_STEPS,
+)
+
+
+def _require_finite_tensors(tensors, message):
+    """Read one reduced flag per device, preserving optimizer-stage boundaries."""
+    by_device = {}
+    for tensor in tensors:
+        by_device.setdefault(tensor.device, []).append(torch.isfinite(tensor).all())
+    if any(not bool(torch.stack(flags).all()) for flags in by_device.values()):
+        raise FloatingPointError(message)
 
 
 @dataclass(frozen=True)
@@ -69,7 +80,7 @@ class TemporalPPOTrainer:
         device: torch.device | str, config: TemporalPPOConfig | None = None,
         symmetry_enabled: bool = False, joint_permutation: JointPermutation | None = None,
         mount_quat_xyzw: torch.Tensor | None = None, allow_cpu: bool = True,
-        seed: int = 0,
+        seed: int = 0, execution_mode: str = "low_memory",
         auxiliary: Callable[[Any, Any], AuxiliaryResult] | None = None,
     ) -> None:
         if not isinstance(network, nn.Module) or not isinstance(distribution_provider, nn.Module):
@@ -81,6 +92,9 @@ class TemporalPPOTrainer:
             raise TypeError("symmetry_enabled must be bool")
         if symmetry_enabled and (joint_permutation is None or mount_quat_xyzw is None):
             raise ValueError("symmetry requires joint mapping and lidar optical mount quaternion")
+        if execution_mode not in ("low_memory", "speed"):
+            raise ValueError("execution_mode must be low_memory or speed")
+        self.execution_mode = execution_mode
         self.network = network
         self.distribution_provider = distribution_provider
         self.config = config or TemporalPPOConfig()
@@ -122,6 +136,7 @@ class TemporalPPOTrainer:
             "optimizer_step_count": self.optimizer_step_count,
             "config": asdict(self.config),
             "symmetry_enabled": self.symmetry_enabled,
+            "execution_mode": self.execution_mode,
             "seed": self.seed,
             "shuffle_generator_state": self.shuffle_generator.get_state().cpu(),
         }
@@ -133,6 +148,8 @@ class TemporalPPOTrainer:
             raise ValueError("saved temporal PPO recipe differs from this trainer")
         if int(state.get("seed", -1)) != self.seed:
             raise ValueError("saved temporal PPO seed differs from this trainer")
+        if state.get("execution_mode") != self.execution_mode:
+            raise ValueError("saved execution mode differs from this trainer")
         self.optimizer.load_state_dict(state["optimizer"])
         self.updates = int(state["updates"])
         self.optimizer_step_count = int(state["optimizer_step_count"])
@@ -153,75 +170,11 @@ class TemporalPPOTrainer:
             raise ValueError("empty loss minibatch")
         return values[mask]
 
-    def _replay(self, steps: list[SequenceStep], *, mirrored: bool = False) -> list[Any]:
-        outputs: list[Any] = []
-        h = (steps[0].mirror_hidden_before if mirrored else steps[0].hidden_before)
-        if h is None:
-            raise ValueError("mirror replay requires mirrored hidden initial state")
-        h = h.detach().clone()
-        previous_done = torch.zeros((h.shape[0],), dtype=torch.bool, device=h.device)
-        feature_cache: dict[tuple[Any, ...], tuple[torch.Tensor, tuple[torch.Tensor, ...]]] = {}
-        for t, step in enumerate(steps):
-            if t:
-                h = torch.where(previous_done[:, None], torch.zeros_like(h), h)
-            if mirrored:
-                if step.prepared is None:
-                    raise ValueError("symmetry sequence replay requires complete prepared metadata")
-                p = mirror_prepared(step.prepared, self.joint_permutation, mount_quat_xyzw=self.mount_quat_xyzw)
-                obs, near, nv, far, fv = p.observation, p.near_points, p.near_valid, p.far_points, p.far_valid
-                nk, fk, identity = p.near_angle_keys, p.far_angle_keys, p
-            else:
-                identity = step.prepared
-                obs = identity.observation if identity is not None else step.observation
-                near = identity.near_points if identity is not None else step.near_points
-                nv = identity.near_valid if identity is not None else step.near_valid
-                far = identity.far_points if identity is not None else step.far_points
-                fv = identity.far_valid if identity is not None else step.far_valid
-                nk = getattr(identity, "near_angle_keys", None) if identity is not None else step.near_angle_keys
-                fk = getattr(identity, "far_angle_keys", None) if identity is not None else step.far_angle_keys
-            # Re-encode once per immutable source scan pair within this replay graph.
-            # This is a graph-preserving cache: each update recomputes from raw scans,
-            # and a reused feature retains autograd edges to the shared frame encoder.
-            if hasattr(self.network, "forward_from_features") and hasattr(self.network, "encode_points"):
-                near_ids = getattr(identity, "near_scan_ids", None) if identity is not None else None
-                far_ids = getattr(identity, "far_point_scan_ids", None) if identity is not None else None
-                if near_ids is not None and far_ids is not None:
-                    feature_rows = []
-                    for row in range(h.shape[0]):
-                        key = (int(obs.env_ids[row]), int(obs.episode_ids[row]), int(near_ids[row]),
-                               tuple(int(x) for x in far_ids[row].tolist()))
-                        row_inputs = (near[row:row+1], nv[row:row+1], far[row:row+1], fv[row:row+1],
-                                      None if nk is None else nk[row:row+1],
-                                      None if fk is None else fk[row:row+1])
-                        if key in feature_cache:
-                            cached, cached_inputs = feature_cache[key]
-                            same = all(
-                                (a is None and b is None) or
-                                (a is not None and b is not None and torch.equal(a, b))
-                                for a, b in zip(row_inputs, cached_inputs)
-                            )
-                            if not same:
-                                raise ValueError("same scan identity produced different frame input during PPO replay")
-                            feature_rows.append(cached)
-                        else:
-                            feature = self.network.encode_points(
-                                row_inputs[0], row_inputs[1], row_inputs[2], row_inputs[3],
-                                near_angle_keys=row_inputs[4], far_angle_keys=row_inputs[5],
-                            )
-                            feature_cache[key] = (feature, tuple(None if x is None else x.detach().clone() for x in row_inputs))
-                            feature_rows.append(feature)
-                    frame_feature = torch.cat(feature_rows, dim=0)
-                else:
-                    frame_feature = self.network.encode_points(
-                        near, nv, far, fv, near_angle_keys=nk, far_angle_keys=fk
-                    )
-                out = self.network.forward_from_features(obs, frame_feature, h)
-            else:
-                out = self.network(obs, near, nv, far, fv, h, near_angle_keys=nk, far_angle_keys=fk)
-            outputs.append(out)
-            h = out.hidden
-            previous_done = step.terminated | step.truncated
-        return outputs
+    def _replay(self, steps: list[SequenceStep] | PreparedSequenceReplay, *, mirrored: bool = False) -> list[Any]:
+        return replay_sequence(
+            self.network, steps, mirrored=mirrored,
+            joint_permutation=self.joint_permutation, mount_quat_xyzw=self.mount_quat_xyzw,
+            checkpoint_points=self.execution_mode == "low_memory")
 
     def update(self, buffer: SequenceRolloutBuffer) -> dict[str, float | int]:
         if self.faulted:
@@ -238,6 +191,12 @@ class TemporalPPOTrainer:
             raise ValueError("buffer and trainer devices differ")
         if self.symmetry_enabled and any(step.prepared is None or step.mirror_hidden_before is None for step in buffer.steps):
             raise ValueError("symmetry requires prepared inputs and shadow hidden state at every step")
+        replay_inputs = prepare_sequence_replay(buffer.steps, network=self.network)
+        mirror_inputs = prepare_sequence_replay(
+            buffer.steps, network=self.network, mirrored=True, joint_permutation=self.joint_permutation,
+            mount_quat_xyzw=self.mount_quat_xyzw) if self.symmetry_enabled else None
+        height_targets = (self.auxiliary.prepare_targets(buffer.steps, mirrored=self.symmetry_enabled)
+                          if isinstance(self.auxiliary, HeightReconstructionAuxiliary) else None)
         advantages, returns = buffer.compute_gae()
         flat_adv = normalize_rollout_advantage(advantages.reshape(-1))
         advantages = flat_adv.reshape_as(advantages).detach()
@@ -246,6 +205,22 @@ class TemporalPPOTrainer:
         total = t_count * batch
         if total % self.config.minibatches:
             raise ValueError("T*B must divide evenly into four disjoint minibatches")
+        # Behavior data and supervision are immutable throughout all Adam steps.
+        actions = torch.stack([s.action for s in buffer.steps]).reshape(total, -1)
+        old_lp = torch.stack([s.old_log_prob for s in buffer.steps])
+        old_means = torch.stack([s.old_mean for s in buffer.steps])
+        old_stds = torch.stack([s.old_std for s in buffer.steps])
+        old_values = torch.stack([s.old_value for s in buffer.steps])
+        et = torch.stack([s.envelope_label.values for s in buffer.steps])
+        ev = torch.stack([s.envelope_label.valid for s in buffer.steps])
+        if self.symmetry_enabled:
+            pushed = mirror_action_distribution(
+                old_means.reshape(total, -1), old_stds.reshape(total, -1),
+                actions, self.joint_permutation)
+            old_m = pushed.mean.reshape_as(old_means)
+            old_s = pushed.std.reshape_as(old_stds)
+            mirror_actions = pushed.raw_action
+            mirror_et = mirror_envelope_values(et.reshape(total, -1)).reshape_as(et)
         summaries: dict[str, float | int] = {"updates": self.updates, "steps": t_count, "num_envs": batch}
         # Keep diagnostics as detached device scalars through the whole update.  Converting
         # each parameter norm (or each metric) with .item() here would synchronize CUDA
@@ -265,28 +240,17 @@ class TemporalPPOTrainer:
                 loss_mask = torch.zeros(total, dtype=torch.bool, device=self.device)
                 loss_mask[selected] = True
                 loss_mask = loss_mask.reshape(t_count, batch)
-                outputs = self._replay(buffer.steps)
-                mirrored_outputs = self._replay(buffer.steps, mirrored=True) if self.symmetry_enabled else None
-                new_log_probs, entropies, new_means, new_stds, new_values = [], [], [], [], []
-                env_preds, env_targets, env_valids = [], [], []
-                mirror_log_probs, mirror_entropies, mirror_values, mirror_means, mirror_envs = [], [], [], [], []
-                for t, output in enumerate(outputs):
-                    dist = self.distribution_provider(output.action_mean)
-                    new_log_probs.append(dist.log_prob(buffer.steps[t].action))
-                    entropies.append(dist.entropy())
-                    new_means.append(output.action_mean)
-                    new_stds.append(dist.std)
-                    new_values.append(output.value.squeeze(-1))
-                    env_preds.append(output.envelope)
-                    env_targets.append(buffer.steps[t].envelope_label.values)
-                    env_valids.append(buffer.steps[t].envelope_label.valid)
-                lp = torch.stack(new_log_probs); ent = torch.stack(entropies)
-                means = torch.stack(new_means); stds = torch.stack(new_stds); values = torch.stack(new_values)
-                ep = torch.stack(env_preds); et = torch.stack(env_targets); ev = torch.stack(env_valids)
-                old_lp = torch.stack([s.old_log_prob for s in buffer.steps])
-                old_means = torch.stack([s.old_mean for s in buffer.steps])
-                old_stds = torch.stack([s.old_std for s in buffer.steps])
-                old_values = torch.stack([s.old_value for s in buffer.steps])
+                outputs = self._replay(replay_inputs)
+                mirrored_outputs = self._replay(mirror_inputs) if mirror_inputs is not None else None
+                # Distribution calls operate on independent action events. Flatten only
+                # T and B; retain all sequence replay and minibatch loss masks unchanged.
+                means = torch.stack([o.action_mean for o in outputs])
+                values = torch.stack([o.value.squeeze(-1) for o in outputs])
+                ep = torch.stack([o.envelope for o in outputs])
+                dist = self.distribution_provider(means.reshape(total, -1))
+                lp = dist.log_prob(actions).reshape(t_count, batch)
+                ent = dist.entropy().reshape(t_count, batch)
+                stds = dist.std.reshape_as(means)
                 if not bool(loss_mask.any()):
                     raise AssertionError("empty disjoint minibatch")
                 mask = loss_mask
@@ -301,30 +265,22 @@ class TemporalPPOTrainer:
                     old_means[mask], old_stds[mask], means[mask].detach(), stds[mask].detach()
                 ).mean()
                 if mirrored_outputs is not None:
-                    mlps, ments, mvals, mmeans, menvs = [], [], [], [], []
-                    for t, output in enumerate(mirrored_outputs):
-                        # The augmented behavior distribution is the pushforward of pi_old.
-                        pushed = mirror_action_distribution(old_means[t], old_stds[t], buffer.steps[t].action, self.joint_permutation)
-                        mdist = self.distribution_provider(output.action_mean)
-                        mlps.append(mdist.log_prob(pushed.raw_action))
-                        ments.append(mdist.entropy())
-                        mvals.append(output.value.squeeze(-1))
-                        mmeans.append(output.action_mean)
-                        menvs.append(output.envelope)
-                    mlp = torch.stack(mlps); ment = torch.stack(ments)
-                    mvalue = torch.stack(mvals); mmean = torch.stack(mmeans); menv = torch.stack(menvs)
-                    old_m = torch.stack([mirror_action_distribution(old_means[t], old_stds[t], buffer.steps[t].action, self.joint_permutation).mean for t in range(t_count)])
-                    old_s = torch.stack([mirror_action_distribution(old_means[t], old_stds[t], buffer.steps[t].action, self.joint_permutation).std for t in range(t_count)])
+                    mmean = torch.stack([o.action_mean for o in mirrored_outputs])
+                    mvalue = torch.stack([o.value.squeeze(-1) for o in mirrored_outputs])
+                    menv = torch.stack([o.envelope for o in mirrored_outputs])
+                    mdist = self.distribution_provider(mmean.reshape(total, -1))
+                    mlp = mdist.log_prob(mirror_actions).reshape(t_count, batch)
+                    ment = mdist.entropy().reshape(t_count, batch)
                     # The event log probability is invariant under the same joint permutation.
                     mpi = ppo_policy_loss(mlp[mask], old_lp[mask], advantages[mask], clip_epsilon=self.config.clip_epsilon)
                     mvl = value_clipped_loss(mvalue[mask], old_values[mask], returns[mask])
-                    mel = envelope_sum_loss(menv[mask], mirror_envelope_values(et[mask]), ev[mask])
+                    mel = envelope_sum_loss(menv[mask], mirror_et[mask], ev[mask])
                     loss_pi = 0.5 * (loss_pi + mpi)
                     loss_v = 0.5 * (loss_v + mvl)
                     loss_e = 0.5 * (loss_e + mel)
                     loss_h = 0.5 * (loss_h + ment[mask].mean())
                     loss_sym = mirror_mean_mse(mmean[mask], means[mask], self.joint_permutation)
-                    new_mirror_std = self.distribution_provider(mmean[mask]).std.detach()
+                    new_mirror_std = mdist.std.reshape_as(mmean)[mask].detach()
                     kl_m = kl_divergence_old_new(
                         old_m[mask], old_s[mask], mmean[mask].detach(), new_mirror_std
                     ).mean()
@@ -332,7 +288,11 @@ class TemporalPPOTrainer:
                 else:
                     loss_sym = means.new_zeros(())
                 # Plugin sees deployable output features and a small batch view; empty default has no head.
-                auxiliary_result = self.auxiliary(outputs, {"loss_mask": mask, "advantages": advantages, "returns": returns})
+                auxiliary_result = self.auxiliary(outputs, {
+                    "loss_mask": mask, "advantages": advantages, "returns": returns,
+                    "steps": buffer.steps, "mirrored_outputs": mirrored_outputs,
+                    "height_targets": height_targets,
+                })
                 if not isinstance(auxiliary_result, AuxiliaryResult) or auxiliary_result.loss.ndim != 0:
                     raise TypeError("auxiliary plugin must return AuxiliaryResult with scalar loss")
                 total_loss = (loss_pi + self.config.value_coeff * loss_v - self.config.entropy_coeff * loss_h
@@ -343,8 +303,7 @@ class TemporalPPOTrainer:
                 self.optimizer.zero_grad(set_to_none=True)
                 total_loss.backward()
                 params = [p for g in self.optimizer.param_groups for p in g["params"] if p.grad is not None]
-                if any(not bool(torch.isfinite(p.grad).all()) for p in params):
-                    raise FloatingPointError("non-finite PPO gradient")
+                _require_finite_tensors((p.grad for p in params), "non-finite PPO gradient")
                 frame_grad_norm = torch.stack([p.grad.detach().norm(2) for p in params
                                                if id(p) in frame_parameter_ids]).norm(2) if any(
                     id(p) in frame_parameter_ids for p in params
@@ -354,19 +313,17 @@ class TemporalPPOTrainer:
                     id(p) in temporal_parameter_ids for p in params
                 ) else total_loss.new_zeros(())
                 grad_norm = torch.nn.utils.clip_grad_norm_(params, self.config.max_grad_norm)
-                if not bool(torch.isfinite(grad_norm)) or any(not bool(torch.isfinite(p.grad).all()) for p in params):
-                    raise FloatingPointError("non-finite PPO gradient after clipping")
+                _require_finite_tensors([grad_norm, *(p.grad for p in params)],
+                                        "non-finite PPO gradient after clipping")
                 lr = adjust_learning_rate(float(kl.detach().item()), self.optimizer.param_groups[0]["lr"], desired_kl=self.config.desired_kl, lr_min=self.config.lr_min, lr_max=self.config.lr_max)
                 for group in self.optimizer.param_groups:
                     group["lr"] = lr
                 self.optimizer.step()
                 self.optimizer_step_count += 1
-                if any(not bool(torch.isfinite(p).all()) for p in params):
-                    raise FloatingPointError("non-finite PPO parameter after optimizer step")
-                for state in self.optimizer.state.values():
-                    for value in state.values():
-                        if isinstance(value, torch.Tensor) and not bool(torch.isfinite(value).all()):
-                            raise FloatingPointError("non-finite Adam state after optimizer step")
+                _require_finite_tensors(params, "non-finite PPO parameter after optimizer step")
+                _require_finite_tensors(
+                    (value for state in self.optimizer.state.values() for value in state.values()
+                     if isinstance(value, torch.Tensor)), "non-finite Adam state after optimizer step")
                 diagnostic_items = {
                     "entropy": loss_h,
                     "symmetry_loss": loss_sym,
@@ -387,14 +344,12 @@ class TemporalPPOTrainer:
                 diagnostic_items["value_explained_variance"] = explained_variance
                 for name, value in diagnostic_items.items():
                     record_diagnostic(name, value)
-                summaries.update({
-                    f"epoch_{epoch}_minibatch_{mb}_loss": float(total_loss.detach().item()),
-                    f"epoch_{epoch}_minibatch_{mb}_policy": float(loss_pi.detach().item()),
-                    f"epoch_{epoch}_minibatch_{mb}_value": float(loss_v.detach().item()),
-                    f"epoch_{epoch}_minibatch_{mb}_envelope": float(loss_e.detach().item()),
-                    f"epoch_{epoch}_minibatch_{mb}_kl": float(kl.detach().item()),
-                    f"epoch_{epoch}_minibatch_{mb}_lr": float(lr),
-                })
+                for name, value in auxiliary_result.metrics.items():
+                    record_diagnostic(name, torch.as_tensor(value, device=self.device))
+                for name, value in (("loss", total_loss), ("policy", loss_pi), ("value", loss_v),
+                                    ("envelope", loss_e), ("kl", kl)):
+                    record_diagnostic(name, value)
+                summaries[f"epoch_{epoch}_minibatch_{mb}_lr"] = float(lr)
         diagnostic_names = tuple(diagnostic_values)
         if diagnostic_names:
             # One host transfer for all optimizer diagnostics, independent of parameter
@@ -416,6 +371,8 @@ class TemporalPPOTrainer:
                     if name == "value_explained_variance" and not bool(valid_ev[index]):
                         continue
                     summaries[f"epoch_{epoch}_minibatch_{mb}_{name}"] = float(value)
+                if name in ("loss", "policy", "value", "envelope", "kl"):
+                    continue  # Existing minibatch-only keys; no new aggregate metrics.
                 if name in ("actor_std_min", "actor_std_max"):
                     reducer = min if name == "actor_std_min" else max
                     summaries[f"Optimizer/{name}"] = float(reducer(host_values))
@@ -425,6 +382,8 @@ class TemporalPPOTrainer:
                     valid_values = [float(value) for index, value in enumerate(host_values) if bool(valid_ev[index])]
                     if valid_values:
                         summaries["Optimizer/value_explained_variance_mean"] = sum(valid_values) / len(valid_values)
+                elif name.startswith("Height/"):
+                    summaries[name] = float(sum(host_values) / count)
                 elif name != "actor_std_mean":
                     summaries[f"Optimizer/{name}_mean"] = float(sum(host_values) / count)
                 else:

@@ -1,86 +1,89 @@
 # confined_locomotion_2
 
-更新：2026-10-24。独立注册名为 `El-4090-Confined-Locomotion-Flat_2`。可部署的预训练版本与当前干净检出证据见[部署与基线](training/部署与基线.md)。
-原 `confined_locomotion` 的任务与 RL 源文件保持不变；公共任务发现入口只追加新任务导入。
-本页是新任务的架构、配置和验收入口。日常复制执行的训练、续训、Play和检查指令见[快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)。机器人、T1、PD、奖励、指令、六维物理输出和观测扰动的共用依据见[原任务配置](../confined_locomotion/平地学习与基准测量.md)。固定稀疏射线的离线设计、历史实验与当前接入边界见[设计与验收](sparse_rays/设计与验收.md)。
+`confined_locomotion_2`包含两个独立任务：Flat Baseline平地行走基线，以及通过高度重建辅助监督学习地形记忆的Terrain Memory。二者共享双GRU、Runtime、rollout和PPO实现，通过独立配置、注册身份及Play入口区分。
 
-## 已确认架构
+当前支持真实地形采集、动作前高度标签、时序重放、高度辅助联合更新、完整checkpoint及任务独立可视化。已有小规模运行验证，尚未完成长期学习效果或RTX5090容量验证。
 
-| 部分 | 配置 |
+| 用途 | 入口 |
 |---|---|
-| 当前扫描 | 近端 XYZ FPS 256 点；远端 XYZ FPS 128 点；不拼接历史扫描 |
-| 分组与原始雷达 | 固定 T1 catalog 提供 96×900 Airy 源方向及固定 near/far 分组；raycast 默认 full（86,400条），也可显式指定经过校验的固定 sparse NPZ；15 m、10 Hz，硬件与安装不变 |
-| 帧内编码 | 合并近远端并按光学方向角键全局稳定排序；掩码排除填充点；单层单向点 GRU，3→187，每份扫描 h0=0 |
-| 时间记忆 | `[帧特征187, 缩放后的v/ω/g共9]` → 单层单向 GRU，196→187；50 Hz；跨 rollout 保留隐藏状态，episode 重置清零 |
-| 输入时间信息 | 无扫描年龄、全局时间戳或新扫描标志通道 |
-| 六维预测 | `[时间状态187, 当前完整本体63]` → MLP 250→128→64→6；ELU；统一六维头；保留已有米制映射和初始化 |
-| 动作、价值 | 分别由 `[时间状态187, 本体63, 指令3, detach(六维包络)]` 共259维输入 MLP 512→256→128，输出18/1 |
-| 地面监督 | 无地面头、地面标签生成、网格配置或地面损失 |
-| 辅助接口 | `rl/confined_locomotion_2/auxiliary.py`，默认空实现；未实现或启用任何足端预测监督 |
+| 安装与新机器配置 | [部署](training/部署.md) |
+| 日常训练、续训、Play | [快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md) |
+| 指标与保存规则 | [监控与保存](training/监控与保存.md) |
+| CPU/GPU及打包检查 | [测试说明](../../../tests/confined_locomotion_2/README.md) |
+| 网格预览、离线选集和性能测量 | [实验工具](../../../scripts/experiments/confined_locomotion_2/README.md) |
 
-近端固定从P6 gap有效的near候选池中作BASE米制XYZ FPS 256。远端候选可显式选择 `far_sampling=all_endpoints`（默认legacy语义，no-hit 15m端点仍有效）或 `hit_only_10m`（仅P6 gap有效、原始Raycast真实命中且雷达原点原始距离≤10m的射线参与FPS）。该门槛不改变物理15m量程、原始无回波定义、近端、P6扰动或固定catalog分组。FPS从最大范数点起步、距离并列时取pool中较早源索引，选中索引显式排除；不足128点时valid=False、xyz=0、source id=-1，不复制或合成点。最终near/far网络输入仍是256/128个定长槽。
+## 任务组织与配置
 
-CUDA后端为任务独立的`sampling.py`/`_sampling_warp.py`：先按原顺序对到期环境raycast、分组和应用扰动，再将这些frame的近端、远端分别批量FPS；GPU稳定压紧有效候选、执行选点迭代并反映射原pool槽位，使用当前PyTorch流。原始射线ID、方向角键与采样点直接gather关联；选完后仍由原输入流程排序。CPU保留确定性参考实现。非到期行不扫描/不采样，扫描10 Hz、控制50 Hz与重置边界不变。
+| 任务 | 注册身份 | 配置 | 训练 / Play脚本 |
+|---|---|---|---|
+| Flat Baseline | `El-4090-Confined-Locomotion-Flat_2` | [`config/flat_baseline.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline.py) | `train.py` / `play_flat.py` |
+| Terrain Memory | `El-4090-Confined-Locomotion-Terrain-Memory_2` | [`config/terrain_memory.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory.py) | `train_terrain_memory.py` / `play_terrain_memory.py` |
 
-采集、推理时仅缓存无状态帧特征，旧扫描之间继续用当前本体信息更新时间状态。
-训练时从原始点云重新计算帧特征，每个 fresh replay graph 内可复用同一扫描的特征，保留对帧编码器的梯度；不使用采集期 no-grad 特征训练。
+脚本统一位于 `scripts/experiments/confined_locomotion_2/`。包内 `__init__.py`集中注册，训练需显式提供seed、环境数和轮数；Terrain额外要求正的高度损失权重。注册默认配置不直接授权训练。
 
-## 时序训练与镜像
+环境、MDP、Runtime、雷达及可视化保留在任务包内；网络与PPO位于 `rl/confined_locomotion_2/`。不复制整套环境或训练实现，不提供旧 `play.py`、`rl_cfg.py`的转发层。原 `confined_locomotion`任务仍独立存在，共享地形查询入口未启用时继续使用原平面。
 
-rollout=24、5 epochs、4 minibatches、一个 Adam，保留原 PPO 数值起步配方及单一18维可学习 log_std。FP32、关闭 TF32 和 AMP，cuDNN RNN 使用 IEEE FP32。
+## 网络与训练
 
-每个 minibatch 按顺序完整重放24步，只对本批互斥选中的行计算直接损失，因此小环境数下仍能维持4批与连续时间梯度。片段开始的隐藏状态 detach，片段内按真实 episode 边界清零；不因 rollout 边界清零在线记忆。完整重放以计算开销换取清晰的首版正确性，尚未做大规模性能调优。
+| 模块 | 当前配置与连接 |
+|---|---|
+| 当前扫描 | 近端256点、远端128点；按光学方向角全局稳定排序，排除无效填充点；不拼接历史扫描 |
+| 点GRU | 单层、单向，3→187；每份扫描从零隐藏状态编码 |
+| 时间GRU | 单层、单向，196→187；输入为帧特征187维及缩放后的线速度、角速度和重力9维；50 Hz更新 |
+| 六维包络 | `[时间状态187, 本体63]`→MLP 250→128→64→6；保留米制映射及初始化 |
+| Actor / Critic | 对称输入 `[时间状态187, 本体63, 指令3, detach(包络6)]` 共259维；分别为512→256→128的MLP，输出18 / 1 |
+| 高度头 | 仅Terrain Memory：时间状态187维→`Linear(187,187)`→11×17；只用于辅助损失 |
 
-镜像增强保留：观测、点云、指令、动作和标签执行已有镜像映射，点云按镜像后的光学方向重新排序；镜像历史独立维护隐藏状态，不对187维状态做逐维镜像。增强样本的旧行为分布使用真实行为高斯的镜像 pushforward，不假定网络已等变。均值一致性系数0.6，正式配方保留 ALL_THREE 观测扰动。
+每轮采集24个控制步，5 epochs×4 minibatches，共20次Adam更新。完整rollout优势统一归一化；原始/镜像保留独立GRU历史，episode边界清零，跨rollout保留时间状态。Bootstrap使用隐藏状态副本，不推进在线历史。具体固定PPO数值由 [`TemporalPPOConfig`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py)维护。
 
-bootstrap 从自然 pre-reset final 输入与动作后的隐藏状态计算 value，结果作为纯分支，不提交其新隐藏状态。真终止不 bootstrap，超时使用自然 final value，二者都切断跨集 GAE。
+Flat Baseline无高度头、标签或高度损失，既有网络、观测、动作、奖励和控制语义保留。六维包络暂使用既有固定形态参考；未扩展动态形态Oracle或形态控制。
 
-## 运行
+## 地形与高度辅助监督
 
-在项目根目录、`hp_mjlab` 环境运行，具体指令见[快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)。注册默认 max_iterations=0，不能直接启动学习；显式工厂不再需要地面网格参数。工程验证最多2个环境、1次迭代；正式长训练的预算尚未确定或启动。
+当前Terrain Memory使用10×8 m、49×65采样的静态单值Heightfield，包含平坦出生平台和非平地表。地面由 [`make_default_terrain`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory.py)生成，不需要外部地形文件。接触、雷达及标签查询读取同一实际编译地形，没有额外隐藏平面或独立近似标签地形。
 
-完整 checkpoint 恢复始终要求源码/配方/模型/设备、扫描身份和远端采样身份严格匹配。扫描身份包含固定T1 catalog、full/sparse模式、（sparse时）具体selection哈希及非legacy远端采样身份。full与sparse、不同selection之间不能完整续训。Play权重必须与 `far_sampling` 完全一致；`--allow-scan-override` 只允许在同一采样身份、同一 `fixed_t1_channels/v1` grouping和完全相同固定T1 catalog下改变full/sparse mode或selection，不能跨 `all_endpoints` 与 `hit_only_10m`。旧动态分组checkpoint因架构身份不同而拒绝。保存包括物理与manager状态、命令和扰动随机流、输入缓存、两个历史状态、Adam与shuffle随机流；稳定的24步采集及20次更新之后才能保存。默认每累计50轮保存完整checkpoint，正常结束另保留final文件；学习指标写入TensorBoard与JSONL。保存语义、指标单位、当前GPU验证与5090启动条件见[监控与保存](training/监控与保存.md)。
+网格以当前动作前Root为中心，X方向17点、Y方向11点，物理范围为X±0.75 m、Y±0.65 m；相邻点间距分别为0.09375 m和0.13 m。网格随水平位置及Yaw移动，不随Roll/Pitch倾斜。沿世界竖直方向查询地表，所有187点共用Root的世界Z参考：
 
-扫描配置默认 `raycast_mode=full`、`far_sampling=all_endpoints`。near/far固定分组仍来自同一个T1 catalog；sparse只通过显式、校验过的selection NPZ（或同名校验JSON）启用，不支持运行时生成或按负载改变射线。候选池预算为 `rawN = 256 × near_multiplier + 128 × far_multiplier`，网络仍接收near 256槽、far 128槽。既有 `v1/`、`v1_independent/` 选集保持原样；新增 `assets/fixed_channels/v1_hit10/near_x6_far_x10.npz` 是当前已选工程基线的固定源方向资产（2,816条候选）。Play默认也发现 `v1_hit10/`。用户已选择 `hit_only_10m` + near×6/far×10 作为当前工程验证与短训基线；尚未决定长训规模或宣称学习效果。
+```text
+H[iy, ix] = terrain_world_z[iy, ix] - root_world_z
+```
 
-Play默认接入独立的本地浏览器界面（8094，旧任务默认8093），初始暂停；`--no-viewer`保留有限推理。`PlaySession`只读权重并从新episode、零时间状态开始，不建立optimizer或动作采样器。所选 `far_sampling` 必须与checkpoint匹配，GUI不提供跨sampling切换。浏览器提供 `Raycast mode`、独立的 `Near candidate multiplier` 与 `Far candidate multiplier` 下拉，以及 `Apply acquisition + reset`；默认资产发现 `v1/`、`v1_independent/`、`v1_hit10/` 中可用组合，包含near×6/far×10。两倍率互不联动；只有对应的离线文件存在时才能提交，缺失组合会提示并禁用按钮。same-sampling模型可显式评估同catalog下不同full/sparse或selection，跨sampling身份始终拒绝。状态栏显示far_sampling和当前far有效点数。Apply后新episode、命令和GRU状态归零并保持暂停，浏览器server继续运行。GUI适配near 256槽、far 128槽，无地面预测/标签；点源查询通过原始射线ID关联。物理平面只是场景参考。
+标签按 `[11,17]` 保存，并绑定当前env/episode/control-step身份，与动作前时间GRU输出对齐。具有有效地形真值的点参与监督，即使当前雷达不可见；地形边界之外mask=False、标签为零。高度标签不涉及足端高度、姿态投影、接触判断或落足可行性。
 
-显示层使用独立CPU快照；输入在动作前保留，姿态在动作后读取并分别标记身份。切换显示和查点不调用网络或推进runtime；初始、改指令、重置的显式preview不提交时间隐藏状态。WORLD显示仅是采集时BASE点到当前姿态的投影，没有历史运动补偿或建图。GUI回调只写意图，由主循环统一执行控制、推理与重置；不得用通用play循环绕过扫描/记忆时钟。
+Masked MSE先在每个控制步样本内对有效格求均值，再对当前minibatch中至少有一个有效格的样本等权平均；原始/镜像分支取平均，镜像标签只翻转Y行。高度损失通过共享编码器联合反向传播，首轮权重候选为1.0，需在启动时显式指定。
 
-采样身份写入checkpoint架构、训练配方、runtime配方及runtime状态。`all_endpoints`保留既有legacy identity；`hit_only_10m`使用独立版本身份并记录原始命中、原始雷达距离门槛、gap有效性和空槽语义。两种采样身份不能互相加载Play权重或续训。此前远端角采样或其他legacy checkpoint不能用作hit10模型示例；hit10和legacy都支持从零训练。原`confined_locomotion`源码与校验逻辑不受影响。
+**高度预测和地形真值均不输入Actor或Critic。** 二者当前使用相同的在线信息；辅助监督改变训练梯度，不扩充在线策略观测。
 
-## 验证与边界
+运动MDP的地形适配独立于高度监督：已有root高度、足端离地和支撑识别按需查询实际地形，保留原公式、权重和阈值，不新增运动奖励。尚未支持多种地形课程、动态地形、通用复杂几何或动态形态教师。
 
-新增周期保存与学习指标后的当前CPU检查98项、真实GPU恢复/保存回归通过，见[监控与保存](training/监控与保存.md)。以下far-hit验收为当时冻结源码的结果；其中旧checkpoint仍可用于匹配sampling的Play，但不再匹配当前源码的严格续训。
+## 雷达与采样
 
-raw BASE审计修正后的86项CPU检查通过，命令为 `tests/confined_locomotion_2/run_checks.py`。`hit_only_10m` near×6/far×10的真实pose parity通过：full 86,400与sparse 2,816在实际roll/pitch/height下，同通道、同候选池FPS及P6一致，见[actual-pose parity](../../../logs/verification/confined_locomotion_2/20261023_far_hit10_parity_actual_pose/checks.json)。此前[parity报告](../../../logs/verification/confined_locomotion_2/20261023_far_hit10_parity/checks.json)的同通道/P6/同候选池FPS结果仍有效，但其姿态用例未实际改变底层root pose，不能作为姿态变化证据。
+固定T1 catalog提供96×900 Airy源方向及near/far分组，物理量程15 m、扫描10 Hz。训练可选full或显式固定sparse selection。当前稀疏候选为near×6/far×10，共2816条原始射线，资源随Git及package-data交付：
 
-最终配对短训通过：相同种子、相同near×6/far×10候选，每组2环境、10迭代，480次环境转移和200次优化更新；损失/梯度有限、无跌倒或超时。hit10最少51个有效远端点。耗时和PyTorch显存峰值接近，未证明学习收益。完整数值、测量边界及先导记录统一见[扫描设计与验收](sparse_rays/设计与验收.md)。
+```text
+src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_hit10/near_x6_far_x10.npz
+```
 
-227帧真实Warp扫描、少量远端输入、P6、缓存/reset及GRU检查通过；下楼最少31个有效远端点，顶部与地面持续保留。这是合成人为姿态、固定本体输入与随机权重的点云诊断，不能证明真实楼梯运动或训练后策略稳定性。几何、特征和恢复结果见[扫描设计与验收](sparse_rays/设计与验收.md)。
+`hit_only_10m`仅让P6 gap有效、真实命中且雷达原点原始距离≤10 m的远端射线参与FPS；near规则和物理量程不变。候选不足时保留invalid零槽，不复制点。`all_endpoints`仍是Flat入口默认的旧采样身份，包含无回波量程端点；它与hit10不互用checkpoint。日常命令显式指定hit10，避免依赖默认值。
 
-最终Play CUA验收通过：[browser checks](../../../logs/verification/confined_locomotion_2/20261023_far_hit10_play_browser/browser_checks.json)、[play summary](../../../logs/verification/confined_locomotion_2/20261023_far_hit10_play_browser/play_summary.json)和[截图](../../../logs/verification/confined_locomotion_2/20261023_far_hit10_play_browser/hit10_controls.png)。实际使用final hit10 checkpoint，在sparse near×6/far×10 single step，再Apply full、回到sparse、Exit；weights SHA保持一致，sampling始终为 `hit_only_10m`，cross_configuration依次false/true/false，Apply后均为fresh episode、zero GRU、paused，状态栏显示命中规则和far valid 128/128。
+FPS按米制BASE XYZ进行，首点为最大范数点，并列取pool原顺序，保持源射线身份。更完整的采样设计见[扫描设计](sparse_rays/设计与验收.md)，实验命令见[实验工具](../../../scripts/experiments/confined_locomotion_2/README.md)。
 
-汇总验收记录[acceptance.json](../../../logs/verification/confined_locomotion_2/20261023_far_hit10_acceptance/acceptance.json)为passed，汇总CPU 86项、Warp姿态stage2、actual-pose parity、严格恢复、当时源码的配对短训及Play浏览器。该记录不代表长期训练或学习效果通过；旧任务43个PY文件及 `v1/`、`v1_independent/` 共42个选集文件SHA保持不变。 GPU入口见[快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)。
+## 执行与显存设置
 
-独立倍率扩展已完成GPU往返验证：full→4/4→4/8→8/8→8/4→full→4/4，实际射线数和通道来源检查通过，同模式同步数显存allocated增量为0；见[GPU检查](../../../logs/verification/confined_locomotion_2/20261023_independent_multipliers_gpu/checks.json)。新增4/8组合的全量/稀疏同通道求交一致性见[parity检查](../../../logs/verification/confined_locomotion_2/20261023_independent_multipliers_parity/checks.json)。真实浏览器完成full→4/8→8/8→Exit，确认两倍率独立、同权重且Apply后清空episode/GRU并保持暂停；见[浏览器检查](../../../logs/verification/confined_locomotion_2/20261023_independent_multipliers_browser/browser_checks.json)和[截图](../../../logs/verification/confined_locomotion_2/20261023_independent_multipliers_browser/independent_controls.png)。以上仅为工程验证。
+两个训练入口接受 `--execution-mode low_memory|speed`，默认 `low_memory`。它对点GRU激活做反向重计算，`speed`保留激活；FP32、样本、损失及20次更新顺序相同。当前采集编码块最多128行，点GRU重放块最多1024份独立扫描；1024是面向32 GB RTX5090的首轮候选，实际块大小受本轮扫描数限制，不是PPO minibatch大小。
 
-**此前 fixed-channel 工程见证（2026-10-23）**：当时CPU共63项通过。RTX4050双环境 full 与 sparse near×4/far×4 各完成1次24步采集、20次联合更新；两者均启用ALL_THREE扰动与镜像，完整恢复边界逐位一致，同一保留rollout的优化器重放逐位一致。它们是有限工程见证，不代表学习或行走效果：[full](../../../logs/verification/confined_locomotion_2/20261023_fixed_channels_full_training/checks.json)、[sparse×4](../../../logs/verification/confined_locomotion_2/20261023_fixed_channels_sparse_x4_training/checks.json)。当时源码下full与sparse严格训练恢复回归均通过（历史checkpoint不匹配当前源码）：[full regression](../../../logs/verification/confined_locomotion_2/20261023_independent_multipliers_full_regression/checks.json)、[sparse regression](../../../logs/verification/confined_locomotion_2/20261023_independent_multipliers_sparse_regression/checks.json)；历史checkpoint不匹配新增监控源码，当前恢复验证见[监控与保存](training/监控与保存.md)。
+固定点云打包、观测缩放、目标/镜像标签在rollout内复用；GRU特征及预测仍随每次Adam更新重算。有限性检查在各优化器阶段合批，日志延后读取；逐次KL学习率调度保留。没有引入混合精度或自动OOM降级。性能测量与未采用方案见[实验记录](../../../scripts/experiments/confined_locomotion_2/records/20261026_terrain_memory_and_performance.md)，不将本机容量外推到5090。
 
-[fixed sparse GPU检查](../../../logs/verification/confined_locomotion_2/20261023_fixed_sparse_scan_x4_final/checks.json)中同姿态原始射线、BASE点、固定分组、同候选池FPS、gap/range关联及障碍物Warp对照仍有效。该冻结报告的roll/pitch/height pose fixture曾写入 `root_link_pose_w` 返回的副本，未改变底层姿态；因此其“姿态变化后分组稳定”不能作为证据，已由[actual-pose parity](../../../logs/verification/confined_locomotion_2/20261023_far_hit10_parity_actual_pose/checks.json)的底层pose断言替代。
+## 可视化与模型边界
 
-同一报告中的扫描阶段性能测量使用2环境、2次预热和5次采样，中位数为 full 7.2578ms、near×4/far×4 sparse 2.7264ms。该数字只计扫描链，不代表训练吞吐。[训练阶段小样本benchmark](../../../logs/verification/confined_locomotion_2/20261023_fixed_channels_training_benchmark/benchmark.json)另以每个模式各自的checkpoint恢复后测量，2环境、每次24步采集和20次优化更新，1次预热、3个顺序样本：full中位采集0.9316s、更新6.6851s、总计7.6409s（6.282 envsteps/s）；sparse分别为0.8821s、6.5602s、7.4423s（6.450 envsteps/s）。这是小幅差异；模式使用不同训练checkpoint且样本数少，不能据此推断大环境扩展或收敛表现。显存字段是运行期间总分配量/增量，不是整卡GPU预算。
+Flat和Terrain各有独立Play脚本，共享必要显示实现。Terrain显示真实地形、高度预测/真值、当前及候选监督网格、预测/监督六棱柱包络；六棱柱在机器人坐标系内跟随机器人，上下六边形使用相同五维平面参数，上底高度由第六维控制。近端圆锥包络默认关闭。界面使用中文分组控件，候选范围只预览、不写训练配置。
 
-当前独立 fixed-channel 几何报告显示了明确限制：[随姿态地面覆盖](../../../logs/verification/confined_locomotion_2/20261023_fixed_channels_moving/report.json)在上仰5°、654个有效探针上，near FPS 的P95最近距离为 full 0.497m、near×4/far×4 0.484m；两者仅约22.8%和24.5%的探针在0.20m内。25cm台阶表面0.20m支持率为 full 27.6%、sparse×4 28.2%（312探针）；两种模式的FPS台阶表面P95分别约0.854m和1.112m。[障碍物报告](../../../logs/verification/confined_locomotion_2/20261023_fixed_channels_obstacles/report.json)中，full与sparse×4的上方横梁均有原始射线命中，但最终near/far FPS都保留0个梁点。增加near倍率并不能解决所有FPS/分组限制；没有推荐稀疏默认比例。
+Play只读权重，实际监督范围读取checkpoint。其扫描override仅用于同sampling、同固定catalog内的权重评估；不能作为完整续训或跨任务兼容机制。
 
-GUI的固定角域边界显示目前标为 `Fixed near-channel boundary rays`，显示固定T1分组的角域边界射线，不再表示动态锥体与BASE-x平面裁切。[full viewer](../../../logs/verification/confined_locomotion_2/20261023_fixed_channels_full_viewer_final/checks.json)和[sparse×4 viewer](../../../logs/verification/confined_locomotion_2/20261023_fixed_channels_sparse_x4_viewer/checks.json) GPU检查均通过：真实Viser渲染与HTTP、点源查询、50个控制步/10帧编码及暂停缓存保持纯UI状态均有验证；新旧viewer的HTTP端口均返回200。该轮没有CUA浏览器点击或截图证据，因此不声称手工浏览器交互验收。
+完整checkpoint严格比较源码、架构、编译模型、配方、seed、环境数、扫描身份、GPU型号/设备及PyTorch版本。源码改变后应使用对应版本恢复；4050模型不能直接在5090进行严格完整恢复。当前新机器部署从零训练，不改写旧身份。细则见[监控与保存](training/监控与保存.md)。
 
-此前 XYZ FPS、可视化、恢复和性能报告均属于**旧动态分组源码身份**，不能用其覆盖率（包括旧报告中的约94%数字）、GUI行为或命令作为当前 fixed-channel 证据；查看各自的旧报告时应按当时源码身份解释。旧任务隔离记录仍见[85文件SHA256检查](../../../logs/verification/confined_locomotion_2/20261023_viewer_cli_browser_final/legacy_hash_check.json)。本说明不修改任何冻结日志。
+## 检查与历史记录
 
-尚未验收：稳定行走、足下遮挡记忆效果、复杂地形控制、5090适配和大规模性能；单次优化通过不证明学习效果。
+当前CPU/GPU检查入口见[测试说明](../../../tests/confined_locomotion_2/README.md)。地形几何、标签对齐、联合更新及性能阶段结论统一放在[实验记录](../../../scripts/experiments/confined_locomotion_2/records/20261026_terrain_memory_and_performance.md)，原始日志和checkpoint仍保留在本地实验目录，不是克隆后的运行依赖。
 
-显存另经独立进程复测：RTX4050下32环境、ALL_THREE与镜像、一次24步采集+20次优化，full/sparse near×4/far×4的更新后GPU进程占用分别为1,566/1,026 MiB，节省540 MiB（34.5%）；PyTorch张量峰值节省38.6%。该测量只覆盖near×4/far×4，不可外推到其他far倍率。2/16/32环境的定义、原始报告与顺序时间benchmark显存污染说明见[显存复测](sparse_rays/设计与验收.md#显存独立进程复测)。
-
-同一模型切换的最终GPU往返检查通过：[GPU检查](../../../logs/verification/confined_locomotion_2/20261023_acquisition_switch_gpu_final/checks.json)记录full→near×4/far×4 sparse→full→near×8/far×4 sparse→near×4/far×4 sparse；同模式同步数的allocated增量为0，旧session弱引用均释放，退出close后清理通过。真实CUA浏览器交互也通过：[浏览器检查](../../../logs/verification/confined_locomotion_2/20261023_acquisition_switch_browser/browser_checks.json)，实际操作full→sparse×4→full→Exit；Apply才触发切换，同端口重建，三段cross_configuration依次为false/true/false，weights一致，切换后paused且command为零。[sparse截图](../../../logs/verification/confined_locomotion_2/20261023_acquisition_switch_browser/sparse_switch.png)与[full截图](../../../logs/verification/confined_locomotion_2/20261023_acquisition_switch_browser/full_switch.png)保留现场。
-
-**历史计划（legacy all_endpoints阶段）**：当时计划按显存预算确定训练环境数和周期checkpoint方案，再做full与sparse配对平地短训；near倍率仍是候选。该计划记录了当时对台阶与悬梁FPS几何保留的关注，不代表当前sampling决策或状态。当前已选hit10工程基线与待验收事项见上文。
+2026-10-24平地tag的交付记录见[旧部署与基线](training/部署与基线.md)，对应[冻结证据](baseline/evidence/README.md)保持原内容。该tag不包含后续Terrain Memory与当前性能优化；新机器使用[当前分支部署](training/部署.md)。

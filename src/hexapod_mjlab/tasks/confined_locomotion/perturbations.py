@@ -831,9 +831,13 @@ class ObservationPerturbations:
     )
     if tuple(clean.shape) != (batch, _PROPRIO_NOISE_DIM):
       raise PerturbationContractError("clean proprio concatenation shape mismatch")
-    for row in range(batch):
-      episode_id = int(observation.episode_ids[row])
-      step_id = int(observation.step_ids[row])
+    # Cache/noise arithmetic stays on CPU with the same per-row generators.
+    # Transfer the immutable observation and identities once instead of one
+    # CUDA synchronization per row, then copy all noisy rows back together.
+    identities = torch.stack((observation.episode_ids, observation.step_ids), dim=1).cpu().tolist()
+    clean = clean.cpu()
+    noisy_rows = []
+    for row, (episode_id, step_id) in enumerate(identities):
       entry = self._proprio_cache[row]
       if (
         entry is not None
@@ -841,7 +845,7 @@ class ObservationPerturbations:
         and entry["step_id"] == step_id
         and entry["control_step"] == int(control_step)
       ):
-        if not torch.equal(entry["clean"], clean[row].cpu()):
+        if not torch.equal(entry["clean"], clean[row]):
           raise PerturbationContractError(
             f"env {row}: proprio cache hit at (episode={episode_id}, step="
             f"{step_id}) but the rebuilt clean values differ — the same "
@@ -852,7 +856,7 @@ class ObservationPerturbations:
       else:
         u = torch.rand(_PROPRIO_NOISE_DIM, generator=self._proprio_generators[row])
         noise = ((u * 2.0) - 1.0).mul(halves).mul(level)
-        noisy = clean[row].cpu() + noise
+        noisy = clean[row] + noise
         g = noisy[slices["gravity_b"]]
         g = g / torch.linalg.vector_norm(g)
         noisy[slices["gravity_b"]] = g
@@ -866,17 +870,16 @@ class ObservationPerturbations:
           "step_id": step_id,
           "control_step": int(control_step),
           "noise": noise.clone(),
-          "clean": clean[row].cpu().clone(),
+          "clean": clean[row].clone(),
           "noisy": noisy.clone(),
           "draw_index": int(self._proprio_draws[row]),
         }
         self._proprio_cache[row] = entry
-      device = observation.lin_vel_b.device
-      noisy_device = noisy.to(device=device, dtype=torch.float32)
+      noisy_rows.append(noisy)
+    noisy_device = torch.stack(noisy_rows).to(device=observation.lin_vel_b.device, dtype=torch.float32)
+    with torch.no_grad():
       for name, size in _PROPRIO_FIELD_SHAPES:
-        target = getattr(observation, name)
-        with torch.no_grad():
-          target[row] = noisy_device[slices[name]].reshape(size)
+        getattr(observation, name).copy_(noisy_device[:, slices[name]].reshape(batch, size))
 
   def proprio_records(self) -> list[dict | None]:
     """Per-row audit copies of the current proprio noise cache (for evidence)."""

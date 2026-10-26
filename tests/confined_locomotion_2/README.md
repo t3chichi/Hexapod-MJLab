@@ -1,0 +1,105 @@
+# confined_locomotion_2 测试与工程检查
+
+本页列出可复用的测试入口。所有命令从仓库根目录、`hp_mjlab` 环境运行。测试证据输出到新目录；检查会按各自用途创建仿真环境、推进有限步数，部分检查会执行 PPO 更新并改变临时模型参数。它们不是正式学习验收。
+
+## CPU 检查
+
+```bash
+python -B tests/confined_locomotion_2/run_checks.py
+```
+
+该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含148项CPU检查。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
+
+## 真实 GPU 工程检查
+
+### Flat Baseline 训练、保存与恢复
+
+`check_gpu.py` 是有限真实 CUDA 集成门：最多 2 个环境、执行训练更新、检查 checkpoint 边界及同一保留 rollout 的优化器重放。下面固定使用 hit10 sparse 身份，并把保存间隔设为 1，以在短运行内检查累计周期保存；生成的权重只是临时工程检查产物。
+
+```bash
+python -B tests/confined_locomotion_2/check_gpu.py \
+  --output "logs/verification/confined_locomotion_2/check_hit10_$(date +%Y%m%d_%H%M%S)" \
+  --seed 20261023 --num-envs 2 --gpu 0 \
+  --far-sampling hit_only_10m --raycast-mode sparse \
+  --sparse-selection src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_hit10/near_x6_far_x10.npz \
+  --save-interval 1
+```
+
+该检查每轮采集 24 个控制步并执行 20 次 Adam 更新；保存间隔 1 是测试设置，正式入口默认 50。`all_endpoints` 与 `hit_only_10m` 是不同采样身份，selection 也属于恢复身份，不能互换 checkpoint。
+
+### 地形几何、标签和辅助损失
+
+几何门只核对真实 Heightfield、射线和地面标签，不训练：
+
+```bash
+python -B tests/confined_locomotion_2/check_terrain_geometry_gpu.py \
+  --gpu 0 --output "logs/verification/confined_locomotion_2/terrain_geometry_$(date +%Y%m%d_%H%M%S)"
+```
+
+序列门核对真实采集、标签配对、重放和重置，不含网络头、损失或优化器。加 `--flat` 可核对 Flat 默认采集/重放路径：
+
+```bash
+python -B tests/confined_locomotion_2/check_terrain_sequence_gpu.py \
+  --gpu 0 --output "logs/verification/confined_locomotion_2/terrain_sequence_$(date +%Y%m%d_%H%M%S)"
+
+python -B tests/confined_locomotion_2/check_terrain_sequence_gpu.py \
+  --gpu 0 --flat --output "logs/verification/confined_locomotion_2/flat_sequence_$(date +%Y%m%d_%H%M%S)"
+```
+
+辅助损失门在显式传入 `--weight 1.0` 时执行一次 PPO 更新；省略权重只测量损失和梯度，不代表权重已获长训确认：
+
+```bash
+python -B tests/confined_locomotion_2/check_terrain_auxiliary_gpu.py \
+  --weight 1.0 --output "logs/verification/confined_locomotion_2/terrain_auxiliary_$(date +%Y%m%d_%H%M%S)"
+```
+
+### checkpoint、Play、扫描与界面
+
+下面Terrain checkpoint检查要求当前源码生成的1或2环境、low_memory、near×6/far×10 hit10 sparse模型，且原保存间隔为默认50。其他配方不要直接套用这个固定检查脚本。可用[快速开始](../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)的训练命令从零生成；本仓库不要求克隆 ignored 日志或模型。
+
+```bash
+TERRAIN_CKPT="填写本机生成的 Terrain Memory checkpoint 路径"
+SELECTION="src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_hit10/near_x6_far_x10.npz"
+
+python -B tests/confined_locomotion_2/check_terrain_checkpoint_gpu.py \
+  --checkpoint "$TERRAIN_CKPT" \
+  --output "logs/verification/confined_locomotion_2/terrain_checkpoint_$(date +%Y%m%d_%H%M%S)"
+
+python -B tests/confined_locomotion_2/check_terrain_play_gpu.py \
+  --checkpoint "$TERRAIN_CKPT" --port 8097 \
+  --output "logs/verification/confined_locomotion_2/terrain_play_$(date +%Y%m%d_%H%M%S)"
+```
+
+Play 检查会绑定本地 Viser/HTTP 端口。运行前确认请求端口空闲；不要用检查脚本探测或覆盖已有服务。
+
+扫描器的 GPU/reference 对照与 fixed sparse/full 对照都不训练：
+
+```bash
+python -B tests/confined_locomotion_2/check_sampling_gpu.py \
+  --output "logs/verification/confined_locomotion_2/sampling_$(date +%Y%m%d_%H%M%S)" \
+  --seed 20261023 --num-envs 2 --gpu 0
+
+python -B tests/confined_locomotion_2/check_fixed_sparse_gpu.py \
+  --selection "$SELECTION" --far-sampling hit_only_10m \
+  --output "logs/verification/confined_locomotion_2/fixed_sparse_$(date +%Y%m%d_%H%M%S)" \
+  --seed 20261023 --num-envs 2 --gpu 0
+```
+
+性能 benchmark `benchmark_fixed_training_gpu.py` 需要同一源码身份下配对的 full/sparse 完整 checkpoint、selection 和新输出目录；它会各自恢复检查点，测量 24 步采集与 20 次更新，不应拿不同配置或旧源码权重作比较。先用 `--help` 查看必需参数，再按实际路径传入。所有 `--output` 都必须是尚不存在的目录；上例使用带时间戳的目录名。
+
+## wheel 固定资源检查
+
+`check_package.py` 在隔离 wheel 中校验固定通道 JSON/NPZ 随包发布，并从 wheel 自身加载 catalog 与 selection。它不依赖 editable checkout 的导入路径：
+
+```bash
+python -m pip wheel --no-deps . --wheel-dir build/wheel
+python -B tests/confined_locomotion_2/check_package.py \
+  build/wheel/hexapod_mjlab-0.1.0-py3-none-any.whl \
+  --output logs/verification/confined_locomotion_2/package_check.json
+```
+
+wheel 构建后请核对文件名与项目版本一致。预期资源集合为 45 个 JSON/NPZ 和 21 个 selection NPZ；hit10 near×6/far×10 选集包含 2,816 条候选射线。检查结果是针对所构建 wheel 的记录。
+
+## 旧实验检查
+
+`check_viewer_gpu.py`固定采用Flat legacy `all_endpoints`，不支持当前hit10模型，不能直接套用上方Terrain checkpoint。它会使用8093/8094两个显示端口。`check_far_hit_gpu.py`、`check_far_shorttrain_gpu.py`和固定射线 benchmark 属于各自版本的专项工程配方；部分会更新参数，部分要求与源码严格匹配的 checkpoint。先读脚本头部说明和 `--help`，再创建专属新输出目录。它们的历史结果不能替代当前 task 的训练效果验收。

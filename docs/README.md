@@ -1,23 +1,19 @@
 # 文档导航
 
-更新：2026-10-24。在实际克隆的项目根目录使用 `hp_mjlab` 环境。当前 `_2` 预训练工程基线、干净检出验收与5090部署见[部署与基线](tasks/confined_locomotion_2/training/部署与基线.md)。历史P0–P9及基础门A/B按各自接受源码理解，原任务能力和复现门见[功能状态](tasks/confined_locomotion/training/功能状态.md)与[工程验收与复现](tasks/confined_locomotion/training/工程验收与复现.md)。正式学习、5090容量与学习效果仍待验证。
+当前训练与5090部署使用[confined_locomotion_2](tasks/confined_locomotion_2/README.md)，包含Flat Baseline与Terrain Memory。其他研究任务继续独立保留；历史结果按其对应版本理解。
 
 ## 当前任务的阅读顺序
 
-从[受限空间任务入口](tasks/confined_locomotion/README.md)开始；按下表分工读取，实验历史按需查证。
-
-新增独立时间记忆变体见 [confined_locomotion_2](tasks/confined_locomotion_2/README.md)：187维帧编码与187维时间状态、统一六维头；原任务保留为基线。
-
-| 文档 | 职责 |
+| 需要做什么 | 入口 |
 |---|---|
-| [训练架构](research/训练架构对齐.md) | 网络信息、形态含义、标签时刻和梯度边界 |
-| [平地启动配置](tasks/confined_locomotion/平地学习与基准测量.md) | 已确认数值、执行/reset/传感规则及首版与后续边界 |
-| [第一阶段要求](tasks/confined_locomotion/第一阶段任务说明.md) | 整体范围、训练管线与学习效果验收 |
-| [当前功能状态](tasks/confined_locomotion/training/功能状态.md) | 当前源码能力、默认守卫、已验收历史门和后置事项 |
-| [输出与模型约定](tasks/confined_locomotion/mapping/输出与模型约定.md)、[接口与约定](tasks/confined_locomotion/framework/接口与约定.md) | 网络输出、映射、数据契约、标签时刻、梯度和损失分母 |
-| [雷达与地面查询边界](tasks/confined_locomotion/lidar_setup/配置与边界.md)、[设计依据](tasks/confined_locomotion/reference/设计依据.md) | 当前真实扫描/噪声/网格语义与映射、动作、旧控制器、镜像依据 |
-| [工程验收与复现](tasks/confined_locomotion/training/工程验收与复现.md)、[训练使用说明](tasks/confined_locomotion/training/使用说明.md) | 当前GPU门、checkpoint边界、CLI和play运行规则 |
-| [总体规划](research/联合任务方案.md)、[阶段成果](research/阶段总结.md) | 后续研究路线与已有成果的复用边界 |
+| 在新机器克隆并安装 | [当前开发分支部署](tasks/confined_locomotion_2/training/部署.md) |
+| 训练、续训和Play | [快速开始](../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md) |
+| 理解任务配置、架构和信息边界 | [任务说明](tasks/confined_locomotion_2/README.md) |
+| 读曲线和管理checkpoint | [监控与保存](tasks/confined_locomotion_2/training/监控与保存.md) |
+| 运行检查 | [任务测试](../tests/confined_locomotion_2/README.md) |
+| 调整网格、生成选集或测量吞吐 | [实验工具](../scripts/experiments/confined_locomotion_2/README.md) |
+
+原任务的连接约定见[研究架构](research/训练架构对齐.md)，原数值配方见[平地配置](tasks/confined_locomotion/平地学习与基准测量.md)，原任务能力及历史门见[功能状态](tasks/confined_locomotion/training/功能状态.md)与[工程验收](tasks/confined_locomotion/training/工程验收与复现.md)。这些历史材料不替代当前 `_2` 的配置和使用入口。
 
 ## 按主题查证
 

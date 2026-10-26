@@ -1,6 +1,6 @@
 from dataclasses import asdict
 
-from hexapod_mjlab.tasks.confined_locomotion_2.rl_cfg import (
+from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import (
     confined_locomotion_rl_cfg, confined_locomotion_formal_rl_cfg,
 )
 from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import resolve_recipe
@@ -18,6 +18,25 @@ def test_registry_keeps_original_and_new_task_separate_and_defaults_guarded():
         pass
     else:
         raise AssertionError("registration must not silently authorize learning")
+
+
+def test_terrain_memory_registration_is_real_independent_and_guarded():
+    from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
+    from hexapod_mjlab.tasks.confined_locomotion_2.config import flat_baseline, terrain_memory
+
+    assert terrain_memory.TASK_ID != flat_baseline.TASK_ID
+    assert terrain_memory.IMPLEMENTED is True
+    assert terrain_memory.TASK_ID in list_tasks()
+    terrain = load_env_cfg(terrain_memory.TASK_ID)
+    assert terrain.scene.terrain.terrain_type == "generator"
+    assert terrain.rewards and terrain.terminations
+    assert load_runner_cls(terrain_memory.TASK_ID) is load_runner_cls(flat_baseline.TASK_ID)
+    try:
+        resolve_recipe(asdict(load_rl_cfg(terrain_memory.TASK_ID)))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("registration defaults must not authorize learning")
 
 
 def test_formal_recipe_retains_24_steps_mirror_and_perturbations_without_grid():
@@ -68,3 +87,23 @@ def test_close_failure_does_not_report_environment_closed():
         raise AssertionError("close failure must propagate")
     assert runner.closed is False and runner.phase == "faulted"
     assert "declared close fixture" in runner.close_error
+
+
+def test_execution_modes_reach_both_task_recipes_and_reject_invalid_values():
+    from hexapod_mjlab.tasks.confined_locomotion_2.rl.terrain_entry import build_terrain_train_config
+    assert confined_locomotion_rl_cfg().execution_mode == "low_memory"
+    for mode in ("low_memory", "speed"):
+        flat = build_formal_train_config(seed=9, num_envs=2, max_iterations=1, execution_mode=mode)
+        terrain = build_terrain_train_config(seed=9, num_envs=2, max_iterations=1,
+                                            height_loss_weight=1., execution_mode=mode)
+        for cfg in (flat, terrain):
+            resolved = resolve_recipe(asdict(cfg.agent))
+            assert resolved["execution_mode"] == mode
+            assert resolved["ppo"].epochs == 5 and resolved["ppo"].minibatches == 4
+    for mode in ("auto", "fast", None, True):
+        try:
+            build_formal_train_config(seed=9, num_envs=2, max_iterations=1, execution_mode=mode)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid execution mode accepted")
