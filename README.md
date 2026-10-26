@@ -6,10 +6,10 @@ EL4090六足机器人研究项目，基于 **mjlab / MuJoCo Warp**，研究受�
 
 ## 获取代码与安装
 
-当前发布在开发分支 `codex/confined-flat-2-pretrain-baseline`：
+当前训练版本发布在 `main` 分支：
 
 ```bash
-git clone --branch codex/confined-flat-2-pretrain-baseline --single-branch \
+git clone --branch main --single-branch \
   https://github.com/t3chichi/Hexapod-MJLab.git
 cd Hexapod-MJLab
 conda env create -f environment.yml
@@ -17,7 +17,7 @@ conda activate hp_mjlab
 python -m pip install -e .
 ```
 
-需要Linux、NVIDIA GPU、可用驱动和conda。依赖版本由 [environment.yml](environment.yml)维护，包依赖及资源声明见 [pyproject.toml](pyproject.toml)。目标机器的安装与GPU确认步骤见[部署说明](docs/tasks/confined_locomotion_2/training/部署.md)。默认 `main` 和旧平地tag不代表上述开发分支。
+需要Linux、NVIDIA GPU、可用驱动和conda。依赖版本由 [environment.yml](environment.yml)维护，包依赖及资源声明见 [pyproject.toml](pyproject.toml)。目标机器的安装与GPU确认步骤见[部署说明](docs/tasks/confined_locomotion_2/training/部署.md)。旧平地tag仅用于复现历史版本，当前部署使用 `main`。
 
 机器人资产、雷达选集及默认地形构建代码均在仓库内；新机器不需要开发机的日志、checkpoint、缓存或性能工作树。仓库不附训练好的模型。
 

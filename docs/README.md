@@ -6,7 +6,7 @@
 
 | 需要做什么 | 入口 |
 |---|---|
-| 在新机器克隆并安装 | [当前开发分支部署](tasks/confined_locomotion_2/training/部署.md) |
+| 在新机器克隆并安装 | [主分支部署](tasks/confined_locomotion_2/training/部署.md) |
 | 训练、续训和Play | [快速开始](../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md) |
 | 理解任务配置、架构和信息边界 | [任务说明](tasks/confined_locomotion_2/README.md) |
 | 读曲线和管理checkpoint | [监控与保存](tasks/confined_locomotion_2/training/监控与保存.md) |
