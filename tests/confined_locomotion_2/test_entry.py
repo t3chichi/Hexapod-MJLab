@@ -1,6 +1,8 @@
 import copy
 from dataclasses import asdict
 
+import torch
+
 from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import (
     confined_locomotion_rl_cfg, confined_locomotion_formal_rl_cfg,
 )
@@ -36,6 +38,17 @@ def _checkpoint_identity():
             },
         },
     }
+
+
+def test_v2_initial_exploration_std_is_one_without_changing_v1_default():
+    from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider
+    v1 = IndependentDiagonalNormalProvider(generator_seed=1)
+    v2 = IndependentDiagonalNormalProvider(generator_seed=1, initial_std=1.0)
+    assert torch.equal(v1.log_std.detach(), torch.full((18,), torch.log(torch.tensor(0.5)).item()))
+    assert torch.equal(v2.log_std.detach(), torch.zeros(18))
+    assert v1.distribution_identity()["initial_std"] == 0.5
+    assert v2.distribution_identity()["initial_std"] == 1.0
+    assert v2.distribution_identity()["log_std_init"] == 0.0
 
 
 def test_identity_compares_optional_semantics_without_legacy_breakage():
@@ -74,6 +87,19 @@ def test_identity_compares_optional_semantics_without_legacy_breakage():
         assert "actuator_sha256" in str(error)
     else:
         raise AssertionError("actuator identity change accepted")
+
+    with_distribution = copy.deepcopy(current)
+    with_distribution["recipe"]["distribution"] = {"initial_std": 1.0, "parameterization": "log_std"}
+    compare_identity(with_distribution, copy.deepcopy(with_distribution))
+    changed_distribution = copy.deepcopy(with_distribution)
+    changed_distribution["recipe"]["distribution"]["initial_std"] = 0.5
+    try:
+        compare_identity(with_distribution, changed_distribution)
+    except ValueError as error:
+        assert "distribution" in str(error)
+    else:
+        raise AssertionError("changed exploration recipe accepted")
+    compare_identity(with_distribution, current)  # historical checkpoints omit distribution
 
     changed_model = copy.deepcopy(current)
     changed_model["compiled_model"]["q_ref"] = [1.0]

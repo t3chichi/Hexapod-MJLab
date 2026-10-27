@@ -219,11 +219,17 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         self.network = network_cls(
             mlp_activation=nn.ELU(), init_fn=None, envelope_mode="raw",
             ground_samples=None).to(self.device)
+        # v2 Flat/Terrain startup recipe: std=1.0, still log_std-parameterized.
         self.provider = IndependentDiagonalNormalProvider(
-            device=self.device, generator_seed=derive_action_generator_seed(self.seed))
+            device=self.device, generator_seed=derive_action_generator_seed(self.seed),
+            initial_std=1.0)
         self.symmetry_config = resolved["symmetry"]
+        distribution_identity = {
+            **self.provider.distribution_identity(), "parameterization": "log_std",
+        }
         self.recipe_identity = {
             "architecture": architecture_identity(resolved["lidar_cfg"].far_sampling, terrain_memory=terrain),
+            "distribution": distribution_identity,
             "ppo": asdict(resolved["ppo"]), "symmetry": asdict(self.symmetry_config),
             "execution_mode": resolved["execution_mode"],
             "perturbations": None if resolved["perturbations"] is None else resolved["perturbations"].identity(),

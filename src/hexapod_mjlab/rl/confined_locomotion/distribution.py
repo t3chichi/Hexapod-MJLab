@@ -7,8 +7,9 @@ training/首版训练实施计划.md 4.1），不实现 PPO 更新、退火或�
 
 * 18 维独立对角高斯：均值**只**来自现有网络动作头（provider 不建第二个
   均值头、不变换传入均值）；各关节独立可学习且与观测无关的 log_std(18)
-  是本 provider 唯一的 ``nn.Parameter``，初始 std=0.5（log_std=ln 0.5），
-  std=exp(log_std)，不 clamp、不设边界、不加状态相关标准差头。
+  是本 provider 唯一的 ``nn.Parameter``，默认初始 std=0.5（log_std=ln 0.5；
+  v2 Flat/Terrain 显式使用 std=1.0），std=exp(log_std)，不 clamp、不设
+  边界、不加状态相关标准差头。
 * 事件级契约（与 ``ConfinedPolicyAdapter`` 的 provider 注入口一致）：
   ``mean``/``std``/``stddev`` (B,18)；``sample()`` (B,18)；``log_prob(raw)``
   与 ``entropy()`` 均为 18 维求和后的 (B,) 一维张量。log_prob 对应**未裁剪
@@ -23,7 +24,7 @@ training/首版训练实施计划.md 4.1），不实现 PPO 更新、退火或�
   ``DistributionContractError``——异常保存停止（由采集层冻结现场），不删除
   样本、不加 AMP、不退火、不加探索噪声、不使用截断 Normal。
 * 身份 schema（``distribution_identity``）稳定描述分布族：18 维、独立对角、
-  初始 std=0.5、log_std 与观测无关、采样流名称。学习后 provider 仍代表同一
+  实例初始 std、log_std 与观测无关、采样流名称。学习后 provider 仍代表同一
   族，身份**不**随当前 std 漂移；身份不含任何服务凭据。身份用于注入
   ``ConfinedPolicyAdapter(distribution_identity=...)``（JSON 可冻结）。
 * ``forward(action_mean)`` 保留计算图：log_prob/entropy 的梯度同时流向网络
@@ -193,13 +194,15 @@ class DiagonalNormalDistribution:
 class IndependentDiagonalNormalProvider(nn.Module):
     """18 维独立对角 Normal 的 distribution provider（唯一参数 log_std）。
 
-    构造（均显式，无隐藏默认）：
+    构造参数：
       device          provider 所在设备（生成器与 log_std 同设备；CUDA 须给
                       实际 CUDA 设备）。``.to()`` 不会迁移 generator——设备变更
                       须显式重建 provider（P5 保存恢复负责流迁移），forward 对
                       设备错配一律拒绝，绝不静默重播种。
       generator_seed  动作采样 generator 的显式 seed（用命名派生入口
                       ``derive_action_generator_seed(base_seed)`` 产生）。
+      initial_std     初始动作标准差；默认保留 v1 的 0.5，v2 Flat/Terrain
+                      显式传入 1.0。只影响 log_std 初始化，不改变参数化。
 
     使用方式（P2 采集层）：构造一次注入
     ``ConfinedPolicyAdapter(network=..., distribution_provider=provider,
@@ -208,16 +211,25 @@ class IndependentDiagonalNormalProvider(nn.Module):
     不得为 mean/value/辅助重复前向网络。
     """
 
-    def __init__(self, *, device: torch.device | str | None = None, generator_seed: int) -> None:
+    def __init__(self, *, device: torch.device | str | None = None, generator_seed: int,
+                 initial_std: float = INITIAL_STD_STARTUP) -> None:
         super().__init__()
         if isinstance(generator_seed, bool) or not isinstance(generator_seed, int):
             raise DistributionContractError(
                 "generator_seed 必须显式给出为 int（命名派生入口 "
                 f"derive_action_generator_seed），实际 {generator_seed!r}"
             )
+        if (isinstance(initial_std, bool)
+                or not isinstance(initial_std, (int, float))
+                or not math.isfinite(initial_std) or initial_std <= 0):
+            raise DistributionContractError(
+                f"initial_std must be a positive finite number, got {initial_std!r}"
+            )
+        self.initial_std = float(initial_std)
+        self.initial_log_std = math.log(self.initial_std)
         resolved = torch.device(device) if device is not None else torch.device("cpu")
         self.log_std = nn.Parameter(
-            torch.full((JOINT_DIM,), LOG_STD_INIT, dtype=FLOAT_DTYPE, device=resolved)
+            torch.full((JOINT_DIM,), self.initial_log_std, dtype=FLOAT_DTYPE, device=resolved)
         )
         self._generator_seed = int(generator_seed)
         # 生成器固定在构造设备上（CUDA 上为实际 CUDA 设备）；绝不使用全局
@@ -273,15 +285,15 @@ class IndependentDiagonalNormalProvider(nn.Module):
     def distribution_identity(self) -> dict:
         """稳定的族级身份（JSON 可冻结；不随学习后的 std 漂移）。
 
-        内容：schema 版本、分布族、18 维、初始 std=0.5、log_std 初始值、
+        内容：schema 版本、分布族、18 维、实例初始 std、log_std 初始值、
         std 与观测无关、采样流名称。不含当前 std、不含设备/凭据等执行细节。
         """
         return {
             "schema": ACTION_NORMAL_SCHEMA_VERSION,
             "family": "independent_diagonal_normal",
             "action_dim": JOINT_DIM,
-            "initial_std": INITIAL_STD_STARTUP,
-            "log_std_init": LOG_STD_INIT,
+            "initial_std": self.initial_std,
+            "log_std_init": self.initial_log_std,
             "std_observation_dependent": False,
             "sample_generator_stream": ACTION_GENERATOR_STREAM,
         }

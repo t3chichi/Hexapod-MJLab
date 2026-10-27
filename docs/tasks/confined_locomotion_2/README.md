@@ -35,7 +35,7 @@ Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjl
 | Actor / Critic | 对称输入 `[时间状态187, 本体63, 指令3, detach(包络6)]` 共259维；分别为512→256→128的MLP，输出18 / 1 |
 | 高度头 | 仅Terrain Memory：时间状态187维→`Linear(187,187)`→11×17；只用于辅助损失 |
 
-每轮采集24个控制步，5 epochs×4 minibatches，共20次Adam更新。完整rollout优势统一归一化；原始/镜像保留独立GRU历史，episode边界清零，跨rollout保留时间状态。Bootstrap使用隐藏状态副本，不推进在线历史。具体固定PPO数值由 [`TemporalPPOConfig`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py)维护。
+每轮采集24个控制步，5 epochs×4 minibatches，共20次Adam更新。完整rollout优势统一归一化；原始/镜像保留独立GRU历史，episode边界清零，跨rollout保留时间状态。Bootstrap使用隐藏状态副本，不推进在线历史。具体固定PPO数值由 [`TemporalPPOConfig`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py)维护。Flat/Terrain 的动作分布沿用独立高斯的 `log_std` 参数化，初始 `std=1.0`（`log_std=0`）；原 v1 Flat 默认仍为 `std=0.5`，Tripod 保留直接优化 `std=1.0` 的 Legacy 配方。此变更仅针对新训练起点，历史 Checkpoint 恢复加载其已保存的动作分布参数，不会重新初始化为 1.0。
 
 Flat Baseline无高度头、标签或高度损失，既有网络、观测、动作、奖励和控制语义保留。六维包络暂使用既有固定形态参考；未扩展动态形态Oracle或形态控制。
 
