@@ -395,25 +395,8 @@ class ScanFrame:
 # ── the pipeline ─────────────────────────────────────────────────────────────
 
 
-@dataclass
-class _SensorBundle:
-    """Strong owner of one single-env sensor and its pose tensors.
-
-    The LidarSensor's warp arrays zero-copy alias these torch tensors; the
-    bundle keeps them alive and every scan writes the fresh pose into the SAME
-    storage (verified pattern from the el_4090 pipeline).
-    """
-
-    row: int
-    sensor: object
-    pos_tensor: torch.Tensor   # (1,3)
-    quat_tensor: torch.Tensor  # (1,4) xyzw
-    ray_dirs: torch.Tensor     # (R,3) unit dirs in sensor frame
-
-
 class ConfinedScanPipeline:
-    """Real scanner for the confined flat task (one shared plane mesh, per-env
-    single-env ``LidarSensor`` raycast units).
+    """Real scanner using one shared plane mesh and batched due-row raycasts.
 
     Construct AFTER a real reset geometry refresh (the runtime does so at its
     first explicit reset); the plane identity/mesh are read from the compiled
@@ -554,15 +537,12 @@ class ConfinedScanPipeline:
         self.fixed_near_mask = full_near.index_select(0, self.source_ray_ids)
         self._raw_azimuth_deg = (self.source_ray_ids // c.airy_n_elevation).double() * (360.0 / c.airy_n_azimuth)
         directions = self.full_ray_dirs.index_select(0, self.source_ray_ids).contiguous()
-        self._sensors = []
         if terrain_query is None:
-            for row in range(self.num_envs):
-                pos_t = torch.zeros(1, 3, device=self.device, dtype=torch.float32)
-                quat_t = torch.zeros(1, 4, device=self.device, dtype=torch.float32)
-                sensor = ChannelRaycaster(directions=directions, position=pos_t,
-                                          quaternion=quat_t, mesh_ids=self.mesh_ids,
-                                          max_range=c.max_range_m)
-                self._sensors.append(_SensorBundle(row, sensor, pos_t, quat_t, directions))
+            self._sensor = ChannelRaycaster(
+                directions=directions,
+                position=torch.zeros(self.num_envs, 3, device=self.device, dtype=torch.float32),
+                quaternion=torch.zeros(self.num_envs, 4, device=self.device, dtype=torch.float32),
+                mesh_ids=self.mesh_ids, max_range=c.max_range_m)
 
         #: Full raw audit records (identity/time fields filled by the runtime).
         self.scan_records: list[dict] = []
@@ -616,46 +596,63 @@ class ConfinedScanPipeline:
                 "perturbed scans require the runtime-owned persistent scan "
                 "numbers (1-based, never reset) for the gap schedule"
             )
+        rows = [int(row) for row in rows]
+        if any(row < 0 or row >= self.num_envs for row in rows):
+            raise IndexError("scan row outside environment batch")
+        if not rows:
+            return []
         if is_cuda:
             wp.synchronize_device()  # pending physics kernels -> pose reads
-        base_pos = robot.data.root_link_pos_w          # (B,3)
-        base_quat_wxyz = robot.data.root_link_quat_w   # (B,4) wxyz (mjlab)
+        base_pos = robot.data.root_link_pos_w
+        base_quat_wxyz = robot.data.root_link_quat_w
+        selected = torch.tensor(rows, dtype=torch.long, device=self.device)
+        base_q = base_quat_wxyz.index_select(0, selected)[:, [1, 2, 3, 0]]
+        sensor_quats = _quat_mul_xyzw(base_q, self._mount_q.expand(len(rows), 4))
+        sensor_positions = base_pos.index_select(0, selected) + _quat_apply_xyzw(
+            base_q, self._mount_t.expand(len(rows), 3))
+        ray_dirs = self.full_ray_dirs.index_select(0, self.source_ray_ids)
+        prefix = len(rows)
         if self.terrain_query is not None:
-            rows = [int(row) for row in rows]
-            if any(row < 0 or row >= self.num_envs for row in rows):
-                raise IndexError("terrain scan row outside environment batch")
-            if rows:
-                # Physics is unchanged throughout this scan boundary. Query only
-                # the due worlds together; P6 draws remain in per-world order below.
-                selected = torch.tensor(rows, dtype=torch.long, device=self.device)
-                base_q = base_quat_wxyz.index_select(0, selected)[:, [1, 2, 3, 0]]
-                sensor_quats = _quat_mul_xyzw(base_q, self._mount_q.expand(len(rows), 4))
-                sensor_positions = base_pos.index_select(0, selected) + _quat_apply_xyzw(
-                    base_q, self._mount_t.expand(len(rows), 3))
-                terrain_dirs = self.full_ray_dirs.index_select(0, self.source_ray_ids)
-                world_dirs = _quat_apply_xyzw(
-                    sensor_quats[:, None].expand(-1, self.num_raw_rays, -1),
-                    terrain_dirs[None].expand(len(rows), -1, -1))
-                raw, geom = self.terrain_query.raycast(
-                    selected, sensor_positions[:, None].expand_as(world_dirs), world_dirs)
-                hit = (geom >= 0) & (raw >= 0) & (raw < max_range)
-                terrain_distances = torch.where(hit, raw, torch.full_like(raw, max_range))
+            world_dirs = _quat_apply_xyzw(
+                sensor_quats[:, None].expand(-1, self.num_raw_rays, -1),
+                ray_dirs[None].expand(len(rows), -1, -1))
+            raw, geom = self.terrain_query.raycast(
+                selected, sensor_positions[:, None].expand_as(world_dirs), world_dirs)
+            hit = (geom >= 0) & (raw >= 0) & (raw < max_range)
+            batch_distances = torch.where(hit, raw, torch.full_like(raw, max_range))
+            batch_points = batch_distances[:, :, None] * ray_dirs[None]
+        else:
+            # Preserve the Python-double coverage calculation and refuse to
+            # raycast the first uncovered row or any later row. P6 side effects
+            # and the original coverage error still occur in row order below.
+            xy = sensor_positions[:, :2].double()
+            xmin, xmax, ymin, ymax = self.mesh_bounds
+            uncovered = ((xmin > xy[:, 0] - max_range - 1e-3) |
+                         (xmax < xy[:, 0] + max_range + 1e-3) |
+                         (ymin > xy[:, 1] - max_range - 1e-3) |
+                         (ymax < xy[:, 1] + max_range + 1e-3)).cpu().tolist()
+            prefix = next((i for i, bad in enumerate(uncovered) if bad), len(rows))
+            if prefix:
+                self._sensor.position[:prefix].copy_(sensor_positions[:prefix])
+                self._sensor.quaternion[:prefix].copy_(sensor_quats[:prefix])
+                points, distances = self._sensor.update(prefix)
+                batch_points = points[:, 0, :, 0]
+                batch_distances = distances[:, 0, :, 0]
+        batch_checks = []
+        if prefix:
+            # One host transfer for all raw geometry flags. Interpret failures
+            # below, before that row's range draw, preserving stream ordering.
+            finite = (torch.isfinite(batch_distances).all(dim=1) &
+                      torch.isfinite(batch_points).all(dim=(1, 2)))
+            in_range = ((batch_distances >= 0) & (batch_distances <= max_range)).all(dim=1)
+            norms = torch.linalg.vector_norm(batch_points, dim=-1)
+            endpoint_ok = ((batch_distances == max_range) | torch.isclose(
+                norms, batch_distances, atol=1e-3, rtol=1e-4)).all(dim=1)
+            batch_checks = torch.stack((finite, in_range, endpoint_ok), dim=1).cpu().tolist()
         frames: list[ScanFrame] = []
         for scan_row, row in enumerate(rows):
-            row = int(row)
-            if not (0 <= row < self.num_envs):
-                raise IndexError(f"env row {row} out of range [0, {self.num_envs})")
-            bundle = self._sensors[row] if self.terrain_query is None else None
             base_p = base_pos[row].detach()
-            base_q_xyzw = base_quat_wxyz[row].detach()[[1, 2, 3, 0]]  # wxyz→xyzw
-            if self.terrain_query is None:
-                sensor_q = _quat_mul_xyzw(base_q_xyzw.view(1, 4), self._mount_q)[0]
-                sensor_p = base_p + _quat_apply_xyzw(
-                    base_q_xyzw.view(1, 4), self._mount_t
-                )[0]
-            else:
-                sensor_q = sensor_quats[scan_row]
-                sensor_p = sensor_positions[scan_row]
+            sensor_q, sensor_p = sensor_quats[scan_row], sensor_positions[scan_row]
             # P6 gap schedule advance happens in per-env persistent scan
             # order BEFORE any consumption processing (the event offset is
             # drawn/fixed before the earliest candidate frame per contract).
@@ -666,27 +663,16 @@ class ConfinedScanPipeline:
                         row, int(persistent_scan_numbers[row])
                     )
                 )
-            if self.terrain_query is None:
-                # COVERAGE FIRST: never let a finite mesh edge become a false miss.
-                self.assert_coverage(sensor_p)
-                bundle.pos_tensor.copy_(sensor_p.view(1, 3))
-                bundle.quat_tensor.copy_(sensor_q.view(1, 4))
-                points_sensor, dist = bundle.sensor.update()
-                points_backend = points_sensor.detach().view(-1, 3).clone()
-                dist = dist.detach().view(-1).clone()
-
-            else:
-                unit_dirs = terrain_dirs
-                # Retained frames own each distance row, so a partial reset does
-                # not keep the entire old batched result alive through one row.
-                dist = terrain_distances[scan_row].clone()
-                points_backend = dist[:, None] * unit_dirs
+            if scan_row >= prefix:
+                self.assert_coverage(sensor_p)  # original error before any raycast for this row
+            unit_dirs = ray_dirs
+            # Retained frames own compact rows, not the reusable batch workspace.
+            dist = batch_distances[scan_row].detach().clone()
+            points_backend = batch_points[scan_row].detach().clone()
 
             # Fault checks: NaN/Inf are faults EVEN IF they would be maskable;
             # never silently sanitized, never disguised as valid.
-            if not bool(torch.isfinite(dist).all()) or not bool(
-                torch.isfinite(points_backend).all()
-            ):
+            if not batch_checks[scan_row][0]:
                 self.scan_records.append(
                     {
                         "env_row": row,
@@ -705,10 +691,8 @@ class ConfinedScanPipeline:
             # identity is dist == max_range. Real hits below max_range
             # (including 15−ε) stay REAL HITS — no near-range promotion, no ε
             # band. Any dist outside [0, max_range] is a fault, never clamped.
-            unit_dirs = (bundle.ray_dirs if bundle is not None else
-                         terrain_dirs)
             no_hit = dist == max_range
-            if bool((dist < 0.0).any()) or bool((dist > max_range).any()):
+            if not batch_checks[scan_row][1]:
                 n_low = int((dist < 0.0).sum().item())
                 n_high = int((dist > max_range).sum().item())
                 self.scan_records.append(
@@ -727,22 +711,17 @@ class ConfinedScanPipeline:
                     f"({n_low} below 0, {n_high} above {max_range}); fault "
                     "(recorded; never clamped)"
                 )
-            hit = ~no_hit
-            if bool(hit.any()):
-                norms = torch.linalg.vector_norm(points_backend[hit], dim=-1)
-                if not bool(
-                    torch.allclose(norms, dist[hit], atol=1e-3, rtol=1e-4)
-                ):
-                    self.scan_records.append(
-                        {
-                            "env_row": row,
-                            "fault": "hit_endpoint_dist_mismatch",
-                            "sensor_pos_w": sensor_p.detach().cpu().numpy().tolist(),
-                        }
-                    )
-                    raise ScanFaultError(
-                        f"env {row}: hit endpoint norm != recorded dist (fault)"
-                    )
+            if not batch_checks[scan_row][2]:
+                self.scan_records.append(
+                    {
+                        "env_row": row,
+                        "fault": "hit_endpoint_dist_mismatch",
+                        "sensor_pos_w": sensor_p.detach().cpu().numpy().tolist(),
+                    }
+                )
+                raise ScanFaultError(
+                    f"env {row}: hit endpoint norm != recorded dist (fault)"
+                )
 
             # ── P6 consumed-copy extras (None on the clean path) ────────────
             consumed_valid_full = None

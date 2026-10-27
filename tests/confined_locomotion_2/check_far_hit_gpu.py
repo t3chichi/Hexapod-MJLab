@@ -193,8 +193,7 @@ def _install_mesh(pipelines, device, solids, mesh_bank):
         pipeline._wp_points = points
         pipeline._wp_indices = indices
         pipeline.mesh_ids = mesh_ids
-        for bundle in pipeline._sensors:
-            bundle.sensor.mesh_ids = mesh_ids
+        pipeline._sensor.mesh_ids = mesh_ids
 
 
 def _make_observation(OnlineObservation, device, step: int, time_s: float):
@@ -519,10 +518,10 @@ def main(argv=None) -> None:
 
         # Production cache repeatability and selected reset identity change.
         cached_a = runtime.prepare()
-        launch_before_repeat = hit_pipeline._sensors[0].sensor.launch_count
+        launch_before_repeat = hit_pipeline._sensor.launch_count
         cached_b = runtime.prepare()
         _check(cached_a is cached_b, "repeat prepare did not return same cached object")
-        _check(hit_pipeline._sensors[0].sensor.launch_count == launch_before_repeat,
+        _check(hit_pipeline._sensor.launch_count == launch_before_repeat,
                "cached prepare launched another physical scan")
         cache_record = {"same_object_on_repeat": True, "raycast_launches_on_repeat": 0}
 
@@ -835,12 +834,12 @@ def main(argv=None) -> None:
 
         # Reset the real runtime at an unchanged global control step: episode
         # identity changes, first scan is acquired, and cache is rebuilt once.
-        before_reset_launch = hit_pipeline._sensors[0].sensor.launch_count
+        before_reset_launch = hit_pipeline._sensor.launch_count
         reset_record = runtime.reset(torch.tensor([0], device=device))
         after_reset = runtime.prepare()
         _check(after_reset is not cached_a, "selected reset reused the pre-reset cached input")
         _check(int(runtime.episode_ids[0].item()) == 1, "runtime reset did not advance episode identity")
-        _check(hit_pipeline._sensors[0].sensor.launch_count > before_reset_launch,
+        _check(hit_pipeline._sensor.launch_count > before_reset_launch,
                "runtime reset did not produce a fresh first scan")
         _check(after_reset is runtime.prepare(), "post-reset prepare is not cache-stable")
         cache_record.update({

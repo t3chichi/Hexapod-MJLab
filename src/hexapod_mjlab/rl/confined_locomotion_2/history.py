@@ -382,62 +382,85 @@ class ScanWindow:
                     directions[~present], torch.zeros_like(directions[~present])
                 ):
                     raise ContractError(f"{name} 无源方向槽必须精确填 0")
-        for i in range(count):
-            env = int(envs[i])
-            if int(episodes[i]) != int(self._episode_ids[env]):
+        current_episodes = self._episode_ids[envs]
+        last_scans = self._last_scan_id[envs]
+        last_times = self._last_time[envs]
+        episode_bad = episodes != current_episodes
+        scan_bad = scans <= last_scans
+        time_bad = stamps <= last_times
+        identity_bad = episode_bad | scan_bad | time_bad
+        if bool(identity_bad.any()):
+            # Transfer error details only on the exceptional path. Resolve
+            # errors in the historical order: input row first, then episode,
+            # scan id, and time within that row.
+            identity_errors = torch.stack((episode_bad, scan_bad, time_bad), dim=1).cpu()
+            bad_row = int(identity_errors.any(dim=1).nonzero()[0, 0])
+            integer_values = torch.stack((envs, episodes, current_episodes, scans, last_scans), dim=1).cpu()
+            time_values = torch.stack((stamps, last_times), dim=1).cpu()
+            env, episode, current_episode, scan, last_scan = map(
+                int, integer_values[bad_row].tolist()
+            )
+            stamp, last_time = map(float, time_values[bad_row].tolist())
+            if bool(identity_errors[bad_row, 0]):
                 raise EpisodeMismatchError(
-                    f"env {env}: 写入 episode {int(episodes[i])} 与窗口当前 "
-                    f"{int(self._episode_ids[env])} 不一致（陈旧/未声明 episode 拒绝）"
+                    f"env {env}: 写入 episode {episode} 与窗口当前 "
+                    f"{current_episode} 不一致（陈旧/未声明 episode 拒绝）"
                 )
-            last_scan = int(self._last_scan_id[env])
-            if int(scans[i]) <= last_scan:
+            if bool(identity_errors[bad_row, 1]):
                 raise StaleScanError(
-                    f"env {env}: scan_id {int(scans[i])} 未大于最新 {last_scan}（重复/旧扫描拒绝）"
+                    f"env {env}: scan_id {scan} 未大于最新 {last_scan}（重复/旧扫描拒绝）"
                 )
-            last_time = float(self._last_time[env])
-            if float(stamps[i]) <= last_time:
-                raise TimeOrderError(
-                    f"env {env}: time {float(stamps[i])} 未晚于最新 {last_time}（episode 内须严格递增）"
-                )
-        for i in range(count):
-            env = int(envs[i])
-            slot = int(self._far_pos[env])
-            self._far_points[env, slot] = far_points[i]
-            self._far_valid[env, slot] = far_valid[i]
-            self._far_scan_ids[env, slot] = int(scans[i])
-            self._far_times[env, slot] = float(stamps[i])
-            self._far_count[env] = min(int(self._far_count[env]) + 1, FAR_WINDOW_SLOTS)
-            self._far_pos[env] = (slot + 1) % FAR_WINDOW_SLOTS
-            self._near_points[env] = near_points[i]
-            self._near_valid[env] = near_valid[i]
-            self._near_filled[env] = True
-            self._near_scan_ids[env] = int(scans[i])
-            self._near_times[env] = float(stamps[i])
-            self._last_scan_id[env] = int(scans[i])
-            self._last_time[env] = float(stamps[i])
-            if near_angle_keys is not None and far_angle_keys is not None:
-                self._near_angle_keys[env] = torch.where(near_valid[i], near_angle_keys[i], 0.0)
-                self._far_angle_keys[env, slot] = torch.where(far_valid[i], far_angle_keys[i], 0.0)
-                self._angle_keys_present[env] = True
-            else:
-                self._near_angle_keys[env].zero_()
-                self._far_angle_keys[env, slot].zero_()
-                self._angle_keys_present[env] = False
-            if near_source_dirs_sensor is not None:
-                self._near_source_dirs_sensor[env] = near_source_dirs_sensor[i]
-                self._far_source_dirs_sensor[env, slot] = far_source_dirs_sensor[i]
-                self._near_source_dirs_present[env] = near_valid[i]
-                self._far_source_dirs_present[env, slot] = far_valid[i]
-                self._near_source_indices[env] = near_source_indices[i]
-                self._far_source_indices[env, slot] = far_source_indices[i]
-                self._source_dirs_attached[env] = True
-            else:
-                self._near_source_dirs_sensor[env].zero_()
-                self._far_source_dirs_sensor[env, slot].zero_()
-                self._near_source_dirs_present[env].zero_()
-                self._far_source_dirs_present[env, slot].zero_()
-                self._near_source_indices[env].fill_(-1)
-                self._far_source_indices[env, slot].fill_(-1)
+            raise TimeOrderError(
+                f"env {env}: time {stamp} 未晚于最新 {last_time}（episode 内须严格递增）"
+            )
+
+        # All identity checks passed. Apply the batch with indexed tensor writes;
+        # the ring arithmetic remains valid for any FAR_WINDOW_SLOTS value.
+        slots = self._far_pos[envs]
+        self._far_points[envs, slots] = far_points
+        self._far_valid[envs, slots] = far_valid
+        self._far_scan_ids[envs, slots] = scans
+        self._far_times[envs, slots] = stamps
+        self._far_count[envs] = torch.clamp(
+            self._far_count[envs] + 1, max=FAR_WINDOW_SLOTS
+        )
+        self._far_pos[envs] = torch.remainder(slots + 1, FAR_WINDOW_SLOTS)
+        self._near_points.index_copy_(0, envs, near_points)
+        self._near_valid.index_copy_(0, envs, near_valid)
+        self._near_filled[envs] = True
+        self._near_scan_ids[envs] = scans
+        self._near_times[envs] = stamps
+        self._last_scan_id[envs] = scans
+        self._last_time[envs] = stamps
+
+        if near_angle_keys is not None and far_angle_keys is not None:
+            self._near_angle_keys.index_copy_(
+                0, envs, torch.where(near_valid, near_angle_keys, 0.0)
+            )
+            self._far_angle_keys[envs, slots] = torch.where(
+                far_valid, far_angle_keys, 0.0
+            )
+            self._angle_keys_present[envs] = True
+        else:
+            self._near_angle_keys[envs] = 0.0
+            self._far_angle_keys[envs, slots] = 0.0
+            self._angle_keys_present[envs] = False
+
+        if near_source_dirs_sensor is not None:
+            self._near_source_dirs_sensor.index_copy_(0, envs, near_source_dirs_sensor)
+            self._far_source_dirs_sensor[envs, slots] = far_source_dirs_sensor
+            self._near_source_dirs_present.index_copy_(0, envs, near_valid)
+            self._far_source_dirs_present[envs, slots] = far_valid
+            self._near_source_indices.index_copy_(0, envs, near_source_indices)
+            self._far_source_indices[envs, slots] = far_source_indices
+            self._source_dirs_attached[envs] = True
+        else:
+            self._near_source_dirs_sensor[envs] = 0.0
+            self._far_source_dirs_sensor[envs, slots] = 0.0
+            self._near_source_dirs_present[envs] = False
+            self._far_source_dirs_present[envs, slots] = False
+            self._near_source_indices[envs] = -1
+            self._far_source_indices[envs, slots] = -1
 
     def read(self) -> ScanWindowSnapshot:
         """整批只读快照：不推进窗口；返回全新 clone，后续写入/reset 不影响已返回快照。

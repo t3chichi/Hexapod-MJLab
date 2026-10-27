@@ -818,10 +818,20 @@ class TrainingRuntime:
         keys whenever the consumed frames provide them.
         """
         time_s = float(self.control_time_s())
+        if not rows:
+            return []
+        rows_t = torch.tensor(rows, dtype=torch.long, device=self.device)
+        # Transfer scan identities together, rather than synchronizing once per
+        # scalar/environment. Keep Python records and their original row order.
+        identities = torch.stack((
+            self.scan_counters.index_select(0, rows_t) + 1,
+            self.episode_ids.index_select(0, rows_t),
+            self.sensor_scan_counts.index_select(0, rows_t) + 1,
+        ), dim=1)
+        identity_rows = identities.cpu().tolist()
         persistent_numbers = (
-            None
-            if self._perturbations is None
-            else {int(row): int(self.sensor_scan_counts[int(row)]) + 1 for row in rows}
+            None if self._perturbations is None else
+            {int(row): values[2] for row, values in zip(rows, identity_rows)}
         )
         frames = self.pipeline.scan_rows(
             rows,
@@ -829,11 +839,16 @@ class TrainingRuntime:
             persistent_scan_numbers=persistent_numbers,
         )
         writes = []
-        for frame in frames:
+        if frames:
+            near_valid = torch.stack([f.near_valid for f in frames])
+            far_valid = torch.stack([f.far_valid for f in frames])
+            valid_counts = torch.stack((near_valid.sum(1), far_valid.sum(1)), dim=1).cpu().tolist()
+            frame_identities = {int(row): values for row, values in zip(rows, identity_rows)}
+            self.scan_counters.index_copy_(0, rows_t, identities[:, 0])
+            self.sensor_scan_counts.index_copy_(0, rows_t, identities[:, 2])
+        for index, frame in enumerate(frames):
             row = int(frame.env_row)
-            scan_id = int(self.scan_counters[row]) + 1
-            episode_id = int(self.episode_ids[row])
-            persistent = int(self.sensor_scan_counts[row]) + 1
+            scan_id, episode_id, persistent = frame_identities[row]
             if persistent_numbers is not None and int(persistent_numbers[row]) != persistent:
                 raise RuntimeError(
                     f"persistent scan numbering changed during the scan of env "
@@ -842,8 +857,6 @@ class TrainingRuntime:
             self.pipeline.stamp_scan_record(
                 frame, scan_id=scan_id, episode_id=episode_id, time_s=time_s
             )
-            self.scan_counters[row] = scan_id
-            self.sensor_scan_counts[row] = persistent
             if self._play_source_scans is not None:
                 self._capture_play_source_scan(
                     frame,
@@ -876,8 +889,8 @@ class TrainingRuntime:
                     "episode_id": episode_id,
                     "persistent_scan_count": persistent,
                     "time_s": time_s,
-                    "near_valid_count": int(frame.near_valid.sum().item()),
-                    "far_valid_count": int(frame.far_valid.sum().item()),
+                    "near_valid_count": valid_counts[index][0],
+                    "far_valid_count": valid_counts[index][1],
                     "gap_fired": bool(frame.gap_fired),
                 }
             )
@@ -895,22 +908,14 @@ class TrainingRuntime:
                     )
                 near_keys_batch = torch.stack([f.near_angle_keys for f in frames])
                 far_keys_batch = torch.stack([f.far_angle_keys for f in frames])
-            near_dirs_batch = torch.stack([
-                torch.where(
-                    frame.near_indices[:, None] >= 0,
-                    self.pipeline.full_ray_dirs[frame.near_indices.clamp(min=0)],
-                    torch.zeros_like(frame.near_points_base),
-                )
-                for frame in frames
-            ])
-            far_dirs_batch = torch.stack([
-                torch.where(
-                    frame.far_indices[:, None] >= 0,
-                    self.pipeline.full_ray_dirs[frame.far_indices.clamp(min=0)],
-                    torch.zeros_like(frame.far_points_base),
-                )
-                for frame in frames
-            ])
+            near_indices = torch.stack([f.near_indices for f in frames])
+            far_indices = torch.stack([f.far_indices for f in frames])
+            near_dirs_batch = torch.where(
+                near_indices[:, :, None] >= 0,
+                self.pipeline.full_ray_dirs[near_indices.clamp(min=0)], 0.0)
+            far_dirs_batch = torch.where(
+                far_indices[:, :, None] >= 0,
+                self.pipeline.full_ray_dirs[far_indices.clamp(min=0)], 0.0)
             self.window.write(
                 env_ids=rows_t,
                 episode_ids=self.episode_ids.index_select(0, rows_t),
@@ -919,15 +924,15 @@ class TrainingRuntime:
                     [w["time_s"] for w in writes], dtype=torch.float32, device=self.device
                 ),
                 near_points=torch.stack([f.near_points_base for f in frames]),
-                near_valid=torch.stack([f.near_valid for f in frames]),
+                near_valid=near_valid,
                 far_points=torch.stack([f.far_points_base for f in frames]),
-                far_valid=torch.stack([f.far_valid for f in frames]),
+                far_valid=far_valid,
                 near_angle_keys=near_keys_batch,
                 far_angle_keys=far_keys_batch,
                 near_source_dirs_sensor=near_dirs_batch,
                 far_source_dirs_sensor=far_dirs_batch,
-                near_source_indices=torch.stack([f.near_indices for f in frames]),
-                far_source_indices=torch.stack([f.far_indices for f in frames]),
+                near_source_indices=near_indices,
+                far_source_indices=far_indices,
             )
             if self.scan_audit_bound is not None:
                 overflow = len(self.pipeline.scan_records) - self.scan_audit_bound

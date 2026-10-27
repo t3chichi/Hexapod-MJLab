@@ -20,20 +20,25 @@ class ChannelRaycaster:
         self.kernel = LidarWarpKernels.draw_optimized_kernel_pointcloud
         self.device = directions.device
         self.num_rays = int(directions.shape[0])
-        self.points = torch.empty((1, 1, self.num_rays, 1, 3), device=self.device)
-        self.distances = torch.empty((1, 1, self.num_rays, 1), device=self.device)
+        self.capacity = int(position.shape[0])
+        self.points = torch.empty((self.capacity, 1, self.num_rays, 1, 3), device=self.device)
+        self.distances = torch.empty((self.capacity, 1, self.num_rays, 1), device=self.device)
         self.launch_count = 0
 
     def get_ray_directions(self):
         return self.directions
 
-    def update(self):
+    def update(self, num_rows=None):
+        """Launch the existing kernel only for the supplied pose prefix."""
+        num_rows = self.capacity if num_rows is None else num_rows
+        if not 1 <= num_rows <= self.capacity:
+            raise ValueError("raycast row count outside allocated capacity")
         wp.launch(
             kernel=self.kernel,
-            dim=(1, 1, self.num_rays, 1),
+            dim=(num_rows, 1, self.num_rays, 1),
             inputs=[self.mesh_ids,
-                    wp.from_torch(self.position.view(1, 1, 3), dtype=wp.vec3),
-                    wp.from_torch(self.quaternion.view(1, 1, 4), dtype=wp.quat),
+                    wp.from_torch(self.position.view(self.capacity, 1, 3), dtype=wp.vec3),
+                    wp.from_torch(self.quaternion.view(self.capacity, 1, 4), dtype=wp.quat),
                     wp.from_torch(self.directions.view(self.num_rays, 1, 3), dtype=wp.vec3),
                     self.max_range,
                     wp.from_torch(self.points, dtype=wp.vec3),
@@ -42,4 +47,4 @@ class ChannelRaycaster:
             stream=wp.stream_from_torch(torch.cuda.current_stream(self.device)),
         )
         self.launch_count += 1
-        return self.points, self.distances
+        return self.points[:num_rows], self.distances[:num_rows]

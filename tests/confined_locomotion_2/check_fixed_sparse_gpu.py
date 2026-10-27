@@ -367,7 +367,7 @@ def main() -> None:
                "sparse source IDs are not sorted selected global IDs")
         catalog_dirs = torch.as_tensor(catalog.directions_sensor, dtype=torch.float32)
         full_selected_dirs = full_pipeline.full_ray_dirs.index_select(0, selected).cpu()
-        sparse_raw_dirs = sparse_pipeline._sensors[0].ray_dirs.cpu()
+        sparse_raw_dirs = sparse_pipeline._sensor.get_ray_directions().cpu()
         _check(_same_tensor(full_selected_dirs, catalog_dirs[selected.cpu()]),
                "CPU catalog and full GPU direction table differ on selected IDs")
         _check(_same_tensor(sparse_raw_dirs, catalog_dirs[selected.cpu()]),

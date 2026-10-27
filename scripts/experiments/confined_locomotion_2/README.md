@@ -32,6 +32,18 @@ python -B scripts/experiments/confined_locomotion_2/sparse_rays/select_channels.
 
 ## 容量测量建议
 
+`benchmark_collection.py` 是有限稀疏采集测量入口，不创建优化器或checkpoint。默认使用near×6/far×10 hit10、全部扰动与镜像，先预热再测量；`--output`必须是新目录。例如：
+
+```bash
+python -B scripts/experiments/confined_locomotion_2/benchmark_collection.py \
+  --task terrain --num-envs 512 --variant optimized --warmups 1 --collections 2 \
+  --output "logs/verification/confined_locomotion_2/collection_$(date +%Y%m%d_%H%M%S)"
+```
+
+`--task flat`选择Flat_2。`--variant baseline --reference-rev 2c08bab`仅在该实验进程中使用Git历史中的参考采集方法；需要本地具有对应提交。对照保持相同配置并分别使用新进程。`collect_s`只包含采集，不能作为整轮PPO耗时；`--profile`的包含等待/嵌套时间不能直接相加或当作无插桩吞吐。原型与负结果未接入正式训练。
+
 目标机容量尚未实测。测量前先用匹配配置的小规模真实 GPU 工程检查，再固定 task、seed、near×6/far×10 hit10 selection、24 步 rollout、镜像和扰动，逐级增加环境数。分别记录采集、20 次 optimizer 更新、周期保存、`torch.cuda.max_memory_allocated`、PyTorch reserved，以及进程/整卡显存；每个候选使用新进程和新输出目录。不要从 PyTorch 张量显存推算整卡余量，也不要跨环境数或不同源码/selection 的结果直接比较。
 
 当前 RTX 4050 结果与测量边界整理在[2026-10-26 地形记忆与性能记录](records/20261026_terrain_memory_and_performance.md)。这些有限工程运行不构成 5090 容量、长期稳定性或学习效果结论。
+
+已验证的两批采集优化在目录重构后的迁移范围、回归结果与512环境有限采集记录见[迁移验收](records/20261027_optimization_migration.md)。

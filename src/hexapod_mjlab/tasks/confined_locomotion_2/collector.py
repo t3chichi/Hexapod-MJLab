@@ -10,6 +10,9 @@ from hexapod_mjlab.rl.confined_locomotion_2.symmetry import mirror_prepared
 from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import SequenceRolloutBuffer
 
 
+_FRAME_ENCODING_CHUNK = 128
+
+
 def model_state_fingerprint(module):
     digest = hashlib.sha256()
     for name, value in sorted(module.state_dict().items()):
@@ -41,17 +44,19 @@ class TrainingCollector:
 
     def _frame(self, prepared, *, mirror=False):
         """Batch new scans; retain one owned feature per environment and view."""
-        identities = torch.stack((prepared.observation.episode_ids, prepared.near_scan_ids), dim=1).cpu().tolist()
-        changed = []
-        for row, identity in enumerate(identities):
-            entry = self._features.get((mirror, row))
-            if entry is None or entry[0] != tuple(identity):
-                changed.append(row)
-        # Bound inference workspace as environment count grows; cached rows still
-        # own independent storage and preserve the original environment ordering.
-        for start in range(0, len(changed), 128):
-            rows = changed[start:start + 128]
-            indices = torch.tensor(rows, dtype=torch.long, device=self.device)
+        identities = torch.stack((prepared.observation.episode_ids, prepared.near_scan_ids), dim=1)
+        entry = self._features.get(mirror)
+        if entry is None:
+            changed = torch.arange(self.num_envs, device=self.device)
+            cached = None
+        else:
+            previous_ids, cached = entry
+            changed = (identities != previous_ids).any(dim=1).nonzero(as_tuple=False).flatten()
+        # Keep the existing bounded encoding and ascending environment order.
+        # The two views own separate feature/identity tensors; no host dictionary
+        # or per-environment feature allocation is needed on a control boundary.
+        for start in range(0, changed.numel(), _FRAME_ENCODING_CHUNK):
+            indices = changed[start:start + _FRAME_ENCODING_CHUNK]
             features = self.network.encode_points(
                 prepared.near_points.index_select(0, indices), prepared.near_valid.index_select(0, indices),
                 prepared.far_points.index_select(0, indices), prepared.far_valid.index_select(0, indices),
@@ -60,10 +65,14 @@ class TrainingCollector:
                 far_angle_keys=(None if prepared.far_angle_keys is None else
                                 prepared.far_angle_keys.index_select(0, indices)),
             )
-            for index, row in enumerate(rows):
-                self._features[mirror, row] = (tuple(identities[row]), features[index:index + 1].detach().clone())
-        self.frame_encoding_rows += len(changed)
-        return torch.cat([self._features[mirror, row][1] for row in range(self.num_envs)], dim=0)
+            if cached is None:
+                cached = features.new_empty((self.num_envs, *features.shape[1:]))
+            cached.index_copy_(0, indices, features.detach())
+        if changed.numel():
+            self._features[mirror] = (identities.clone(), cached)
+        self.frame_encoding_rows += changed.numel()
+        # A retained online/bootstrap output must not alias the next cache write.
+        return cached.clone()
 
     def _mirror(self, prepared):
         return mirror_prepared(prepared, self.joint_permutation,

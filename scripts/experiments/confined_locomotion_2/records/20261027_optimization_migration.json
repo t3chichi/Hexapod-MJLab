@@ -1,0 +1,120 @@
+{
+  "date": "2026-10-27",
+  "source_commits": [
+    "630e5ae",
+    "1d24664"
+  ],
+  "target_base": "f4970d64082d9ddd629da53742dbdfe6b3925004",
+  "integration": "main branch integration; verification performed before commit",
+  "sparse_recipe": {
+    "near_multiplier": 6,
+    "far_multiplier": 10,
+    "far_sampling": "hit_only_10m",
+    "control_steps_per_collection": 24,
+    "execution_mode": "low_memory",
+    "collector_chunk": 128,
+    "point_replay_limit": 1024
+  },
+  "cpu_check_entries": 163,
+  "integrity": {
+    "src/hexapod_mjlab/rl/confined_locomotion_2/history.py_matches_1d24664": true,
+    "src/hexapod_mjlab/tasks/confined_locomotion_2/collector.py_matches_1d24664": true,
+    "src/hexapod_mjlab/tasks/confined_locomotion_2/sparse_raycast.py_matches_1d24664": true,
+    "ConfinedScanPipeline_matches_optimized_except_imports": true,
+    "_scan_rows_now_matches_optimized_except_imports": true,
+    "prior_boundary_changes_preserved": true,
+    "index_untouched": true
+  },
+  "gpu_checks": [
+    {
+      "name": "terrain-equivalence",
+      "returncode": 0
+    },
+    {
+      "name": "full-sparse",
+      "returncode": 0
+    },
+    {
+      "name": "terrain-sequence",
+      "returncode": 0
+    },
+    {
+      "name": "flat-training",
+      "returncode": 0
+    },
+    {
+      "name": "joint-run",
+      "returncode": 0
+    },
+    {
+      "name": "terrain-checkpoint",
+      "returncode": 0
+    },
+    {
+      "name": "terrain-play",
+      "returncode": 0
+    },
+    {
+      "name": "flat-512",
+      "returncode": 0
+    },
+    {
+      "name": "terrain-512",
+      "returncode": 0
+    }
+  ],
+  "same_scene": {
+    "flat": {
+      "passed": true,
+      "max_scan_error": 0.0,
+      "max_feature_error": 0.0,
+      "optimizer_updates": 0
+    },
+    "terrain": {
+      "passed": true,
+      "max_scan_error": 0.0,
+      "max_feature_error": 0.0,
+      "optimizer_updates": 0
+    }
+  },
+  "collections_512": {
+    "flat": {
+      "passed": true,
+      "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "warmups": 1,
+      "optimizer_updates": 0,
+      "collect_s": [
+        4.787338185000408,
+        4.58733019400006
+      ],
+      "torch_peak_MiB": [
+        907.14208984375,
+        918.564453125
+      ]
+    },
+    "terrain": {
+      "passed": true,
+      "gpu": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "warmups": 1,
+      "optimizer_updates": 0,
+      "collect_s": [
+        5.291244261999964,
+        5.025759303000086
+      ],
+      "torch_peak_MiB": [
+        903.4169921875,
+        917.8544921875
+      ]
+    }
+  },
+  "source_sha256": {
+    "src/hexapod_mjlab/rl/confined_locomotion_2/history.py": "b2dbf54f9f4a37c690f80109a5c9a130eb74c1805058a123f9f6fd527f06033b",
+    "src/hexapod_mjlab/tasks/confined_locomotion_2/collector.py": "16e9e8b28d1c8b082e5e098b79c93e8f32d4b095d8b55b62341681e2311eef96",
+    "src/hexapod_mjlab/tasks/confined_locomotion_2/scanner.py": "d9625d7d54ed3048cb11c13d2f8c8b692f603be026271c83f74168504a31ae8e",
+    "src/hexapod_mjlab/tasks/confined_locomotion_2/sparse_raycast.py": "51df6b9af804d8693ed0b200da88029278fe723f14b5ae3e0fb502f401daea35",
+    "src/hexapod_mjlab/tasks/confined_locomotion_2/runtime.py": "eaad39a4dcd3291b52f465f03a9a5dbad96c3a50ffb64451d0b8896ba2722315"
+  },
+  "baseline_tool_smoke_passed": true,
+  "flat_equivalence_passed": true,
+  "passed": true
+}
