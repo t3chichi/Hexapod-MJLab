@@ -148,8 +148,12 @@ class TemporalPPOTrainer:
             raise ValueError("saved temporal PPO recipe differs from this trainer")
         if int(state.get("seed", -1)) != self.seed:
             raise ValueError("saved temporal PPO seed differs from this trainer")
-        if state.get("execution_mode") != self.execution_mode:
-            raise ValueError("saved execution mode differs from this trainer")
+        # execution_mode only selects activation recomputation; it does not
+        # change the optimizer or rollout semantics, so cross-mode resume is
+        # allowed. The current trainer keeps its requested mode.
+        saved_mode = state.get("execution_mode")
+        if saved_mode is not None and saved_mode not in ("low_memory", "speed"):
+            raise ValueError(f"saved execution mode is invalid: {saved_mode!r}")
         self.optimizer.load_state_dict(state["optimizer"])
         self.updates = int(state["updates"])
         self.optimizer_step_count = int(state["optimizer_step_count"])

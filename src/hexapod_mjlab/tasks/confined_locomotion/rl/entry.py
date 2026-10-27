@@ -163,7 +163,6 @@ def _static_resume_identity(cfg: TrainConfig, path: Path) -> dict:
   from .checkpoint import (
     CHECKPOINT_KIND_FULL,
     CHECKPOINT_SCHEMA,
-    _source_identity,
     validate_payload_envelope,
   )
 
@@ -186,7 +185,6 @@ def _static_resume_identity(cfg: TrainConfig, path: Path) -> dict:
   expected = {
     "task": TASK_ID,
     "runner_identity": FORMAL_RUNNER_IDENTITY,
-    "source_sha256": _source_identity(),
     "num_envs": int(cfg.agent.formal_num_envs),
     "env_seed": int(cfg.env.seed),
     "runtime": {"mode": "training", "seed": int(cfg.agent.seed)},
@@ -205,7 +203,6 @@ def _static_resume_identity(cfg: TrainConfig, path: Path) -> dict:
     "kind": payload["kind"],
     "task": identity.get("task"),
     "runner_identity": identity.get("runner_identity"),
-    "source_sha256": identity.get("source_sha256"),
     "num_envs": identity.get("num_envs"),
     "env_seed": identity.get("env_seed"),
     "runtime": identity.get("runtime"),

@@ -18,7 +18,7 @@ Checks:
   unsupported artifact kind, missing M) and a REAL weights-only file peeked and
   reloaded on a fresh network (env-count independence is a GPU/check-mode
   matter; the loader contract itself is CPU-checkable);
-* weights rejections: NaN state, same-M moved grid, tampered source hash
+* weights rejections: NaN state and same-M moved grid; legacy source metadata is ignored
   (rejected without the explicit flag, accepted-and-recorded with it),
   wrong-M network;
 * the confirmed manual-zero takeover order on the real scheduler: ALL rows
@@ -32,7 +32,7 @@ Checks:
   of guessing; the clean geometric-fallback key path also maps exactly;
 * GUI intent mailbox semantics (take clears, exit is sticky);
 * CLI contracts: required explicit grid coordinates and the play CLI defaults
-  (clean preset, 1 env, START PAUSED, no allow_source_change);
+  (clean preset, 1 env, START PAUSED);
 * the training runner's ``play()`` refusal points at the explicit task
   entry (message contract, no runner constructed).
 """
@@ -280,7 +280,6 @@ def test_weights_rejection_counterexamples():
       adapter.distribution_provider.log_std.detach().clone()
     )
     base_identity = {
-        "source_sha256": header["source_sha256"],
         "distribution_identity_frozen": "x",
         "network_state_keys": sorted(state),
         "ground_samples": 12,
@@ -332,26 +331,21 @@ def test_weights_rejection_counterexamples():
     else:
       raise AssertionError("same-M moved grid accepted")
 
-    tampered_identity = dict(base_identity)
-    tampered_identity["source_sha256"] = {"some/module.py": "0" * 64}
-    tampered_path = Path(tmp) / "tampered.pt"
+    legacy_identity = dict(base_identity)
+    legacy_identity["source_sha256"] = {"some/module.py": "0" * 64}
+    legacy_path = Path(tmp) / "legacy_source_metadata.pt"
     torch.save(
       {"schema": CHECKPOINT_SCHEMA,
        "kind": "confined_locomotion_weights_only",
-         "identity": tampered_identity, "state": state},
-        tampered_path,
+         "identity": legacy_identity, "state": state},
+        legacy_path,
     )
-    try:
-      load_weights(tampered_path, network=network, provider=None)
-    except CheckpointError as error:
-      assert "allow_source_change" in str(error)
-    else:
-      raise AssertionError("tampered source accepted without the explicit flag")
-    allowed = load_weights(
-        tampered_path, network=network, provider=None,
-        expected_grid_identity=grid.identity(), allow_source_change=True,
+    report = load_weights(
+        legacy_path, network=network, provider=None,
+        expected_grid_identity=grid.identity(),
     )
-    assert allowed["source_change_allowed"] is True
+    assert report["resumable"] is False
+    assert "source_change_allowed" not in report
 
     small = ConfinedLocomotionNetwork(
         mlp_activation=torch.nn.ELU(), init_fn=None,
@@ -732,16 +726,15 @@ def test_play_cli_defaults():
   assert args.grid_y == [-0.3, 0.0, 0.3]
   assert args.parallel_tol is None  # automatic checkpoint-grid case
   assert args.start_running is False  # START PAUSED by default
-  assert args.allow_source_change is False
+  assert not hasattr(args, "allow_source_change")
   assert args.max_steps == 0
   assert args.host == "127.0.0.1"
   assert args.vx == args.vy == args.wz == 0.0
   explicit = module._parse_args([
       *common,
       "--grid-x", "0.1", "0.8", "--grid-y", "-0.3", "0.0", "0.3",
-      "--parallel-tol", "2e-6", "--allow-source-change",
+      "--parallel-tol", "2e-6",
   ])
-  assert explicit.allow_source_change is True
   assert explicit.parallel_tol == 2e-6
   preset = module._parse_args(common + ["--grid-preset", "s1_187"])
   assert preset.grid_preset == "s1_187"

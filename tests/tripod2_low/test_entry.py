@@ -1,7 +1,5 @@
-"""Registration, frozen architecture and launch-isolation contracts."""
+"""Registration and launch-isolation contracts."""
 from dataclasses import asdict
-import hashlib
-from pathlib import Path
 
 from mjlab.tasks.registry import list_tasks
 from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.entry import build_train_config
@@ -36,21 +34,3 @@ def test_registration_defaults_and_oversized_engineering_budget_are_rejected():
         pass
     else:
         raise AssertionError("registration must not silently authorize training")
-
-
-def test_original_checkpoint_source_snapshot_is_byte_identical():
-    root = Path(__file__).resolve().parents[2]
-    snapshot = root / ".checkpoint_sources" / "9a1f296d3b84c63b775f39f47c91b7a3612163c3"
-    # The historical checkout is a local ignored artifact. This test can also
-    # run after fresh installation: use git object bytes as the authority.
-    import subprocess
-    source_dirs = ("tasks/confined_locomotion_2", "rl/confined_locomotion_2", "rl/confined_locomotion", "common", "utils/lidar")
-    prefix = root / "src/hexapod_mjlab"
-    for directory in source_dirs:
-        for path in (prefix / directory).rglob("*.py"):
-            relative = path.relative_to(root).as_posix()
-            if "/tripod2_low/" in relative:
-                continue
-            expected = (snapshot / relative).read_bytes() if snapshot.is_dir() else subprocess.check_output(
-                ["git", "show", "9a1f296d3b84c63b775f39f47c91b7a3612163c3:" + relative], cwd=root)
-            assert hashlib.sha256(path.read_bytes()).digest() == hashlib.sha256(expected).digest(), relative

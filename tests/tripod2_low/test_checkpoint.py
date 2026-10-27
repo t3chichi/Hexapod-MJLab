@@ -1,5 +1,6 @@
 """CPU contract checks; these do not establish GPU simulation resumability."""
 
+import copy
 from contextlib import ExitStack
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -56,9 +57,31 @@ class CheckpointTests(unittest.TestCase):
                                       collector=State(), learning_metrics=State(), task_id=cp.TASK_ID,
                                       phase="ready", _active_buffer=None, current_learning_iteration=1,
                                       total_control_batches=24, total_env_samples=48, device=torch.device("cpu"))
+        identity = {
+            "architecture": cp.architecture_identity(),
+            "seed": 1,
+            "num_envs": 2,
+            "scan_identity": {"scan": "fixture"},
+            "recipe": {
+                "ppo": {}, "symmetry": {}, "perturbations": None,
+                "actuator_sha256": "asset-a",
+                "env_semantics": {
+                    "action": {"stiffness": 1.0},
+                    "rewards": {"reward": 1.0},
+                    "terminations": {"names": [], "time_out": {}},
+                },
+            },
+            "compiled_model": {
+                "dims": {}, "joint_names": [], "actuator_names": [],
+                "actuator_gear": [], "q_ref": [], "options": {},
+            },
+            "warmup_control_steps": cp.WARMUP_CONTROL_STEPS,
+            "source": "fixture",
+        }
+        self.identity = identity
         for target, name, value in (
             (cp, "require_stable", lambda runner: None),
-            (cp, "identity", lambda runner: {"architecture": cp.architecture_identity(), "source": "fixture"}),
+            (cp, "identity", lambda runner: identity),
             (cp.base, "_physics_arrays", lambda env: ({"qpos": tensor()}, {"qpos": "fixture"})),
             (cp.base, "_manager_tensors", lambda env: {"manager": tensor()}),
             (cp.base, "_write_persistent_fields", lambda *args: self.events.append("physics")),
@@ -84,13 +107,39 @@ class CheckpointTests(unittest.TestCase):
         with self.assertRaises(FileExistsError):
             self.save()
 
+    def test_identity_ignores_source_and_device_metadata(self):
+        saved = copy.deepcopy(self.identity)
+        saved["source"] = {"changed.py": "digest"}
+        saved["dependencies"] = {"torch": "9.9.9"}
+        saved["device"] = "cuda:1"
+        saved["recipe"]["execution_mode"] = "speed"
+        cp.base.compare_identity(
+            self.identity, saved, extra_keys=("warmup_control_steps",)
+        )
+        saved["recipe"]["ppo"] = {"lr": 0.1}
+        with self.assertRaisesRegex(ValueError, "training recipe"):
+            cp.base.compare_identity(
+                self.identity, saved, extra_keys=("warmup_control_steps",)
+            )
+
+    def test_apply_failure_freezes_runner(self):
+        path = self.save()
+        with patch.object(cp.base, "_write_persistent_fields",
+                          side_effect=RuntimeError("apply failed")):
+            with self.assertRaisesRegex(RuntimeError, "apply failed"):
+                cp.load_full_checkpoint(self.runner, path)
+        self.assertEqual(self.runner.phase, "faulted")
+        self.assertIn("fault", self.events)
+
     def test_strict_rejection_precedes_mutation(self):
         path = self.save()
         original = torch.load(path, weights_only=False)
         cases = (
             (lambda state: state.update(task=cp.base.TASK_ID), "not a tripod"),
             (lambda state: state.pop("random"), "incomplete"),
-            (lambda state: state["identity"].update(source="tampered"), "identity differs"),
+            (lambda state: state["identity"].update(warmup_control_steps=2), "warmup_control_steps"),
+            (lambda state: state["identity"]["recipe"].update(ppo={"lr": 0.1}), "training recipe"),
+            (lambda state: state["identity"]["recipe"].update(actuator_sha256="asset-b"), "actuator_sha256"),
             (lambda state: state["action"].pop("sea_cell_state"), "action keys differ"),
             (lambda state: state["runtime"].pop("stage_controller"), "runtime keys differ"),
             (lambda state: state["random"].pop("numpy"), "random keys differ"),

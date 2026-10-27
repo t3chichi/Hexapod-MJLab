@@ -54,7 +54,7 @@ python -B scripts/experiments/confined_locomotion_2/train_tripod2_low.py \
   --seed 1 --num-envs 2 --iterations 1 --engineering-validation
 ```
 
-续训使用同入口加`--resume-checkpoint /absolute/path/to/checkpoint.pt`；保持seed、env数、采样、执行模式、保存间隔、源码、资产、依赖和设备身份一致。`--iterations`表示本次追加更新预算。默认4096env仅是配方规模，必须先在目标GPU验证双GRU点云路径的实际显存需求，不自动缩放batch或修改PPO。
+续训使用同入口加`--resume-checkpoint /absolute/path/to/checkpoint.pt`；保持seed、env数、采样、模型/地形配方一致；源码、依赖、设备、执行模式和保存间隔只作记录。`--iterations`表示本次追加更新预算。默认4096env仅是配方规模，必须先在目标GPU验证双GRU点云路径的实际显存需求，不自动缩放batch或修改PPO。
 
 有限确定性均值策略回放，无学习、无隐式reset；翻倒即停止：
 
@@ -65,14 +65,8 @@ python -B scripts/experiments/confined_locomotion_2/play_tripod2_low.py \
 
 此入口生成回放诊断，不是旧任务的交互式Play界面。稀疏采样checkpoint需要保持其选集文件路径和内容。
 
-## 历史checkpoint保护
+## 历史checkpoint兼容
 
-旧源码文件未改动，严格校验未放宽。但旧源码指纹递归包含整个`confined_locomotion_2`目录，新增本子包会使当前checkout的指纹不同。因此历史完整checkpoint应在原源码版本续训，而不是在当前版本强行跨源码恢复。
+2026-10-28 P1 起，checkpoint 不再校验源码路径/SHA。历史完整checkpoint在模型结构、执行器资产哈希、动作/奖励/终止/仿真语义、扫描身份、PPO/训练配方、seed和环境数兼容时可恢复；设备、依赖、执行模式和保存间隔只作记录。仅切换激活重计算方式允许继续训练。恢复失败仍会拒绝并进入 faulted，不会报告成功。
 
-修改前已保存完整原源码快照：
-
-`.checkpoint_sources/9a1f296d3b84c63b775f39f47c91b7a3612163c3/`
-
-该目录为本地忽略资产，不会被新任务指纹扫描；原训练数据和checkpoint不移动。其源码仍执行原来的严格校验。使用相同`hp_mjlab`依赖/设备，从快照根目录运行原训练入口；保留原seed/env数/全部配置，用原日志的绝对`--log-root`和checkpoint路径。脚本会优先加载快照的`src`，无需重装或切换当前editable安装。
-
-可从Git版本`9a1f296d3b84c63b775f39f47c91b7a3612163c3`重新构建该快照；若历史checkpoint指向更早源码或其他GPU，仍须使用其对应版本和设备，不能据此保证任意历史checkpoint都可恢复。新任务的CPU检查会验证旧指纹范围内的原始`.py`文件与该快照逐字节相同。
+修改前保存的本地源码快照 `.checkpoint_sources/9a1f296d3b84c63b775f39f47c91b7a3612163c3/` 仅作为历史资产保留，当前 loader 不再需要它；不要删除用户数据。更早 schema、不同模型或不同扫描/配方仍可能不兼容，以实际加载验证为准。

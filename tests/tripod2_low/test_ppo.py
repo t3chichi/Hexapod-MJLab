@@ -195,3 +195,19 @@ def test_mirrored_observations_do_not_enter_adaptive_kl():
     assert metrics["epoch_0_minibatch_0_kl"] < .005
     assert metrics["epoch_0_minibatch_0_symmetry_loss"] == 9.
     assert trainer.network.bias.grad.abs().sum() > 0
+
+
+def test_execution_mode_change_restores_optimizer_state():
+    low = _trainer(execution_mode="low_memory")
+    state = low.state_dict()
+    speed = _trainer(execution_mode="speed")
+    speed.load_state_dict(state)
+    assert speed.execution_mode == "speed"
+    assert speed.optimizer_step_count == low.optimizer_step_count
+    state["execution_mode"] = "not-a-mode"
+    try:
+        speed.load_state_dict(state)
+    except ValueError as error:
+        assert "execution mode" in str(error)
+    else:
+        raise AssertionError("invalid execution mode accepted")

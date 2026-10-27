@@ -17,9 +17,7 @@ lifecycle with the live local Viser viewer:
   fault saves and freezes permanently (step AND reset refused); collisions
   never pause anything; the 20 s training truncation never fires;
 * default clean observation path; the observation presets (gap/gap_fixed0/range/
-  proprio/all) are explicit and recorded; --allow-source-change is OFF by
-  default and only relaxes the weights-only source-hash rule (never the
-  full-resume rules);
+  proprio/all) are explicit and recorded;
 * the viewer binds 127.0.0.1 only (no public tunnel, no upload); GUI
   callbacks submit intents, the single loop below owns every
   physics/scan/network advance; layer toggles / picking / pausing re-render
@@ -89,10 +87,6 @@ def _parse_args(argv=None) -> argparse.Namespace:
                       help="initial manual vy m/s within [-1.0, 1.0]")
   parser.add_argument("--wz", type=float, default=0.0,
                       help="initial manual omega z rad/s within [-1.0, 1.0]")
-  parser.add_argument("--allow-source-change", action="store_true",
-                      help="explicitly accept the weights-only load under "
-                      "changed source hashes (default OFF; never relaxes "
-                      "full-resume rules)")
   parser.add_argument("--host", default="127.0.0.1",
                       help="viewer bind host (local only; default 127.0.0.1)")
   parser.add_argument("--port", type=int, default=8093,
@@ -213,7 +207,6 @@ def main(argv=None) -> int:
     device="cuda:0",
     num_envs=args.num_envs,
     perturbation_preset=args.preset,
-    allow_source_change=args.allow_source_change,
     initial_command=(args.vx, args.vy, args.wz),
   )
   viewer = None

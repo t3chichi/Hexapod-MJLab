@@ -14,8 +14,8 @@ required fields and inject non-finite values):
   file, another schema, a NON-RESUMABLE artifact or a missing section is
   rejected as a full-resume payload;
 * identity rejections (pure ``_compare_identity``): same M with MOVED grid
-  positions, different M, changed model digest, changed source SHA, changed
-  dependency version, changed device index and changed env count all refuse;
+  positions, different M, changed model structure, changed PPO/config and
+  changed env count all refuse; source/dependency/device metadata is ignored;
 * stable save boundary rejections: fresh/collecting/updating phase, faulted/
   stopped/closed runtime, faulted trainer, active rollout buffer,
   mid-transition context, pending terminal rows, no completed iteration,
@@ -23,15 +23,13 @@ required fields and inject non-finite values):
   fully consistent completed 24/20 boundary alone passes;
 * weights mode: roundtrip (bit-equal params + log_std), no-overwrite, and
   malformed payloads (NaN weight, missing key, wrong ground M, wrong grid
-  identity, changed source) rejected with NO partial mutation of the target
-  network; explicit allow_source_change is the only source-change rule;
+  identity) rejected with NO partial mutation of the target network; source
+  metadata is not a compatibility condition;
 * the default guard stays a non-serialized ClassVar, and the registered
   default factory keeps max_iterations=0 / engineering_enabled=False;
 * runner surface: ``save``/``load`` signatures match the official
   mjlab 1.6.0 base (path/infos; path/load_cfg/strict/map_location), and
   ``load_weights`` exposes the explicit weights-only contract;
-* source identity: current runtime, collector, transition, diagnostics, and
-  checkpoint implementation modules contribute their content digests;
 * finiteness counterexamples: NaN inside the payload refuses; the ONE
   documented ``-inf`` exception (empty-window ``last_time`` with
   ``EMPTY_SCAN_ID``) passes and an inconsistent ``-inf`` refuses.
@@ -59,6 +57,7 @@ from hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint import (
   CHECKPOINT_KIND_WEIGHTS,
   CHECKPOINT_SCHEMA,
   CheckpointError,
+  CheckpointFault,
   _compare_identity,
   _require_stable_save_boundary,
   _validate_payload_finiteness,
@@ -177,10 +176,9 @@ def _base_identity() -> dict:
     "resumable": True,
     "task": "El-4090-Confined-Locomotion-Flat",
     "runner_identity": "El-4090-Confined-Locomotion-Flat/ConfinedLocomotionRunner/mode=engineering",
-    "source_sha256": {"runner.py": "aa", "el_4090_lidar.xml": "bb"},
-    "dependencies": {"torch": "2.11.0", "mjlab": "1.6.0"},
-    "device": {"type": "cuda", "index": 0, "name": "NVIDIA GeForce RTX 4050"},
     "num_envs": 2,
+    "env_seed": 17,
+    "runtime": {"mode": "engineering", "seed": 17},
     "grid": {
       "identity": {
         "x_coords": [0.1, 0.3333333333333333, 0.5666666666666667, 0.8],
@@ -189,8 +187,38 @@ def _base_identity() -> dict:
       },
       "identity_hash": "gridhash",
     },
-    "model": {"digest": "modeldigest", "q_ref": [[0.0] * 18]},
+    "sim": {"timestep": 0.005, "decimation": 4},
+    "rewards": {"weights": {"track_lin_vel": 5.0}},
+    "terminations": {"time_out_flags": {"episode_timeout": True}},
+    "lidar": {"near_points": 256},
+    "wrapper": {"clip_actions": None},
+    "action": {
+      "raw_clip": 100.0,
+      "residual_scale": 0.25,
+      "stiffness": 130.0,
+      "damping": 2.0,
+      "effort_limit": 80.0,
+    },
     "ppo_config": {"learning_rate": 0.001},
+    "trainer_config": {"schema": "trainer/v1"},
+    "symmetry": {"enabled": False},
+    "distribution_identity_frozen": "normal-18",
+    "observation_perturbations": {"mode": "clean"},
+    "model": {
+      "dims": {"nq": 25, "nv": 24, "nu": 18},
+      "joint_names": ["joint_a"],
+      "actuator_names": ["actuator_a"],
+      "actuator_gear": [1.0],
+      "q_ref": [0.0] * 18,
+      "options": {"timestep": 0.005},
+      "compiled_binary_sha256": "binary",
+      "digest": "modeldigest",
+    },
+    # Legacy metadata: recorded by older files, never a resume condition.
+    "source_sha256": {"runner.py": "aa"},
+    "dependencies": {"torch": "2.11.0"},
+    "device": {"type": "cuda", "index": 0, "name": "NVIDIA GeForce RTX 4050"},
+    "torch_precision": {"tf32_disabled": True},
   }
 
 
@@ -221,14 +249,24 @@ def test_identity_rejects_different_m():
     raise AssertionError("different M accepted")
 
 
-def test_identity_rejects_model_source_dependency_device_and_env_changes():
+def test_identity_ignores_source_dependency_device_and_precision_metadata():
+  saved = _base_identity()
+  saved["source_sha256"] = {"runner.py": "changed"}
+  saved["dependencies"] = {"torch": "9.9.9"}
+  saved["device"] = {"type": "cuda", "index": 1, "name": "other"}
+  saved["torch_precision"] = {"tf32_disabled": False}
+  saved["surprise"] = "extra metadata"
+  _compare_identity(_base_identity(), saved)
+
+
+def test_identity_rejects_model_and_training_semantic_changes():
   for mutate, expected in (
-    (lambda s: s["model"].__setitem__("digest", "other"), "model"),
-    (lambda s: s["source_sha256"].__setitem__("runner.py", "zz"), "source_sha256"),
-    (lambda s: s["dependencies"].__setitem__("mjlab", "1.7.0"), "dependencies"),
-    (lambda s: s["device"].__setitem__("index", 1), "device"),
+    (lambda s: s["model"].__setitem__("joint_names", ["other"]), "model"),
+    (lambda s: s["model"].__setitem__("q_ref", [1.0] * 18), "model"),
+    (lambda s: s["action"].__setitem__("stiffness", 131.0), "action"),
     (lambda s: s.__setitem__("num_envs", 4), "num_envs"),
     (lambda s: s["ppo_config"].__setitem__("learning_rate", 0.002), "ppo_config"),
+    (lambda s: s["runtime"].__setitem__("mode", "training"), "runtime"),
   ):
     saved = _base_identity()
     mutate(saved)
@@ -240,24 +278,21 @@ def test_identity_rejects_model_source_dependency_device_and_env_changes():
       raise AssertionError(f"identity change on {expected} accepted")
 
 
-def test_identity_rejects_extra_and_missing_keys():
-  extra = _base_identity()
-  extra["surprise"] = 1
-  try:
-    _compare_identity(_base_identity(), extra)
-  except CheckpointError as error:
-    assert "surprise" in str(error)
-  else:
-    raise AssertionError("unknown extra identity key accepted")
+def test_identity_ignores_legacy_missing_action_block():
+  legacy = _base_identity()
+  legacy.pop("action")
+  _compare_identity(_base_identity(), legacy)
 
+
+def test_identity_rejects_missing_required_model_structure():
   missing = _base_identity()
   missing.pop("model")
   try:
     _compare_identity(_base_identity(), missing)
   except CheckpointError as error:
-    assert "missing" in str(error) and "model" in str(error)
+    assert "compiled-model structure" in str(error)
   else:
-    raise AssertionError("missing identity key accepted")
+    raise AssertionError("missing compiled-model structure accepted")
 
 
 # ═══════════════════════ stable save boundary rejections ═══════════════════
@@ -389,6 +424,48 @@ def test_weights_roundtrip_bit_exact_and_no_overwrite():
                        fresh.distribution_provider.log_std)
 
 
+def test_load_apply_failure_freezes_and_does_not_report_success():
+  from unittest.mock import patch
+
+  from hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint import (
+    load_full_checkpoint,
+  )
+
+  with tempfile.TemporaryDirectory() as tmp_name:
+    tmp = Path(tmp_name)
+    target = tmp / "checkpoint.pt"
+    torch.save({"schema": CHECKPOINT_SCHEMA}, target)
+    events = []
+    runner = SimpleNamespace(
+      device=torch.device("cuda:0"),
+      _lifecycle_phase="fresh",
+      log_dir=tmp,
+      _records=[],
+      recipe={"mode": "engineering"},
+      runtime=SimpleNamespace(
+        _faulted=False, _stopped=False, _closed=False,
+        _context=SimpleNamespace(phase="idle"),
+        _save_fault=lambda *args, **kwargs: events.append("fault"),
+      ),
+      trainer=SimpleNamespace(faulted=False),
+    )
+    with patch.object(checkpoint_module, "_entry_accounting", return_value={}), \
+         patch.object(checkpoint_module, "_validate_full_payload"), \
+         patch.object(checkpoint_module, "_apply_full_checkpoint",
+                      side_effect=RuntimeError("apply boom")):
+      try:
+        load_full_checkpoint(runner, target)
+      except CheckpointFault as error:
+        assert "apply boom" in str(error)
+      else:
+        raise AssertionError("apply failure reported success")
+    assert runner._lifecycle_phase == "faulted"
+    assert events == ["fault"]
+    assert not any(record.get("kind") == "checkpoint_loaded"
+                   for record in runner._records)
+    assert (tmp / "load_fault.json").is_file()
+
+
 def test_weights_malformed_payloads_reject_without_partial_mutation():
   source = _make_adapter()
   fresh = _make_adapter(seed=_SEED + 7)
@@ -419,7 +496,7 @@ def test_weights_malformed_payloads_reject_without_partial_mutation():
       assert _params_digest(fresh) == digest_before, f"partial mutation: {name}"
 
 
-def test_weights_grid_and_source_rules():
+def test_weights_grid_rules_and_source_metadata_ignored():
   adapter = _make_adapter()
   with tempfile.TemporaryDirectory() as tmp_name:
     tmp = Path(tmp_name)
@@ -449,23 +526,19 @@ def test_weights_grid_and_source_rules():
     else:
       raise AssertionError("different M accepted in weights mode")
 
-    mutated = _write_mutated_weights(
+    legacy = _write_mutated_weights(
       tmp, adapter,
-      lambda payload: payload["identity"]["source_sha256"].__setitem__(
-        "runner.py", "changed"),
-      name="source_changed.pt",
+      lambda payload: payload["identity"].__setitem__(
+        "source_sha256", {"runner.py": "changed"}),
+      name="legacy_source_metadata.pt",
     )
-    try:
-      load_weights(mutated, network=fresh.network,
-                   provider=fresh.distribution_provider)
-    except CheckpointError as error:
-      assert "source" in str(error)
-    else:
-      raise AssertionError("source change accepted without the explicit rule")
-    report = load_weights(mutated, network=fresh.network,
-                          provider=fresh.distribution_provider,
-                          allow_source_change=True)
-    assert report["source_change_allowed"] is True
+    report = load_weights(
+      legacy, network=fresh.network,
+      provider=fresh.distribution_provider,
+    )
+    assert report["resumable"] is False
+    assert "source_change_allowed" not in report
+    assert "source_matches_current" not in report
 
 
 # ═══════════════════════ default guard unchanged ══════════════════════════
@@ -504,9 +577,8 @@ def test_runner_save_load_match_official_mjlab_signatures():
   assert official_load == ["self", "path", "load_cfg", "strict", "map_location"]
   assert task_load[: len(official_load)] == official_load
   weights_params = inspect.signature(ConfinedLocomotionRunner.load_weights).parameters
-  assert {"network", "provider", "expected_grid_identity", "allow_source_change"} <= set(
-    weights_params
-  )
+  assert {"network", "provider", "expected_grid_identity"} <= set(weights_params)
+  assert "allow_source_change" not in weights_params
 
 
 # ═══════════════════════ finiteness counterexamples ═══════════════════════
@@ -550,27 +622,6 @@ def test_finiteness_with_window_minus_inf_semantics():
 
 
 # ═══════════════════════ check-entry surface pinned ═══════════════════════
-
-
-def test_current_source_identity_hashes_function_dependencies():
-  from hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint import _source_identity
-
-  sources = _source_identity()
-  required = {
-    "hexapod_mjlab.tasks.confined_locomotion.runtime",
-    "hexapod_mjlab.tasks.confined_locomotion.collector",
-    "hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint",
-    "hexapod_mjlab.tasks.confined_locomotion.rl.runner",
-    "hexapod_mjlab.rl.confined_locomotion.inference",
-    "common/checkpoint.py",
-    "common/transition.py",
-    "common/diagnostics.py",
-    "common/mdp/actions.py",
-    "common/mdp/rewards.py",
-  }
-  assert required <= set(sources)
-  assert not any(key.startswith("hexapod_mjlab.tasks.el_4090_lidar") for key in sources)
-  assert all(len(digest) == 64 for digest in sources.values())
 
 
 def test_runtime_feature_cache_is_absent_from_strict_weight_state_dict():

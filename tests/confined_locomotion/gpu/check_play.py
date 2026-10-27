@@ -32,8 +32,6 @@ def _args(argv=None):
   parser.add_argument("--preset", choices=PRESETS, default="clean")
   parser.add_argument("--max-steps", type=int, default=600,
                       help="natural mean-step budget (default: 600)")
-  parser.add_argument("--allow-source-change", action="store_true",
-                      help="explicitly allow changed source hashes for weights-only play")
   add_common_arguments(parser)
   return parser.parse_args(argv)
 
@@ -49,7 +47,6 @@ def _session(out: Path, *, args, grid, suffix: str = "play"):
     device=f"cuda:{args.gpu}",
     num_envs=args.num_envs,
     perturbation_preset=args.preset,
-    allow_source_change=args.allow_source_change,
   )
 
 
@@ -129,7 +126,6 @@ def _check_weights_only(out: Path, *, args, grid) -> dict:
         ground_grid=moved_grid,
         device=f"cuda:{args.gpu}",
         num_envs=args.num_envs,
-        allow_source_change=True,
       )
       checks["same_M_moved_grid_rejected_before_env_construction"] = False
     except PlayConfigError:
@@ -165,7 +161,7 @@ def _check_weights_only(out: Path, *, args, grid) -> dict:
   network = build_network(seed=args.seed + 1, ground_samples=grid.num_points, device=f"cuda:{args.gpu}")
   report = load_weights(
     args.checkpoint.expanduser().resolve(), network=network, provider=None,
-    expected_grid_identity=grid.identity(), allow_source_change=args.allow_source_change,
+    expected_grid_identity=grid.identity(),
   )
   checks["fresh_network_load_is_weights_only_and_env_count_independent"] = (
     report.get("resumable") is False

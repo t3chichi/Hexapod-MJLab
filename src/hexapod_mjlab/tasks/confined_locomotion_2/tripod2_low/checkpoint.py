@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.metadata
 from dataclasses import fields, is_dataclass
 import os
 from pathlib import Path
@@ -35,8 +34,6 @@ def architecture_identity(far_sampling="all_endpoints"):
 def identity(runner):
     result = base.identity(runner)
     result["warmup_control_steps"] = WARMUP_CONTROL_STEPS
-    result["dependencies"] = {name: importlib.metadata.version(name) for name in
-                              ("numpy", "mjlab", "mujoco", "warp-lang", "mujoco-warp")}
     return result
 
 
@@ -204,8 +201,8 @@ def load_full_checkpoint(runner, path):
         raise RuntimeError("load requires a fresh or stable runner")
     payload = read_checkpoint(path, expected_far_sampling=runner.runtime.lidar_cfg.far_sampling,
                               expected_task_id=runner.task_id)
-    if payload["identity"] != identity(runner):
-        raise ValueError("full resume identity differs (task/source/recipe/model/device/dependencies)")
+    base.compare_identity(identity(runner), payload["identity"],
+                          extra_keys=("warmup_control_steps",))
     env = runner.runtime.env
     action, action_state = _action_tensors(env)
     physics, _ = base._physics_arrays(env)

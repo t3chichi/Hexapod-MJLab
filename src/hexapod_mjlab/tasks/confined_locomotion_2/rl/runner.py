@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -83,6 +84,38 @@ def format_iteration_summary(iteration, target_iteration, num_envs, scalars):
     if "Performance/checkpoint_s" in scalars:
         lines.append(f"周期保存 {metric('Performance/checkpoint_s', '.2f')} s")
     return "\n".join(lines)
+
+
+def environment_semantics(env):
+    """Compact action/reward/termination/sim identity for new checkpoints."""
+    base = getattr(env, "unwrapped", env)
+    action = base.action_manager.get_term("residual_pd")
+    action_fields = {}
+    for name in ("raw_clip", "residual_scale", "stiffness", "damping", "effort_limit"):
+        value = getattr(action.cfg, name, None)
+        if value is not None:
+            numeric = float(value)
+            # Legacy LSTM actuators use inf for "no effort clip"; keep the
+            # identity JSON-safe without changing the value's meaning.
+            action_fields[name] = numeric if math.isfinite(numeric) else str(numeric)
+    return {
+        "action": action_fields,
+        "rewards": {
+            name: float(term.weight) for name, term in base.cfg.rewards.items()
+        },
+        "terminations": {
+            "names": sorted(base.cfg.terminations),
+            "time_out": {
+                name: bool(getattr(term, "time_out", False))
+                for name, term in base.cfg.terminations.items()
+            },
+        },
+        "sim": {
+            "timestep": float(base.cfg.sim.mujoco.timestep),
+            "decimation": int(base.cfg.decimation),
+            "step_dt": float(base.step_dt),
+        },
+    }
 
 
 def resolve_recipe(cfg):
@@ -206,6 +239,19 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
             lidar_cfg=resolved["lidar_cfg"],
             perturbation_cfg=resolved["perturbations"],
             **({"height_grid": resolved["height_grid"]} if terrain else {}))
+        self.recipe_identity["env_semantics"] = environment_semantics(self.runtime.env)
+        from hexapod_mjlab.common.mdp.terminations import (
+            FLIP_THRESHOLD_COS,
+            LOW_HEIGHT_PERSISTENCE_STEPS,
+            LOW_HEIGHT_THRESHOLD_M,
+            TILT_THRESHOLD_COS,
+        )
+        self.recipe_identity["env_semantics"]["termination_thresholds"] = {
+            "low_height_threshold_m": float(LOW_HEIGHT_THRESHOLD_M),
+            "low_height_persistence_steps": int(LOW_HEIGHT_PERSISTENCE_STEPS),
+            "tilt_threshold_cos": float(TILT_THRESHOLD_COS),
+            "flip_threshold_cos": float(FLIP_THRESHOLD_COS),
+        }
         # Store the resolved scanner identity, not the user's absolute path to
         # its selection file. Identical selection content remains resumable
         # after the asset is moved to another checkout or directory.

@@ -677,14 +677,13 @@ def test_close_error_freezes_all_continuation_surfaces():
     frozen_runtime.step(torch.zeros((1, 18)))
 
 
-def test_formal_resume_preflight_checks_v3_kind_mode_grid_seed_and_source():
+def test_formal_resume_preflight_checks_v3_kind_mode_grid_and_seed():
   import copy
   import torch
 
   from hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint import (
     CHECKPOINT_KIND_FULL,
     CHECKPOINT_SCHEMA,
-    _source_identity,
   )
   from hexapod_mjlab.tasks.confined_locomotion.rl.entry import (
     FormalTrainingConfigError,
@@ -704,7 +703,6 @@ def test_formal_resume_preflight_checks_v3_kind_mode_grid_seed_and_source():
   identity = {
     "task": TASK_ID,
     "runner_identity": "El-4090-Confined-Locomotion-Flat/ConfinedLocomotionRunner/mode=formal_training",
-    "source_sha256": _source_identity(),
     "num_envs": 2,
     "env_seed": 17,
     "runtime": {"mode": "training", "seed": 17},
@@ -740,7 +738,6 @@ def test_formal_resume_preflight_checks_v3_kind_mode_grid_seed_and_source():
     for field, mutate in (
       ("mode", lambda item: item["runtime"].update(mode="engineering")),
       ("grid", lambda item: item["grid"].update(identity_hash="other-grid")),
-      ("source", lambda item: item["source_sha256"].update({"runner.py": "changed"})),
     ):
       changed = copy.deepcopy(payload)
       mutate(changed["identity"])

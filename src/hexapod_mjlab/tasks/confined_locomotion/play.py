@@ -35,9 +35,10 @@ training checkpoint may
 serve as a WEIGHTS-ONLY source — fresh T1 physics, a new play seed and the
 manual command lifecycle; this is NOT a training continuation and never
 restores Adam/physics/RNG/lifecycle), task id, ground-head M, grid identity
-(same-M-moved-positions included) and — unless the explicit
-``allow_source_change=True`` rule is passed — the frozen source hashes.
-mean_dev artifacts, fault/stop scenes and v1 files are rejected outright.
+(same-M-moved-positions included), compiled-model structure, sim, lidar,
+rewards and termination semantics. Source hashes are not a compatibility
+condition. mean_dev artifacts, fault/stop scenes and v1 files are rejected
+outright.
 
 Ownership/threading: ONE owner loop advances everything (``step_once``:
 prepare at the pre-action identity → single no-grad forward →
@@ -88,7 +89,6 @@ from .rl.checkpoint import (
   CHECKPOINT_SCHEMA,
   _compiled_model_identity,
   _lidar_identity,
-  _source_identity,
   load_weights,
 )
 from .commands import TrainingCommandScheduler
@@ -234,7 +234,7 @@ def _compare_compiled_model_identity(saved: dict, current: dict) -> tuple[list[s
 
 
 def peek_checkpoint_header(path) -> dict:
-  """Read a checkpoint's IDENTITY header (schema/kind/task/M/grid/source).
+  """Read a checkpoint's IDENTITY header (schema/kind/task/M/grid).
 
   Loads the file once on CPU (the same payload ``load_weights`` consumes
   later) and returns the identity fields the play construction needs plus
@@ -289,7 +289,6 @@ def peek_checkpoint_header(path) -> dict:
     "ground_samples": int(ground_samples),
     "grid_identity": grid_identity,
     "grid_identity_hash": grid_identity_hash,
-    "source_sha256": identity.get("source_sha256"),
     "dependencies": identity.get("dependencies"),
     "saved_identity": identity if kind == CHECKPOINT_KIND_FULL else None,
     "source_kind_note": (
@@ -438,7 +437,6 @@ class PlaySession:
     device: str = "cuda:0",
     num_envs: int = 1,
     perturbation_preset: str = "clean",
-    allow_source_change: bool = False,
     initial_command: tuple[float, float, float] = (0.0, 0.0, 0.0),
     env_seed: int | None = None,
     use_feature_cache: bool = True,
@@ -467,11 +465,6 @@ class PlaySession:
         f"use_feature_cache must be an explicit bool, got {use_feature_cache!r}"
       )
     self.use_feature_cache = use_feature_cache
-    if not isinstance(allow_source_change, bool):
-      raise PlayConfigError(
-        f"allow_source_change must be an explicit bool, got {allow_source_change!r}"
-      )
-    self.allow_source_change = allow_source_change
     self._validated_initial_command = self._validate_command(initial_command)
 
     device_obj = torch.device(device)
@@ -572,7 +565,6 @@ class PlaySession:
         network=self.network,
         provider=None,  # mean-only play: no Normal provider is ever created
         expected_grid_identity=self.grid_cfg.identity(),
-        allow_source_change=self.allow_source_change,
       )
     except BaseException:
       self.close()
@@ -623,9 +615,6 @@ class PlaySession:
       "created": self.created_at,
       "checkpoint": self.header,
       "checkpoint_compatibility": self.full_identity_report,
-      "play_source_sha256": self._play_source_identity(),
-      "current_checkpoint_source_sha256": _source_identity(),
-      "allow_source_change": self.allow_source_change,
       "weight_load_report": self.weight_report,
       "network": {
         "class": type(self.network).__name__,
@@ -753,16 +742,6 @@ class PlaySession:
         )
     return values
 
-  def _play_source_identity(self) -> dict[str, str]:
-    repo = Path(__file__).resolve().parents[4]
-    paths = {
-      "play.py": Path(__file__).resolve(),
-      "visualization/geometry.py": Path(__file__).parent / "visualization" / "geometry.py",
-      "visualization/play.py": Path(__file__).parent / "visualization" / "play.py",
-      "scripts/experiments/confined_locomotion/play.py": repo / "scripts/experiments/confined_locomotion/play.py",
-    }
-    return {name: _file_sha256(path) for name, path in paths.items()}
-
   def _current_runtime_identity(self) -> dict:
     from .flat_env_cfg import DECIMATION, SIM_TIMESTEP_S
     from hexapod_mjlab.common.mdp.rewards import CONTROL_DT_S, TRAINING_REWARD_WEIGHTS
@@ -857,25 +836,10 @@ class PlaySession:
       mismatches.append(f"model_fields:{model_mismatches}")
     if not q_ref_valid:
       mismatches.append("model.q_ref_not_same_T1_reference_across_env_counts")
-    # A source override is never permission to change the physical model or
-    # the PD/T1 implementation baked into a full training checkpoint.
-    saved_sources = saved.get("source_sha256") or {}
-    current_sources = _source_identity()
-    critical_source_keys = (
-      "hexapod_mjlab.tasks.confined_locomotion.flat_env_cfg",
-      "common/mdp/actions.py",
-      Path(__file__).resolve().parents[2].joinpath(
-        "assets", "robots", "el_4090", "mjcf", "el_4090_lidar.xml"
-      ).name,
-    )
-    critical_source_mismatches = [
-      key for key in critical_source_keys
-      if saved_sources.get(key) != current_sources.get(key)
-    ]
-    if mismatches or critical_source_mismatches:
+    if mismatches:
       raise PlayConfigError(
         "FULL weights-only play identity mismatch: "
-        f"fields={mismatches}, critical_source_files={critical_source_mismatches}"
+        f"fields={mismatches}"
       )
     return {
       "kind": CHECKPOINT_KIND_FULL,
@@ -883,15 +847,10 @@ class PlaySession:
       "verified": True,
       "matched_fields": sorted(checks),
       "model_fields_matched_ignoring_repeated_q_ref_batch_and_batch_digest": True,
-      "critical_source_files_matched": list(critical_source_keys),
       "pd_configuration_basis": (
-        "the FULL identity has no separate PD-gain fields; strict hashes "
-        "for flat_env_cfg and mdp.actions match, the live raw_clip/scale/"
-        "stiffness/damping/effort_limit are recorded, and saved T1 q_ref was "
-        "compared across env counts"
-      ),
-      "source_sha_override_only_releases_noncritical_source_hash_matching": (
-        self.allow_source_change
+        "the FULL identity has no separate PD-gain fields; the live raw_clip/"
+        "scale/stiffness/damping/effort_limit are recorded, and saved T1 q_ref "
+        "was compared across env counts"
       ),
       "full_resume": False,
       "note": "validated FULL identity, then loaded network weights only",

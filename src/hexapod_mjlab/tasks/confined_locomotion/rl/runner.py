@@ -965,7 +965,6 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
     network=None,
     provider=None,
     expected_grid_identity=None,
-    allow_source_change: bool = False,
   ) -> dict:
     """Weights-only load for task play: full key set + optional 18-dim log_std.
 
@@ -987,7 +986,6 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         self.grid_cfg.identity() if expected_grid_identity is None
         else expected_grid_identity
       ),
-      allow_source_change=allow_source_change,
     )
 
   # ── explicitly refused pending capabilities ──────────────────────────────

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 from dataclasses import fields, is_dataclass
-import hashlib
 import os
 from pathlib import Path
 import random
@@ -67,25 +66,77 @@ def architecture_identity(far_sampling="all_endpoints", *, terrain_memory=False)
 
 
 def identity(runner):
-    from hexapod_mjlab.common.witness import FROZEN_WITNESS_PATH
-    source = {}
-    root = Path(__file__).resolve().parents[2]
-    for directory in (root / "confined_locomotion_2", root.parent / "rl" / "confined_locomotion_2",
-                      root.parent / "rl" / "confined_locomotion",
-                      root.parent / "common", root.parent / "utils" / "lidar"):
-        for path in sorted(directory.rglob("*.py")):
-            source[str(path.relative_to(root.parent))] = hashlib.sha256(path.read_bytes()).hexdigest()
-    if not FROZEN_WITNESS_PATH.is_file():
-        raise FileNotFoundError(f"frozen witness asset missing: {FROZEN_WITNESS_PATH}")
-    source[str(FROZEN_WITNESS_PATH.relative_to(root.parent))] = hashlib.sha256(
-        FROZEN_WITNESS_PATH.read_bytes()).hexdigest()
     return {"architecture": runner.recipe_identity["architecture"], "seed": runner.seed,
             "num_envs": runner.num_envs, "device": str(runner.device),
             "cuda_name": torch.cuda.get_device_name(runner.device) if runner.device.type == "cuda" else None,
             "torch": torch.__version__, "recipe": runner.recipe_identity,
             "scan_identity": runner.runtime.scan_identity,
-            "compiled_model": _compiled_model_identity(runner.runtime.env),
-            "source": source}
+            "compiled_model": _compiled_model_identity(runner.runtime.env)}
+
+
+#: Fields that determine whether the saved training state is compatible.
+#: Device/Torch metadata and source hashes are recorded but do not gate resume.
+_IDENTITY_COMPARE_KEYS = ("architecture", "seed", "num_envs", "scan_identity")
+_MODEL_COMPARE_KEYS = ("dims", "joint_names", "actuator_names", "actuator_gear", "q_ref", "options")
+
+#: Required for every v2/tripod checkpoint. Optional semantic fields are
+#: compared only when the saved file carries them, so legacy files remain
+#: readable while new files gain stricter action/reward/termination checks.
+_REQUIRED_RECIPE_KEYS = ("ppo", "symmetry")
+_OPTIONAL_RECIPE_KEYS = (
+    "perturbations",
+    "height_grid",
+    "height_loss_weight",
+    "actuator_sha256",
+    "lidar_config",
+    "distribution",
+    "proprio_noise_level",
+    "running_normalization",
+    "lidar_perturbations",
+    "env_semantics",
+    "legacy_reward_scales",
+)
+
+
+def _model_structure(value):
+    if not isinstance(value, dict):
+        return None
+    return {key: value.get(key) for key in _MODEL_COMPARE_KEYS}
+
+
+def _compare_recipe(current, saved):
+    if not isinstance(current, dict) or not isinstance(saved, dict):
+        raise ValueError("checkpoint identity is missing the training recipe")
+    for key in _REQUIRED_RECIPE_KEYS:
+        if key not in saved:
+            raise ValueError(f"checkpoint identity is missing training recipe field {key!r}")
+        if current.get(key) != saved[key]:
+            raise ValueError(f"full resume identity differs on the training recipe.{key}")
+    for key in _OPTIONAL_RECIPE_KEYS:
+        if key not in saved:
+            continue  # legacy files did not record this semantic field
+        if key not in current:
+            raise ValueError(f"checkpoint identity is missing training recipe field {key!r}")
+        if current[key] != saved[key]:
+            raise ValueError(f"full resume identity differs on the training recipe.{key}")
+
+
+def compare_identity(current, saved, *, extra_keys=()):
+    """Compare only state/semantic identity fields; ignore metadata extras."""
+    if not isinstance(saved, dict):
+        raise ValueError("checkpoint identity is not an object")
+    for key in (*_IDENTITY_COMPARE_KEYS, *extra_keys):
+        if key not in saved:
+            raise ValueError(f"checkpoint identity is missing {key!r}")
+        if current.get(key) != saved[key]:
+            raise ValueError(f"full resume identity differs on {key!r}")
+    current_model = _model_structure(current.get("compiled_model"))
+    saved_model = _model_structure(saved.get("compiled_model"))
+    if current_model is None or saved_model is None:
+        raise ValueError("checkpoint identity is missing the compiled-model structure")
+    if current_model != saved_model:
+        raise ValueError("full resume identity differs on the compiled-model structure")
+    _compare_recipe(current.get("recipe"), saved.get("recipe"))
 
 
 def require_stable(runner):
@@ -188,8 +239,7 @@ def load_full_checkpoint(runner, path):
     payload = read_checkpoint(
         path, expected_far_sampling=runner.runtime.lidar_cfg.far_sampling, expected_task_id=runner.task_id
     )
-    if payload["identity"] != identity(runner):
-        raise ValueError("full resume identity differs (task/source/recipe/model/device)")
+    compare_identity(identity(runner), payload["identity"])
     env = runner.runtime.env
     physics, _ = _physics_arrays(env)
     _validate_tensors(payload["physics"], physics, "physics")

@@ -18,9 +18,15 @@ from hexapod_mjlab.rl.confined_locomotion.distribution import derive_action_gene
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
 from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
 from ..collector import TrainingCollector
-from ..rl.runner import ConfinedLocomotionRunner, format_iteration_summary, optimizer_scalar_summary
+from ..rl.runner import (
+    ConfinedLocomotionRunner,
+    environment_semantics,
+    format_iteration_summary,
+    optimizer_scalar_summary,
+)
 from ..scanner import ConfinedLidarCfg
 from .actuator import ACTUATOR_PATH
+from .legacy import reward_scales
 from .checkpoint import architecture_identity, load_full_checkpoint, save_full_checkpoint
 from .env import TASK_ID
 from .ppo import LegacyNormalProvider, LegacyPPOConfig, LegacyPPOTrainer
@@ -155,6 +161,10 @@ class TripodRunner(ConfinedLocomotionRunner):
             "lidar_config": asdict(lidar),
             "distribution": self.provider.distribution_identity(),
             "actuator_sha256": hashlib.sha256(ACTUATOR_PATH.read_bytes()).hexdigest(),
+            "env_semantics": environment_semantics(env),
+            "legacy_reward_scales": {
+                str(stage): reward_scales(stage) for stage in (0, 1)
+            },
             "warmup_control_steps": 1, "proprio_noise_level": 1.5,
             "running_normalization": False, "lidar_perturbations": None,
             "precision": "FP32, TF32 off, cuDNN RNN IEEE, no AMP",

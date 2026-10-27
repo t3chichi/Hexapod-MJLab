@@ -1,3 +1,4 @@
+import copy
 from dataclasses import asdict
 
 from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import (
@@ -5,6 +6,82 @@ from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import (
 )
 from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import resolve_recipe
 from hexapod_mjlab.tasks.confined_locomotion_2.rl.entry import build_formal_train_config
+
+
+def _checkpoint_identity():
+    return {
+        "architecture": {"task": "fixture", "control_hz": 50},
+        "seed": 1,
+        "num_envs": 2,
+        "scan_identity": {"catalog": "fixture", "mode": "full"},
+        "compiled_model": {
+            "dims": {"nq": 25, "nu": 18},
+            "joint_names": ["RF_HAA"],
+            "actuator_names": ["RF_HAA"],
+            "actuator_gear": [1.0],
+            "q_ref": [0.0],
+            "options": {"timestep": 0.005},
+            "compiled_binary_sha256": "binary",
+        },
+        "recipe": {
+            "ppo": {"learning_rate": 0.001},
+            "symmetry": {"enabled": True},
+            "perturbations": {"mode": "all"},
+            "env_semantics": {
+                "action": {"stiffness": 130.0, "damping": 2.0},
+                "rewards": {"track_lin_vel": 5.0},
+                "terminations": {"names": ["fall"], "time_out": {"fall": False}},
+                "sim": {"timestep": 0.005, "decimation": 4},
+            },
+        },
+    }
+
+
+def test_identity_compares_optional_semantics_without_legacy_breakage():
+    from hexapod_mjlab.tasks.confined_locomotion_2.rl.checkpoint import compare_identity
+
+    current = _checkpoint_identity()
+    compare_identity(current, copy.deepcopy(current))
+
+    changed = copy.deepcopy(current)
+    changed["recipe"]["env_semantics"]["action"]["stiffness"] = 131.0
+    try:
+        compare_identity(current, changed)
+    except ValueError as error:
+        assert "training recipe" in str(error)
+    else:
+        raise AssertionError("action semantics change accepted")
+
+    legacy = copy.deepcopy(current)
+    legacy["recipe"].pop("env_semantics")
+    compare_identity(current, legacy)
+
+    low_memory = copy.deepcopy(current)
+    low_memory["recipe"]["execution_mode"] = "low_memory"
+    speed = copy.deepcopy(low_memory)
+    speed["recipe"]["execution_mode"] = "speed"
+    compare_identity(low_memory, speed)
+
+    actuator = copy.deepcopy(current)
+    actuator["recipe"]["actuator_sha256"] = "asset-a"
+    compare_identity(actuator, copy.deepcopy(actuator))
+    changed_actuator = copy.deepcopy(actuator)
+    changed_actuator["recipe"]["actuator_sha256"] = "asset-b"
+    try:
+        compare_identity(actuator, changed_actuator)
+    except ValueError as error:
+        assert "actuator_sha256" in str(error)
+    else:
+        raise AssertionError("actuator identity change accepted")
+
+    changed_model = copy.deepcopy(current)
+    changed_model["compiled_model"]["q_ref"] = [1.0]
+    try:
+        compare_identity(current, changed_model)
+    except ValueError as error:
+        assert "compiled-model" in str(error)
+    else:
+        raise AssertionError("model structure change accepted")
 
 
 def test_registry_keeps_original_and_new_task_separate_and_defaults_guarded():

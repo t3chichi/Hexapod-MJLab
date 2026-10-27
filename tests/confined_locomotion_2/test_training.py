@@ -431,7 +431,7 @@ def test_prepacked_point_inputs_match_online_encoder_and_recompute_gradients():
     assert torch.equal(net.encode_point_sequence(empty), torch.zeros(4, 187))
 
 
-def test_execution_mode_controls_only_recomputation_and_is_strictly_restored():
+def test_execution_mode_controls_only_recomputation_and_cross_mode_restore():
     import hexapod_mjlab.rl.confined_locomotion_2.ppo as ppo
 
     seen = []
@@ -448,12 +448,15 @@ def test_execution_mode_controls_only_recomputation_and_is_strictly_restored():
             assert state["execution_mode"] == mode
             trainer.load_state_dict(state)
             state["execution_mode"] = "speed" if recompute else "low_memory"
+            trainer.load_state_dict(state)
+            assert trainer.execution_mode == mode
+            state["execution_mode"] = "bogus"
             try:
                 trainer.load_state_dict(state)
-            except ValueError:
-                pass
+            except ValueError as error:
+                assert "execution mode" in str(error)
             else:
-                raise AssertionError("cross-mode strict restore accepted")
+                raise AssertionError("invalid saved execution mode accepted")
     finally:
         ppo.replay_sequence = original
 

@@ -18,19 +18,17 @@ Three STRICTLY separated modes (authority: 首版训练实施计划.md §4.6):
    phase/next-event/scheduled-ε, per-row proprio noise cache, draw counters)
    whenever the run is perturbed; a clean run saves an explicit None and
    never resumes into a perturbed runtime (the noise recipe is part of the
-   identity). Same CUDA device/model/config/env-count/grid/source/perturbation-
-   recipe only; a source, dependency, grid (same M with moved positions
-   included), model, device, env-count or noise-recipe mismatch is REJECTED —
-   never silently relaxed into a "cross-device equivalent" resume. v1 (P5)
-   files are rejected by the schema outright.
+   identity). The same model/config/env-count/grid/scan/perturbation recipe is
+   required; a grid (same M with moved positions included), model, env-count,
+   PPO/config or noise-recipe mismatch is REJECTED. Device, dependency versions
+   and source hashes are recorded metadata, not resume gates. v1 (P5) files are
+   rejected by the schema outright.
 2. **Weights only** (``save_weights_only``/``load_weights``): the shared
    network + four heads + all buffers and the OPTIONAL 18-dim log_std. No
    Adam/physics/RNG/lifecycle is touched and NOTHING about continuation is
    claimed (``resumable=False``). The env count may differ; the grid
    positions/sizes and the full key set are still strictly matched (not just
-   the actor head). External source changes are only accepted behind the
-   explicit independent rule ``allow_source_change=True`` — never for full
-   resume.
+   the actor head). Source hashes are not a compatibility condition.
 3. Fault/stop scenes and engineering artifacts stay NON-RESUMABLE
    diagnostics; containing an Adam state never makes them a full resume.
 
@@ -42,7 +40,7 @@ transition's final cache (``prepare`` re-reads are identity-keyed, so saving
 performs NO reset, NO rescan and NO random draws). Save is atomic (same-dir
 tmp + ``os.replace``) and REFUSES to overwrite an existing file.
 
-Load validates EVERYTHING first (schema/kind, full identity, payload key
+Load validates EVERYTHING first (schema/kind, enforced identity, payload key
 completeness, per-tensor shape/dtype/finiteness, PRNG structure) — a failed
 validation mutates NOTHING. Only then is the state applied in a fixed order:
 weights → Adam → physics in-place (``wp.to_torch`` alias ``copy_`` into the
@@ -88,7 +86,7 @@ from hexapod_mjlab.rl.confined_locomotion.ppo import (
 )
 from hexapod_mjlab.tasks.confined_locomotion.scanner import ConfinedLidarCfg
 
-from ..flat_env_cfg import TASK_ID, DECIMATION, SIM_TIMESTEP_S, _ROBOT_XML
+from ..flat_env_cfg import TASK_ID, DECIMATION, SIM_TIMESTEP_S
 from hexapod_mjlab.common.checkpoint import (
   CheckpointFault,
   EXTRA_PERSISTENT_PHYSICS_FIELDS,
@@ -130,51 +128,6 @@ CHECKPOINT_SCHEMA = "confined_locomotion.checkpoint/v3"
 #: external diagnostics and are NEVER checkpoints.
 CHECKPOINT_KIND_FULL = "confined_locomotion_full_resume"
 CHECKPOINT_KIND_WEIGHTS = "confined_locomotion_weights_only"
-
-#: Production source files hashed into the checkpoint identity: the runtime,
-#: MDP, scanning, geometry, policy, PPO, and official-entry dependency closure
-#: plus the compiled robot MJCF; never logs, tests, or docs.
-_SOURCE_MODULE_NAMES = (
-  "hexapod_mjlab.tasks.confined_locomotion",
-  "hexapod_mjlab.tasks.confined_locomotion.rl",
-  "hexapod_mjlab.rl.confined_locomotion",
-  "hexapod_mjlab.rl.confined_locomotion.inference",
-  "hexapod_mjlab.tasks.confined_locomotion.rl.entry",
-  "hexapod_mjlab.tasks.confined_locomotion.runtime",
-  "hexapod_mjlab.tasks.confined_locomotion.collector",
-  "hexapod_mjlab.tasks.confined_locomotion.commands",
-  "hexapod_mjlab.tasks.confined_locomotion.observation",
-  "hexapod_mjlab.tasks.confined_locomotion.scanner",
-  "hexapod_mjlab.tasks.confined_locomotion.ground",
-  "hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint",
-  "hexapod_mjlab.tasks.confined_locomotion.rl.runner",
-  "hexapod_mjlab.tasks.confined_locomotion.rl_cfg",
-  "hexapod_mjlab.tasks.confined_locomotion.flat_env_cfg",
-  "hexapod_mjlab.utils.lidar",
-  "hexapod_mjlab.utils.lidar.lidar_sensor",
-  "hexapod_mjlab.utils.lidar.base_sensor",
-  "hexapod_mjlab.utils.lidar.sensor_config",
-  "hexapod_mjlab.utils.lidar.sensor_config.lidar_sensor_config",
-  "hexapod_mjlab.utils.lidar.sensor_config.base_sensor_config",
-  "hexapod_mjlab.utils.lidar.sensor_pattern",
-  "hexapod_mjlab.utils.lidar.sensor_pattern.sensor_lidar",
-  "hexapod_mjlab.utils.lidar.sensor_pattern.sensor_lidar.genera_lidar_scan_pattern",
-  "hexapod_mjlab.utils.lidar.sensor_kernels",
-  "hexapod_mjlab.utils.lidar.sensor_kernels.lidar_kernels_warp",
-  "hexapod_mjlab.rl.confined_locomotion.network",
-  "hexapod_mjlab.rl.confined_locomotion.policy",
-  "hexapod_mjlab.rl.confined_locomotion.distribution",
-  "hexapod_mjlab.rl.confined_locomotion.ppo",
-  "hexapod_mjlab.rl.confined_locomotion.losses",
-  "hexapod_mjlab.rl.confined_locomotion.training_rollout",
-  "hexapod_mjlab.rl.confined_locomotion.contacts",
-  "hexapod_mjlab.rl.confined_locomotion.contracts",
-  "hexapod_mjlab.rl.confined_locomotion.integration",
-  "hexapod_mjlab.rl.confined_locomotion.control",
-  "hexapod_mjlab.rl.confined_locomotion.mapping",
-  "hexapod_mjlab.rl.confined_locomotion.history",
-  "hexapod_mjlab.rl.confined_locomotion.symmetry",
-)
 
 _JOINT_UPDATE_STEPS_PER_ROLLOUT = NUM_EPOCHS * NUM_MINIBATCHES  # 5×4 = 20
 
@@ -248,40 +201,6 @@ class CheckpointError(RuntimeError):
 # ═══════════════════════════ identity builders ═══════════════════════════
 
 
-def _sha256_file(path: Path) -> str:
-  digest = hashlib.sha256()
-  with path.open("rb") as stream:
-    for chunk in iter(lambda: stream.read(1 << 20), b""):
-      digest.update(chunk)
-  return digest.hexdigest()
-
-
-def _source_identity() -> dict:
-  import importlib
-
-  from hexapod_mjlab.common.witness import FROZEN_WITNESS_PATH
-
-  files: dict[str, str] = {}
-  for module_name in _SOURCE_MODULE_NAMES:
-    module = importlib.import_module(module_name)
-    source = Path(getattr(module, "__file__", ""))
-    if not source.is_file():
-      raise CheckpointFault(f"source file missing for {module_name}: {source}")
-    files[module_name] = _sha256_file(source)
-  common_dir = Path(importlib.import_module("hexapod_mjlab.common").__file__).resolve().parent
-  for source in sorted(common_dir.rglob("*.py")):
-    files[str(source.relative_to(common_dir.parent))] = _sha256_file(source)
-  if not FROZEN_WITNESS_PATH.is_file():
-    raise CheckpointFault(f"frozen witness asset missing: {FROZEN_WITNESS_PATH}")
-  files[str(FROZEN_WITNESS_PATH.relative_to(common_dir.parent))] = _sha256_file(
-    FROZEN_WITNESS_PATH
-  )
-  if not _ROBOT_XML.is_file():
-    raise CheckpointFault(f"robot MJCF asset missing: {_ROBOT_XML}")
-  files[_ROBOT_XML.name] = _sha256_file(_ROBOT_XML)
-  return files
-
-
 def _dependency_versions() -> dict:
   import mjlab
   import mujoco
@@ -335,6 +254,7 @@ def _comparable_identity(runner) -> dict:
   runtime = runner.runtime
   env = runtime.env
   device = torch.device(runner.device)
+  action = env.action_manager.get_term("residual_pd")
   if device.type != "cuda" or torch.cuda.device_count() == 0:
     raise CheckpointError(
       f"full checkpoint identity requires the actual CUDA device, got {device}"
@@ -349,7 +269,6 @@ def _comparable_identity(runner) -> dict:
       "runner_identity",
       "El-4090-Confined-Locomotion-Flat/ConfinedLocomotionRunner/mode=engineering",
     ),
-    "source_sha256": _source_identity(),
     "dependencies": _dependency_versions(),
     "device": {
       "type": "cuda",
@@ -386,6 +305,13 @@ def _comparable_identity(runner) -> dict:
     },
     "lidar": _lidar_identity(runtime.lidar_cfg),
     "wrapper": {"clip_actions": None},
+    "action": {
+      "raw_clip": float(action.cfg.raw_clip),
+      "residual_scale": float(action.cfg.residual_scale),
+      "stiffness": float(action.cfg.stiffness),
+      "damping": float(action.cfg.damping),
+      "effort_limit": float(action.cfg.effort_limit),
+    },
     "ppo_config": runner.trainer.config.summary(),
     "trainer_config": runner.trainer.config_identity(),
     "symmetry": runner.trainer.symmetry_identity,
@@ -906,18 +832,89 @@ def _save_full_checkpoint(runner, path, *, infos: dict | None = None) -> Path:
 # ═══════════════════════════ full load ═══════════════════════════
 
 
+#: Fields that determine whether the saved training state is compatible.
+#: Device, dependency versions, Torch precision and source hashes are recorded
+#: metadata only; they do not gate resume.
+_IDENTITY_COMPARE_KEYS = (
+  "schema",
+  "kind",
+  "resumable",
+  "task",
+  "runner_identity",
+  "num_envs",
+  "env_seed",
+  "runtime",
+  "grid",
+  "sim",
+  "rewards",
+  "terminations",
+  "lidar",
+  "wrapper",
+  "ppo_config",
+  "trainer_config",
+  "symmetry",
+  "distribution_identity_frozen",
+  "observation_perturbations",
+)
+
+#: Optional semantic blocks added after the legacy schema. They are compared
+#: only when present in the saved identity, so older files remain readable.
+_OPTIONAL_IDENTITY_KEYS = ("action",)
+
+#: The compiled binary hash is intentionally excluded: it changes with the
+#: MuJoCo build even when the physical model structure is identical.
+_MODEL_COMPARE_KEYS = (
+  "dims",
+  "joint_names",
+  "actuator_names",
+  "actuator_gear",
+  "q_ref",
+  "options",
+)
+
+
+def _model_structure(identity: dict) -> dict | None:
+  model = identity.get("model")
+  if not isinstance(model, dict):
+    return None
+  return {key: model.get(key) for key in _MODEL_COMPARE_KEYS}
+
+
 def _compare_identity(current: dict, saved: dict) -> None:
-  for key in sorted(set(current) | set(saved)):
-    if key not in current:
-      raise CheckpointError(f"saved identity has unknown extra key {key!r}")
-    if key not in saved:
-      raise CheckpointError(f"saved identity is missing key {key!r}")
+  if not isinstance(saved, dict):
+    raise CheckpointError("saved identity must be an object")
+  for key in _IDENTITY_COMPARE_KEYS:
+    if key not in current or key not in saved:
+      raise CheckpointError(
+        f"identity is missing required field {key!r}"
+      )
     if current[key] != saved[key]:
       raise CheckpointError(
         f"identity mismatch on {key!r}: checkpoint "
         f"{json.dumps(saved[key], default=str, sort_keys=True)[:400]} != current "
         f"{json.dumps(current[key], default=str, sort_keys=True)[:400]} — full "
-        "resume is same-device/model/config/env-count/grid/source only"
+        "resume requires the same model/config/env-count/grid/scan recipe"
+      )
+  current_model = _model_structure(current)
+  saved_model = _model_structure(saved)
+  if current_model is None or saved_model is None:
+    raise CheckpointError("identity is missing the compiled-model structure")
+  if current_model != saved_model:
+    raise CheckpointError(
+      "identity mismatch on 'model' structure: checkpoint "
+      f"{json.dumps(saved_model, default=str, sort_keys=True)[:400]} != current "
+      f"{json.dumps(current_model, default=str, sort_keys=True)[:400]}"
+    )
+  for key in _OPTIONAL_IDENTITY_KEYS:
+    if key not in saved:
+      continue  # legacy files did not record this semantic block
+    if key not in current:
+      raise CheckpointError(f"identity is missing optional field {key!r}")
+    if current[key] != saved[key]:
+      raise CheckpointError(
+        f"identity mismatch on {key!r}: checkpoint "
+        f"{json.dumps(saved[key], default=str, sort_keys=True)[:400]} != current "
+        f"{json.dumps(current[key], default=str, sort_keys=True)[:400]}"
       )
 
 
@@ -1899,7 +1896,6 @@ def save_weights_only(path, policy_adapter, *, grid_identity: dict | None = None
     "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     "reason": str(reason),
     "identity": {
-      "source_sha256": _source_identity(),
       "dependencies": _dependency_versions(),
       "distribution_identity_frozen": str(policy_adapter.identity_frozen),
       "network_state_keys": sorted(state),
@@ -1927,7 +1923,6 @@ def load_weights(
   network: ConfinedLocomotionNetwork | None = None,
   provider=None,
   expected_grid_identity: dict | None = None,
-  allow_source_change: bool = False,
 ) -> dict:
   """Load ALL shared network keys (+ optional 18-dim log_std) — weights ONLY.
 
@@ -1935,9 +1930,8 @@ def load_weights(
   never claimed (``resumable`` stays False in the report). The env count may
   differ from the checkpoint's. Grid positions/sizes are strictly checked
   whenever ``expected_grid_identity`` is supplied; the full model key set
-  must match exactly (not just the actor head). A source change is accepted
-  only under the explicit independent rule ``allow_source_change=True``
-  (recorded; never available to full resume).
+  must match exactly (not just the actor head). Source hashes are not a
+  compatibility condition.
   """
   if not isinstance(network, ConfinedLocomotionNetwork):
     raise CheckpointError(
@@ -1989,14 +1983,6 @@ def load_weights(
         "grid identity mismatch (positions/sizes/resolution must match "
         f"strictly): file {saved_grid} != expected {expected_grid_identity}"
       )
-  current_source = _source_identity()
-  if identity.get("source_sha256") != current_source and not allow_source_change:
-    raise CheckpointError(
-      "source files changed since the checkpoint (weights-only loading under "
-      "external code changes requires the explicit allow_source_change=True "
-      "rule; full resume NEVER accepts source changes)"
-    )
-
   network_keys = {
     key.removeprefix("network."): value for key, value in state.items()
     if key.startswith("network.")
@@ -2046,8 +2032,6 @@ def load_weights(
     "path": str(target),
     "network_keys": sorted(network_keys),
     "log_std": log_std_report,
-    "source_change_allowed": bool(allow_source_change),
-    "source_matches_current": identity.get("source_sha256") == current_source,
     "note": (
       "weights-only load: no Adam/physics/PRNG/lifecycle restored; this is "
       "NOT a resume and never claims one"
