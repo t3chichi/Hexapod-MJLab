@@ -99,7 +99,8 @@ def main():
             cfg = terrain_memory_formal_rl_cfg(seed=args.seed, num_envs=args.num_envs,
                                               max_iterations=1, height_loss_weight=1.0)
         else:
-            from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import confined_locomotion_formal_rl_cfg, make_training_env_cfg
+            from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import confined_locomotion_formal_rl_cfg
+            from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg
             cfg = confined_locomotion_formal_rl_cfg(seed=args.seed, num_envs=args.num_envs, max_iterations=1)
         cfg.lidar_config = {"raycast_mode": "sparse", "far_sampling": "hit_only_10m",
                             "sparse_selection_path": str(ROOT / "src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_hit10/near_x6_far_x10.npz")}

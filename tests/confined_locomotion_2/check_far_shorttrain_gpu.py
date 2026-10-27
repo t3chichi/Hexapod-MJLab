@@ -35,6 +35,7 @@ SOURCE_FILES = (
     "src/hexapod_mjlab/tasks/confined_locomotion_2/runtime.py",
     "src/hexapod_mjlab/tasks/confined_locomotion_2/collector.py",
     "src/hexapod_mjlab/tasks/confined_locomotion_2/flat_env_cfg.py",
+    "src/hexapod_mjlab/common/flat_env.py",
     "src/hexapod_mjlab/common/mdp/rewards.py",
     "src/hexapod_mjlab/common/mdp/terminations.py",
     "src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml",

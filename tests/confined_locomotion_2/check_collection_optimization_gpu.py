@@ -56,7 +56,7 @@ def main():
         torch.backends.cudnn.rnn.fp32_precision = "ieee"
         torch.manual_seed(20261027)
         if args.flat:
-            from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import make_training_env_cfg as env_cfg
+            from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg as env_cfg
         else:
             env_cfg = make_training_env_cfg
         env = ManagerBasedRlEnv(env_cfg(num_envs=4, seed=20261027), device=device)

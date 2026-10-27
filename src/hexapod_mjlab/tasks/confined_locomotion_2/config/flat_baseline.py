@@ -1,11 +1,11 @@
-"""Flat Baseline environment factories and explicit RL recipes.
+"""Flat Baseline explicit RL recipes.
 
-Environment construction and execution stay in the existing task modules;
-this module is the task-specific configuration entry point.
+Environment construction lives in ``hexapod_mjlab.common.flat_env`` and the
+task package owns registration; this module only defines the typed runner
+recipes.
 """
 
 from dataclasses import dataclass, field
-from typing import ClassVar
 
 from mjlab.rl import RslRlBaseRunnerCfg
 
@@ -15,13 +15,9 @@ from hexapod_mjlab.common.perturbations import (
     ALL_THREE_PRESET, ObservationPerturbationCfg,
 )
 
-from ..flat_env_cfg import TASK_ID, make_flat_env_cfg, make_training_env_cfg
-from ..play import make_play_env_cfg
-
 
 @dataclass
 class ConfinedLocomotionRlCfg(RslRlBaseRunnerCfg):
-    IMPLEMENTED: ClassVar[bool] = True
     class_name: str = "ConfinedLocomotionRunner"
     experiment_name: str = "confined_locomotion_flat_2"
     max_iterations: int = 0

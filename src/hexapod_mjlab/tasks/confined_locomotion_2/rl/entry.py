@@ -7,7 +7,8 @@ import uuid
 
 from mjlab.scripts.train import TrainConfig, launch_training
 
-from ..config.flat_baseline import TASK_ID, confined_locomotion_formal_rl_cfg
+from ..config.flat_baseline import confined_locomotion_formal_rl_cfg
+from ..flat_env_cfg import TASK_ID
 from .checkpoint import read_checkpoint
 from .runner import resolve_recipe
 

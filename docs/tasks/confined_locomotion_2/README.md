@@ -1,6 +1,6 @@
 # confined_locomotion_2
 
-`confined_locomotion_2`包含两个独立任务：Flat Baseline平地行走基线，以及通过高度重建辅助监督学习地形记忆的Terrain Memory。二者共享双GRU、Runtime、rollout和PPO实现，通过独立配置、注册身份及Play入口区分。
+`confined_locomotion_2`包含三个注册任务：Flat Baseline平地行走基线、通过高度重建辅助监督学习地形记忆的Terrain Memory，以及作为旧方案迁移对照的Tripod2 Low。Flat/Terrain共享双GRU、Runtime、rollout和Temporal PPO；Tripod2 Low保留LSTM执行器、Legacy PPO和独立运行语义。三者通过独立配置、注册身份及Play入口区分。
 
 当前支持真实地形采集、动作前高度标签、时序重放、高度辅助联合更新、完整checkpoint及任务独立可视化。已有小规模运行验证，尚未完成长期学习效果或RTX5090容量验证。
 
@@ -18,10 +18,11 @@
 |---|---|---|---|
 | Flat Baseline | `El-4090-Confined-Locomotion-Flat_2` | [`config/flat_baseline.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline.py) | `train.py` / `play_flat.py` |
 | Terrain Memory | `El-4090-Confined-Locomotion-Terrain-Memory_2` | [`config/terrain_memory.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory.py) | `train_terrain_memory.py` / `play_terrain_memory.py` |
+| Tripod2 Low | `El-4090-Confined-Locomotion-Flat-Tripod2-Low_2` | [`tripod2_low/env.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/env.py) / [`tripod2_low/runner.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/runner.py) | `train_tripod2_low.py` / `play_tripod2_low.py` |
 
-脚本统一位于 `scripts/experiments/confined_locomotion_2/`。包内 `__init__.py`集中注册，训练需显式提供seed、环境数和轮数；Terrain额外要求正的高度损失权重。注册默认配置不直接授权训练。
+脚本统一位于 `scripts/experiments/confined_locomotion_2/`。三个任务均由包内 `__init__.py`集中注册，训练需显式提供seed、环境数和轮数；Terrain额外要求正的高度损失权重。注册默认配置不直接授权训练。
 
-环境、MDP、Runtime、雷达及可视化保留在任务包内；网络与PPO位于 `rl/confined_locomotion_2/`。不复制整套环境或训练实现，不提供旧 `play.py`、`rl_cfg.py`的转发层。原 `confined_locomotion`任务仍独立存在，共享地形查询入口未启用时继续使用原平面。
+Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjlab/common/flat_env.py)；任务 `flat_env_cfg.py`只保留Task ID和既有任务接口。Terrain/Tripod复用该工厂并各自覆盖地形、执行器或MDP；MDP、Runtime、雷达及可视化保留在任务包内。网络与PPO位于 `rl/confined_locomotion_2/`。不复制整套环境或训练实现，不提供旧 `play.py`、`rl_cfg.py`的转发层。原 `confined_locomotion`任务仍独立存在，共享地形查询入口未启用时继续使用原平面。
 
 ## 网络与训练
 

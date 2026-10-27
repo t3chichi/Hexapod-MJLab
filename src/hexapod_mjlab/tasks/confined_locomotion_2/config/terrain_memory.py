@@ -10,7 +10,6 @@ import numpy as np
 from .flat_baseline import ConfinedLocomotionRlCfg
 
 TASK_ID = "El-4090-Confined-Locomotion-Terrain-Memory_2"
-IMPLEMENTED = True
 
 
 def make_collection_env_cfg(*, terrain, num_envs: int, seed: int):
