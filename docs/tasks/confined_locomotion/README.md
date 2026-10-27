@@ -12,7 +12,7 @@
 
 - **近端点云**：当前近端分组（θ=28°、δ=56°、BASE x≤3.5m；历史代号 B8），近端FPS256；远端每帧64点、保留10帧历史。参数及已知上仰遮蔽风险见[雷达与地面查询边界](lidar_setup/配置与边界.md)。
 - **地面辅助监督**：BASE x∈[0.8,3.2]m、y∈[-0.5,0.5]m，17×11=187点（历史代号 S1-187）；监督值为扫描时机体z轴上的**有符号相对高度**，不是世界绝对高程。四边界定义位于源码`ground_presets.py`，正式训练默认使用该网格；**Play默认恢复所选Checkpoint保存的真实网格**。界面中的候选矩形仅显示，不影响策略与标签。
-- **已经验收**：正式任务配置、CPU回归、近端与地面几何支持，以及真实GPU 1环境/1次PPO更新和Checkpoint Play工程链路。原始结果导航：[验证记录索引](../../../logs/verification/README.md)。
+- **已经验收**：正式任务配置、CPU回归、近端与地面几何支持，以及真实GPU 1环境/1次PPO更新和Checkpoint Play工程链路。历史原始验证日志已删除；当前验收结论见[工程验收与复现](training/工程验收与复现.md)。
 - **尚未验收**：正式长期训练效果、平地稳定行走指标、崎岖地形可观测性、狭窄通道/低顶通行成功率。工程更新成功不等于策略已经学会通行。
 
 ## 按需求查阅文档
@@ -40,11 +40,11 @@
 | `src/hexapod_mjlab/rl/confined_locomotion/` | Torch网络、PPO、动作分布与loss |
 | `scripts/experiments/confined_locomotion/train.py` | 正式训练和完整续训入口 |
 | `scripts/experiments/confined_locomotion/play.py` | 任务专用Checkpoint Play入口 |
-| `logs/confined_locomotion/` | 新训练run、完整Checkpoint及Play输出 |
-| `logs/verification/` | 带目录导航的历史与当前GPU/CPU验证证据 |
+| `logs/confined_locomotion/` | 新训练run、完整Checkpoint及Play输出（运行时目录） |
+| `logs/verification/` | 当前测试输出根；历史验证日志已清理，不存放长期历史证据 |
 
 ## 历史资料与使用边界
 
-2026-10-12的源码整理、P0–P9和基础门A/B属于各自的历史工程快照；2026-10-13已完成点云特征缓存复用及数值验收。完整出处分别见[工程验收与复现](training/工程验收与复现.md)和[精简历史证据索引](../../../logs/maintenance/20261012_confined_archive_retirement/README.md)。历史完整归档按此前授权清理，**不要**直接将旧源码或旧Checkpoint当作当前任务的无条件可恢复基线。
+2026-10-12的源码整理、P0–P9和基础门A/B属于各自的历史工程快照；2026-10-13已完成点云特征缓存复用及数值验收。完整出处分别见[工程验收与复现](training/工程验收与复现.md)；历史原始日志和归档已删除，**不要**直接将旧源码或旧Checkpoint当作当前任务的无条件可恢复基线。
 
 命令变化时优先核对实际CLI `--help`，随后同步更新源码目录中的《快速开始》；算法约定、功能状态与工程证据分别在上述专题页维护，不在本README堆积运行参数或实验流水账。

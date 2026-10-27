@@ -1,6 +1,6 @@
 # 基线验收证据
 
-本目录只保存可随Git交付的精简结果；完整日志、checkpoint和wheel留在开发机的 `logs/maintenance/20261023_pretrain_baseline/`。日期跨2026-10-23至24，不回写此前冻结实验。
+本目录保存可随 Git 交付的精简结果；对应开发机完整日志、checkpoint 和 wheel 已在 2026-10-27 日志清理中删除，不再承诺恢复。日期跨 2026-10-23 至 24，不回写此前冻结实验。
 
 - `acceptance.json`：各检查的通过状态、GPU恢复边界与限制。
 - `clean_git_check.json`：实际Git干净克隆、editable隔离导入、98项CPU检查及换行转换下283文件身份一致；后续提交仅补充这些验收元数据。

@@ -52,7 +52,9 @@ def main():
     )
     from hexapod_mjlab.rl.confined_locomotion.symmetry import GridPermutation
     cli=argparse.ArgumentParser(description=__doc__)
-    cli.add_argument("--source",type=Path,default=ROOT/"logs/verification/current/ground_height/01_ground_visibility_by_pose_20261019")
+    cli.add_argument("--source",type=Path,required=True,
+                     help="existing analyze_ground_sampling_support.py run directory "
+                          "containing report.json and probes_support_matrix.npz")
     cli.add_argument("--output",type=Path,required=True)
     arg=cli.parse_args()
     src=arg.source.expanduser().resolve()

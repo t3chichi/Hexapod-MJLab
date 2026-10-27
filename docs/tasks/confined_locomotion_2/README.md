@@ -84,6 +84,6 @@ Play只读权重，实际监督范围读取checkpoint。其扫描override仅用�
 
 ## 检查与历史记录
 
-当前CPU/GPU检查入口见[测试说明](../../../tests/confined_locomotion_2/README.md)。地形几何、标签对齐、联合更新及性能阶段结论统一放在[实验记录](../../../scripts/experiments/confined_locomotion_2/records/20261026_terrain_memory_and_performance.md)，原始日志和checkpoint仍保留在本地实验目录，不是克隆后的运行依赖。
+当前CPU/GPU检查入口见[测试说明](../../../tests/confined_locomotion_2/README.md)。地形几何、标签对齐、联合更新及性能阶段结论统一放在[实验记录](../../../scripts/experiments/confined_locomotion_2/records/20261026_terrain_memory_and_performance.md)；历史原始日志和 checkpoint 已在 2026-10-27 清理中删除，不能恢复或逐帧复验，复现需重新运行当前检查。
 
 2026-10-24平地tag的交付记录见[旧部署与基线](training/部署与基线.md)，对应[冻结证据](baseline/evidence/README.md)保持原内容。该tag不包含后续Terrain Memory与当前性能优化；新机器使用[当前分支部署](training/部署.md)。

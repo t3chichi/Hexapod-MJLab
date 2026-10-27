@@ -1,0 +1,2728 @@
+{
+  "task": "representative-configuration MuJoCo static-hold verification (stage 2 of joint-task priority 1)",
+  "protocol": {
+    "model": "src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml + ground plane friction 1.0 (verify_stance.py:52-55 construction, via MorphologyMeter default scene)",
+    "initial_state": "config joint angles, level base, base_z = h + 0.01 (fallback h + 0.012 when soles start below floor; actual initial sole depth recorded)",
+    "pd_law": "tau = 130.0*(qdes-q) - 2.0*qd clipped to +/-80.0 N*m (verify_stance.py:83-101 style)",
+    "dt": 0.005,
+    "steps": 1000,
+    "duration_s": 5.0,
+    "tolerances": {
+      "base_z_max_dev_m": 0.05,
+      "mean_rmse_rad": 0.15,
+      "min_contact_feet": 4,
+      "com_margin_m": "> 0"
+    },
+    "hex_convention": "drift conclusions use safe_fit (folded safe LP, sampling-stage\u53e3\u5f84); meter_raw may misreport middle_width=0 (known defect) and is flagged; physical horizontal-projection extremes attached per state",
+    "sampling_input": "/home/t3chichi/Hexapod-MJLab/logs/morphology/sampling_results.json"
+  },
+  "cases": {
+    "a": {
+      "source": "sampling_results.json use_cases_full['a_min_middle_width']",
+      "h": 0.4,
+      "joint_angles": {
+        "RF_HAA": 0.090467,
+        "RF_HFE": 0.429504,
+        "RF_KFE": -1.471573,
+        "RM_HAA": 2.28941,
+        "RM_HFE": 0.694459,
+        "RM_KFE": 0.593932,
+        "RB_HAA": 0.000307,
+        "RB_HFE": -0.303608,
+        "RB_KFE": -0.102653,
+        "LF_HAA": 0.09047,
+        "LF_HFE": 0.429531,
+        "LF_KFE": -1.503227,
+        "LM_HAA": -2.356378,
+        "LM_HFE": 0.581035,
+        "LM_KFE": -1.76681,
+        "LB_HAA": 0.000312,
+        "LB_HFE": -0.303618,
+        "LB_KFE": -0.071049
+      },
+      "reference_hex_safe_fit": {
+        "front_width": 0.922,
+        "middle_width": 0.253,
+        "back_width": 0.5107,
+        "forward_limit": 0.6409,
+        "backward_limit": -0.5295
+      },
+      "reference_com_margin": 0.3946,
+      "reference_max_tau_Nm": 44.395,
+      "start_mode": "drop"
+    },
+    "b1": {
+      "source": "sampling_results.json use_cases_full['b1_min_forward_limit']",
+      "h": 0.32,
+      "joint_angles": {
+        "RF_HAA": -0.000268,
+        "RF_HFE": -0.517599,
+        "RF_KFE": -0.187251,
+        "RM_HAA": -0.000268,
+        "RM_HFE": -0.517599,
+        "RM_KFE": -0.187251,
+        "RB_HAA": 0.000269,
+        "RB_HFE": -0.517598,
+        "RB_KFE": -0.218857,
+        "LF_HAA": -0.000264,
+        "LF_HFE": -0.517588,
+        "LF_KFE": -0.218874,
+        "LM_HAA": -0.000301,
+        "LM_HFE": -0.689418,
+        "LM_KFE": 0.038796,
+        "LB_HAA": 0.000272,
+        "LB_HFE": -0.517604,
+        "LB_KFE": -0.187254
+      },
+      "reference_hex_safe_fit": {
+        "front_width": 0.4749,
+        "middle_width": 0.6118,
+        "back_width": 0.4986,
+        "forward_limit": 0.6409,
+        "backward_limit": -0.5295
+      },
+      "reference_com_margin": 0.4446,
+      "reference_max_tau_Nm": 29.235,
+      "start_mode": "drop"
+    },
+    "b2": {
+      "source": "sampling_results.json use_cases_full['b2_min_backward_limit']",
+      "h": 0.42,
+      "joint_angles": {
+        "RF_HAA": -0.000307,
+        "RF_HFE": -0.204753,
+        "RF_KFE": -0.122751,
+        "RM_HAA": 1.661268,
+        "RM_HFE": 0.53125,
+        "RM_KFE": -1.574597,
+        "RB_HAA": 1.570997,
+        "RB_HFE": 0.50893,
+        "RB_KFE": -1.566827,
+        "LF_HAA": -0.000352,
+        "LF_HFE": -0.282179,
+        "LF_KFE": 0.06195,
+        "LM_HAA": 1.570607,
+        "LM_HFE": 0.508887,
+        "LM_KFE": -1.566774,
+        "LB_HAA": 1.48033,
+        "LB_HFE": 0.531218,
+        "LB_KFE": -1.574562
+      },
+      "reference_hex_safe_fit": {
+        "front_width": 0.5391,
+        "middle_width": 0.2964,
+        "back_width": 0.1669,
+        "forward_limit": 0.6409,
+        "backward_limit": -1.0115
+      },
+      "reference_com_margin": 0.3078,
+      "reference_max_tau_Nm": 44.456,
+      "start_mode": "drop"
+    },
+    "c": {
+      "source": "sampling_results.json use_cases_full['c_min_h']",
+      "h": 0.32,
+      "joint_angles": {
+        "RF_HAA": -0.165502,
+        "RF_HFE": -0.853113,
+        "RF_KFE": 0.295113,
+        "RM_HAA": -0.000358,
+        "RM_HFE": -0.868668,
+        "RM_KFE": 0.315133,
+        "RB_HAA": 0.165502,
+        "RB_HFE": -0.85311,
+        "RB_KFE": 0.263507,
+        "LF_HAA": -0.165495,
+        "LF_HFE": -0.853099,
+        "LF_KFE": 0.263492,
+        "LM_HAA": -0.000423,
+        "LM_HFE": -1.079168,
+        "LM_KFE": 0.526898,
+        "LB_HAA": 0.165504,
+        "LB_HFE": -0.853121,
+        "LB_KFE": 0.29511
+      },
+      "reference_hex_safe_fit": {
+        "front_width": 0.3902,
+        "middle_width": 0.5132,
+        "back_width": 0.4076,
+        "forward_limit": 0.6409,
+        "backward_limit": -0.5502
+      },
+      "reference_com_margin": 0.4501,
+      "reference_max_tau_Nm": 20.714,
+      "start_mode": "drop"
+    },
+    "d": {
+      "source": "sampling_results.json use_cases_full['d_max_h']",
+      "h": 0.5,
+      "joint_angles": {
+        "RF_HAA": -0.00036,
+        "RF_HFE": 0.150278,
+        "RF_KFE": -0.19053,
+        "RM_HAA": -0.00036,
+        "RM_HFE": 0.150278,
+        "RM_KFE": -0.19053,
+        "RB_HAA": 0.000426,
+        "RB_HFE": 0.154649,
+        "RB_KFE": -0.058302,
+        "LF_HAA": -0.000421,
+        "LF_HFE": 0.154647,
+        "LF_KFE": -0.058311,
+        "LM_HAA": -0.00042,
+        "LM_HFE": 0.154627,
+        "LM_KFE": -0.058286,
+        "LB_HAA": 0.000364,
+        "LB_HFE": 0.150264,
+        "LB_KFE": -0.190528
+      },
+      "reference_hex_safe_fit": {
+        "front_width": 0.3776,
+        "middle_width": 0.52,
+        "back_width": 0.4023,
+        "forward_limit": 0.6409,
+        "backward_limit": -0.5296
+      },
+      "reference_com_margin": 0.4399,
+      "reference_max_tau_Nm": 21.208,
+      "start_mode": "drop"
+    },
+    "e": {
+      "source": "constructed: z0=0.40, q=0 stand foot xy (right legs per sampling record, left legs measured), z=-0.40, meter.leg_ik branch closest to q=0",
+      "h": 0.4,
+      "joint_angles": {
+        "RF_HAA": -2.8144863694250292e-05,
+        "RF_HFE": -0.4326044784173986,
+        "RF_KFE": 0.2489426904599279,
+        "RM_HAA": -2.8144863694137792e-05,
+        "RM_HFE": -0.4326044784173983,
+        "RM_KFE": 0.24894269045992773,
+        "RB_HAA": 2.6162077324918263e-05,
+        "RB_HFE": -0.4449534211875247,
+        "RB_KFE": 0.25541712178454357,
+        "LF_HAA": -2.1328904997861942e-05,
+        "LF_HFE": -0.4449492913878686,
+        "LF_KFE": 0.2554050219241212,
+        "LM_HAA": -1.9830503764282793e-05,
+        "LM_HFE": -0.4449798643686387,
+        "LM_KFE": 0.2554318316511223,
+        "LB_HAA": 3.164783417976384e-05,
+        "LB_HFE": -0.4326202783078865,
+        "LB_KFE": 0.2489414910116937
+      },
+      "ik_detail": {
+        "RF": {
+          "target_base": [
+            0.4499,
+            -0.3764,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": -2.8e-05,
+              "HFE": -0.432604,
+              "KFE": 0.248943
+            }
+          ],
+          "chosen": {
+            "HAA": -2.8e-05,
+            "HFE": -0.432604,
+            "KFE": 0.248943
+          }
+        },
+        "RM": {
+          "target_base": [
+            -0.0001,
+            -0.4764,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": -2.8e-05,
+              "HFE": -0.432604,
+              "KFE": 0.248943
+            }
+          ],
+          "chosen": {
+            "HAA": -2.8e-05,
+            "HFE": -0.432604,
+            "KFE": 0.248943
+          }
+        },
+        "RB": {
+          "target_base": [
+            -0.4499,
+            -0.3669,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": 2.6e-05,
+              "HFE": -0.444953,
+              "KFE": 0.255417
+            }
+          ],
+          "chosen": {
+            "HAA": 2.6e-05,
+            "HFE": -0.444953,
+            "KFE": 0.255417
+          }
+        },
+        "LF": {
+          "target_base": [
+            0.4499,
+            0.3669,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": -2.1e-05,
+              "HFE": -0.444949,
+              "KFE": 0.255405
+            }
+          ],
+          "chosen": {
+            "HAA": -2.1e-05,
+            "HFE": -0.444949,
+            "KFE": 0.255405
+          }
+        },
+        "LM": {
+          "target_base": [
+            -0.0001,
+            0.4669,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": -2e-05,
+              "HFE": -0.44498,
+              "KFE": 0.255432
+            }
+          ],
+          "chosen": {
+            "HAA": -2e-05,
+            "HFE": -0.44498,
+            "KFE": 0.255432
+          }
+        },
+        "LB": {
+          "target_base": [
+            -0.4499,
+            0.3764,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": 3.2e-05,
+              "HFE": -0.43262,
+              "KFE": 0.248941
+            }
+          ],
+          "chosen": {
+            "HAA": 3.2e-05,
+            "HFE": -0.43262,
+            "KFE": 0.248941
+          }
+        }
+      },
+      "foot_xy_error": {
+        "RF": 0.0,
+        "RM": 0.0,
+        "RB": 0.0,
+        "LF": 0.0,
+        "LM": 0.0,
+        "LB": 0.0
+      },
+      "start_mode": "drop"
+    },
+    "stand": {
+      "source": "keyframe 'stand' (q=0) of el_4090_lidar.xml + floor, verify_stance.py behaviour inside this tool chain",
+      "h": 0.47292502518701385,
+      "keyframe_base_z": 0.48601,
+      "foot_origin_z_at_keyframe": {
+        "RF": 0.01314,
+        "RM": 0.01314,
+        "RB": 0.01303,
+        "LF": 0.01303,
+        "LM": 0.01303,
+        "LB": 0.01314
+      },
+      "joint_angles": {
+        "RF_HAA": 0.0,
+        "RF_HFE": 0.0,
+        "RF_KFE": 0.0,
+        "RM_HAA": 0.0,
+        "RM_HFE": 0.0,
+        "RM_KFE": 0.0,
+        "RB_HAA": 0.0,
+        "RB_HFE": 0.0,
+        "RB_KFE": 0.0,
+        "LF_HAA": 0.0,
+        "LF_HFE": 0.0,
+        "LF_KFE": 0.0,
+        "LM_HAA": 0.0,
+        "LM_HFE": 0.0,
+        "LM_KFE": 0.0,
+        "LB_HAA": 0.0,
+        "LB_HFE": 0.0,
+        "LB_KFE": 0.0
+      },
+      "start_mode": "keyframe"
+    }
+  },
+  "results": {
+    "a": {
+      "case": "a",
+      "source": "sampling_results.json use_cases_full['a_min_middle_width']",
+      "target_h_m": 0.4,
+      "start": {
+        "start_mode": "drop",
+        "start_base_z_m": 0.412,
+        "start_min_sole_z_m": -0.00603,
+        "start_base_z_minus_h_m": 0.012,
+        "note": [
+          "soles below floor at h+0.010; protocol fallback h+0.012 used",
+          "still -6.0 mm below floor at h+0.012 (tilted-foot sole vertex deeper than the ~8 mm level-foot offset); run proceeds, initial penetration recorded"
+        ]
+      },
+      "verdict": "FAIL",
+      "failed_checks": [
+        "base_z_max_dev_ok",
+        "contact_feet_ok",
+        "com_margin_ok"
+      ],
+      "checks": {
+        "finite_state_all_steps": true,
+        "no_mujoco_warnings": true,
+        "base_z_max_dev_m": 0.06775,
+        "base_z_max_dev_ok": false,
+        "mean_rmse_rad": 0.14149,
+        "mean_rmse_ok": true,
+        "contact_feet_end": 3,
+        "contact_feet_ok": false,
+        "com_margin_end_m": null,
+        "com_margin_ok": false
+      },
+      "settled": {
+        "base_z_final_m": 0.34885,
+        "base_z_settled_mean_last0p5s_m": 0.35397,
+        "settled_dev_from_h_m": -0.04603,
+        "body_height_final_m": 0.34885,
+        "body_height_initial_m": 0.4,
+        "body_height_drift_m": -0.05115
+      },
+      "torque": {
+        "max_abs_tau_per_joint_Nm": {
+          "RF_HAA": 56.036,
+          "RF_HFE": 80.0,
+          "RF_KFE": 80.0,
+          "RM_HAA": 5.011,
+          "RM_HFE": 20.425,
+          "RM_KFE": 28.585,
+          "RB_HAA": 12.922,
+          "RB_HFE": 28.442,
+          "RB_KFE": 18.635,
+          "LF_HAA": 36.212,
+          "LF_HFE": 80.0,
+          "LF_KFE": 80.0,
+          "LM_HAA": 57.056,
+          "LM_HFE": 80.0,
+          "LM_KFE": 80.0,
+          "LB_HAA": 17.542,
+          "LB_HFE": 36.408,
+          "LB_KFE": 25.525
+        },
+        "global_max_abs_tau_Nm": 80.0,
+        "global_max_tau_joint": "RF_HFE",
+        "torque_margin_Nm": 0.0
+      },
+      "com": {
+        "drift_xy_m": [
+          -0.24236,
+          0.39244
+        ],
+        "drift_norm_m": 0.46124,
+        "com_xy_initial": [
+          0.00541,
+          -0.00468
+        ],
+        "com_xy_final": [
+          -0.23695,
+          0.38776
+        ]
+      },
+      "joint_tracking": {
+        "rmse_per_joint_rad": {
+          "RF_HAA": 0.12471,
+          "RF_HFE": 0.17871,
+          "RF_KFE": 0.19122,
+          "RM_HAA": 0.00826,
+          "RM_HFE": 0.06884,
+          "RM_KFE": 0.14835,
+          "RB_HAA": 0.03549,
+          "RB_HFE": 0.09793,
+          "RB_KFE": 0.05789,
+          "LF_HAA": 0.06501,
+          "LF_HFE": 0.2317,
+          "LF_KFE": 0.20344,
+          "LM_HAA": 0.17798,
+          "LM_HFE": 0.17877,
+          "LM_KFE": 0.41165,
+          "LB_HAA": 0.07549,
+          "LB_HFE": 0.18616,
+          "LB_KFE": 0.10519
+        },
+        "worst_joint": "LM_KFE",
+        "worst_joint_rmse_rad": 0.41165,
+        "mean_rmse_rad": 0.14149,
+        "final_error_per_joint_rad": {
+          "RF_HAA": -0.15916,
+          "RF_HFE": -0.23401,
+          "RF_KFE": 0.18462,
+          "RM_HAA": -0.00528,
+          "RM_HFE": 0.07489,
+          "RM_KFE": 0.16786,
+          "RB_HAA": 0.00156,
+          "RB_HFE": -0.07662,
+          "RB_KFE": -0.02592,
+          "LF_HAA": -0.00449,
+          "LF_HFE": -0.13029,
+          "LF_KFE": -0.60586,
+          "LM_HAA": -0.23259,
+          "LM_HFE": 0.12027,
+          "LM_KFE": -0.87519,
+          "LB_HAA": -0.03116,
+          "LB_HFE": -0.19076,
+          "LB_KFE": -0.11069
+        }
+      },
+      "contacts": {
+        "feet_in_contact_end": [
+          "LB",
+          "RB",
+          "RM"
+        ],
+        "n_con_end": 6
+      },
+      "end_state_meter": {
+        "n_stance_feet": 2,
+        "support_polygon_area_m2": null,
+        "com_margin_m": null,
+        "bottom_clearance_m": 0.12988,
+        "top_height_m": 0.36054,
+        "slope_deg": null,
+        "feet_airborne": false,
+        "min_sole_z_m": -0.00491
+      },
+      "hex": {
+        "initial": {
+          "meter_raw": {
+            "front_width": 1.0707083292376325,
+            "middle_width": 0.0,
+            "back_width": 0.5459488537561882,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295411181228197
+          },
+          "safe_fit": {
+            "front_width": 0.9219990724333312,
+            "middle_width": 0.25300160125187265,
+            "back_width": 0.5106937648092559,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295411181228197
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295411181228197,
+            "midship_max_abs_y_|x|<=0.03m": 0.2530027581117503,
+            "overall_max_abs_y": 0.6613998629309372
+          },
+          "mw_zero_in_meter_raw": true
+        },
+        "final": {
+          "meter_raw": {
+            "front_width": 1.1039549214708193,
+            "middle_width": 0.0,
+            "back_width": 0.6076471907354029,
+            "forward_limit": 0.6409109247410208,
+            "backward_limit": -0.5297469828057494
+          },
+          "safe_fit": {
+            "front_width": 0.9588135324582628,
+            "middle_width": 0.2530015375905781,
+            "back_width": 0.5665607469344567,
+            "forward_limit": 0.6409109247410208,
+            "backward_limit": -0.5297469828057494
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410208,
+            "backward_limit": -0.5297469828057494,
+            "midship_max_abs_y_|x|<=0.03m": 0.25300275811175077,
+            "overall_max_abs_y": 0.683908821739132
+          },
+          "mw_zero_in_meter_raw": true
+        },
+        "drift_safe_fit": {
+          "front_width": 0.036814460024931606,
+          "middle_width": -6.366129456925051e-08,
+          "back_width": 0.055866982125200804,
+          "forward_limit": 1.2212453270876722e-15,
+          "backward_limit": -0.00020586468292971283
+        },
+        "drift_meter_raw": {
+          "front_width": 0.03324659223318682,
+          "middle_width": 0.0,
+          "back_width": 0.061698336979214674,
+          "forward_limit": 1.2212453270876722e-15,
+          "backward_limit": -0.00020586468292971283
+        },
+        "mw_zero_flag": {
+          "initial_meter_raw": true,
+          "final_meter_raw": true,
+          "note": "raw meter EA2 fit may report mw=0 (waist-pinching hull-reduction defect); drift conclusions use safe_fit (sampling-stage\u53e3\u5f84), physical extremes attached as supplement"
+        }
+      },
+      "config_summary": {
+        "initial_joint_angles_per_leg": {
+          "RF": [
+            0.0905,
+            0.4295,
+            -1.4716
+          ],
+          "RM": [
+            2.2894,
+            0.6945,
+            0.5939
+          ],
+          "RB": [
+            0.0003,
+            -0.3036,
+            -0.1027
+          ],
+          "LF": [
+            0.0905,
+            0.4295,
+            -1.5032
+          ],
+          "LM": [
+            -2.3564,
+            0.581,
+            -1.7668
+          ],
+          "LB": [
+            0.0003,
+            -0.3036,
+            -0.071
+          ]
+        },
+        "final_joint_angles_per_leg": {
+          "RF": [
+            -0.0687,
+            0.1955,
+            -1.287
+          ],
+          "RM": [
+            2.2841,
+            0.7693,
+            0.7618
+          ],
+          "RB": [
+            0.0019,
+            -0.3802,
+            -0.1286
+          ],
+          "LF": [
+            0.086,
+            0.2992,
+            -2.1091
+          ],
+          "LM": [
+            -2.589,
+            0.7013,
+            -2.642
+          ],
+          "LB": [
+            -0.0308,
+            -0.4944,
+            -0.1817
+          ]
+        }
+      },
+      "steps_completed": 1000,
+      "warnings": [],
+      "reference_sampling": {
+        "hex_params_safe_fit": {
+          "front_width": 0.922,
+          "middle_width": 0.253,
+          "back_width": 0.5107,
+          "forward_limit": 0.6409,
+          "backward_limit": -0.5295
+        },
+        "com_margin_m": 0.3946,
+        "max_tau_Nm": 44.395,
+        "drift_final_vs_sampling_safe_fit": {
+          "front_width": 0.0368135324582628,
+          "middle_width": 1.5375905780823373e-06,
+          "back_width": 0.05586074693445664,
+          "forward_limit": 1.0924741020823525e-05,
+          "backward_limit": -0.00024698280574941833
+        }
+      },
+      "diagnostic_sole_clear_rerun": {
+        "purpose": "cause analysis for the FAIL: identical hold started sole-clear (deepest sole vertex +1 mm) instead of the protocol h+0.010/0.012 initial height; NOT part of the protocol verdict",
+        "start_base_z_m": 0.41903,
+        "start_min_sole_z_m": 0.001,
+        "verdict": "FAIL",
+        "failed_checks": [
+          "base_z_max_dev_ok",
+          "contact_feet_ok",
+          "com_margin_ok"
+        ],
+        "checks": {
+          "finite_state_all_steps": true,
+          "no_mujoco_warnings": true,
+          "base_z_max_dev_m": 0.07419,
+          "base_z_max_dev_ok": false,
+          "mean_rmse_rad": 0.13112,
+          "mean_rmse_ok": true,
+          "contact_feet_end": 3,
+          "contact_feet_ok": false,
+          "com_margin_end_m": null,
+          "com_margin_ok": false
+        },
+        "settled": {
+          "base_z_final_m": 0.37095,
+          "base_z_settled_mean_last0p5s_m": 0.3797,
+          "settled_dev_from_h_m": -0.0203,
+          "body_height_final_m": 0.37095,
+          "body_height_initial_m": 0.4,
+          "body_height_drift_m": -0.02905
+        },
+        "torque": {
+          "max_abs_tau_per_joint_Nm": {
+            "RF_HAA": 57.92,
+            "RF_HFE": 80.0,
+            "RF_KFE": 80.0,
+            "RM_HAA": 4.756,
+            "RM_HFE": 17.126,
+            "RM_KFE": 26.411,
+            "RB_HAA": 10.064,
+            "RB_HFE": 27.837,
+            "RB_KFE": 18.139,
+            "LF_HAA": 22.081,
+            "LF_HFE": 80.0,
+            "LF_KFE": 80.0,
+            "LM_HAA": 51.605,
+            "LM_HFE": 80.0,
+            "LM_KFE": 80.0,
+            "LB_HAA": 16.169,
+            "LB_HFE": 38.53,
+            "LB_KFE": 25.301
+          },
+          "global_max_abs_tau_Nm": 80.0,
+          "global_max_tau_joint": "RF_HFE",
+          "torque_margin_Nm": 0.0
+        },
+        "contacts": {
+          "feet_in_contact_end": [
+            "LB",
+            "RB",
+            "RM"
+          ],
+          "n_con_end": 3
+        },
+        "com": {
+          "drift_xy_m": [
+            -0.36127,
+            0.26218
+          ],
+          "drift_norm_m": 0.44638,
+          "com_xy_initial": [
+            0.00541,
+            -0.00468
+          ],
+          "com_xy_final": [
+            -0.35586,
+            0.25751
+          ]
+        },
+        "hex_drift_safe_fit": {
+          "front_width": -0.03175601812773721,
+          "middle_width": 5.4914000069405944e-08,
+          "back_width": 0.06640493793750146,
+          "forward_limit": 1.4432899320127035e-15,
+          "backward_limit": 0.0018628568931793321
+        }
+      }
+    },
+    "b1": {
+      "case": "b1",
+      "source": "sampling_results.json use_cases_full['b1_min_forward_limit']",
+      "target_h_m": 0.32,
+      "start": {
+        "start_mode": "drop",
+        "start_base_z_m": 0.332,
+        "start_min_sole_z_m": -0.00174,
+        "start_base_z_minus_h_m": 0.012,
+        "note": [
+          "soles below floor at h+0.010; protocol fallback h+0.012 used",
+          "still -1.7 mm below floor at h+0.012 (tilted-foot sole vertex deeper than the ~8 mm level-foot offset); run proceeds, initial penetration recorded"
+        ]
+      },
+      "verdict": "PASS",
+      "failed_checks": [],
+      "checks": {
+        "finite_state_all_steps": true,
+        "no_mujoco_warnings": true,
+        "base_z_max_dev_m": 0.01331,
+        "base_z_max_dev_ok": true,
+        "mean_rmse_rad": 0.01304,
+        "mean_rmse_ok": true,
+        "contact_feet_end": 6,
+        "contact_feet_ok": true,
+        "com_margin_end_m": 0.4446,
+        "com_margin_ok": true
+      },
+      "settled": {
+        "base_z_final_m": 0.32133,
+        "base_z_settled_mean_last0p5s_m": 0.32133,
+        "settled_dev_from_h_m": 0.00133,
+        "body_height_final_m": 0.31002,
+        "body_height_initial_m": 0.32,
+        "body_height_drift_m": -0.00998
+      },
+      "torque": {
+        "max_abs_tau_per_joint_Nm": {
+          "RF_HAA": 0.198,
+          "RF_HFE": 7.656,
+          "RF_KFE": 2.592,
+          "RM_HAA": 0.243,
+          "RM_HFE": 7.713,
+          "RM_KFE": 2.59,
+          "RB_HAA": 0.21,
+          "RB_HFE": 6.799,
+          "RB_KFE": 1.931,
+          "LF_HAA": 0.24,
+          "LF_HFE": 7.455,
+          "LF_KFE": 1.99,
+          "LM_HAA": 0.313,
+          "LM_HFE": 8.161,
+          "LM_KFE": 2.055,
+          "LB_HAA": 0.238,
+          "LB_HFE": 8.345,
+          "LB_KFE": 2.652
+        },
+        "global_max_abs_tau_Nm": 8.345,
+        "global_max_tau_joint": "LB_HFE",
+        "torque_margin_Nm": 71.655
+      },
+      "com": {
+        "drift_xy_m": [
+          -1e-05,
+          3e-05
+        ],
+        "drift_norm_m": 3e-05,
+        "com_xy_initial": [
+          0.00539,
+          -0.00247
+        ],
+        "com_xy_final": [
+          0.00538,
+          -0.00244
+        ]
+      },
+      "joint_tracking": {
+        "rmse_per_joint_rad": {
+          "RF_HAA": 0.00037,
+          "RF_HFE": 0.02444,
+          "RF_KFE": 0.01963,
+          "RM_HAA": 0.00044,
+          "RM_HFE": 0.02442,
+          "RM_KFE": 0.01961,
+          "RB_HAA": 0.00035,
+          "RB_HFE": 0.01743,
+          "RB_KFE": 0.01459,
+          "LF_HAA": 0.00037,
+          "LF_HFE": 0.01763,
+          "LF_KFE": 0.01506,
+          "LM_HAA": 0.00052,
+          "LM_HFE": 0.01841,
+          "LM_KFE": 0.01552,
+          "LB_HAA": 0.00041,
+          "LB_HFE": 0.02543,
+          "LB_KFE": 0.0201
+        },
+        "worst_joint": "LB_HFE",
+        "worst_joint_rmse_rad": 0.02543,
+        "mean_rmse_rad": 0.01304,
+        "final_error_per_joint_rad": {
+          "RF_HAA": 0.0,
+          "RF_HFE": -0.02423,
+          "RF_KFE": -0.01994,
+          "RM_HAA": 1e-05,
+          "RM_HFE": -0.0242,
+          "RM_KFE": -0.01992,
+          "RB_HAA": -0.0,
+          "RB_HFE": -0.01722,
+          "RB_KFE": -0.01483,
+          "LF_HAA": 0.0,
+          "LF_HFE": -0.01738,
+          "LF_KFE": -0.01528,
+          "LM_HAA": -1e-05,
+          "LM_HFE": -0.0181,
+          "LM_KFE": -0.0158,
+          "LB_HAA": -0.0,
+          "LB_HFE": -0.02517,
+          "LB_KFE": -0.0204
+        }
+      },
+      "contacts": {
+        "feet_in_contact_end": [
+          "LB",
+          "LF",
+          "LM",
+          "RB",
+          "RF",
+          "RM"
+        ],
+        "n_con_end": 13
+      },
+      "end_state_meter": {
+        "n_stance_feet": 6,
+        "support_polygon_area_m2": 0.9765091271815369,
+        "com_margin_m": 0.4446112154786063,
+        "bottom_clearance_m": 0.11031,
+        "top_height_m": 0.30979,
+        "slope_deg": 0.078,
+        "feet_airborne": false,
+        "min_sole_z_m": -0.00122
+      },
+      "hex": {
+        "initial": {
+          "meter_raw": {
+            "front_width": 0.47485241878067896,
+            "middle_width": 0.611791327084204,
+            "back_width": 0.49864885760146876,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295361167668029
+          },
+          "safe_fit": {
+            "front_width": 0.47485241878067896,
+            "middle_width": 0.611791327084204,
+            "back_width": 0.49864885760146876,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295361167668029
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295361167668029,
+            "midship_max_abs_y_|x|<=0.03m": 0.6112105713789214,
+            "overall_max_abs_y": 0.6112105713789214
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "final": {
+          "meter_raw": {
+            "front_width": 0.4781548163489709,
+            "middle_width": 0.6169463208821152,
+            "back_width": 0.5021600024909255,
+            "forward_limit": 0.6409109247410213,
+            "backward_limit": -0.5295357090757432
+          },
+          "safe_fit": {
+            "front_width": 0.4781548163489709,
+            "middle_width": 0.6169463208821152,
+            "back_width": 0.5021600024909255,
+            "forward_limit": 0.6409109247410213,
+            "backward_limit": -0.5295357090757432
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410213,
+            "backward_limit": -0.5295357090757432,
+            "midship_max_abs_y_|x|<=0.03m": 0.6163229440073456,
+            "overall_max_abs_y": 0.6163229440073456
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "drift_safe_fit": {
+          "front_width": 0.003302397568291926,
+          "middle_width": 0.005154993797911178,
+          "back_width": 0.003511144889456752,
+          "forward_limit": 1.6653345369377348e-15,
+          "backward_limit": 4.076910596895189e-07
+        },
+        "drift_meter_raw": {
+          "front_width": 0.003302397568291926,
+          "middle_width": 0.005154993797911178,
+          "back_width": 0.003511144889456752,
+          "forward_limit": 1.6653345369377348e-15,
+          "backward_limit": 4.076910596895189e-07
+        },
+        "mw_zero_flag": {
+          "initial_meter_raw": false,
+          "final_meter_raw": false,
+          "note": "raw meter EA2 fit may report mw=0 (waist-pinching hull-reduction defect); drift conclusions use safe_fit (sampling-stage\u53e3\u5f84), physical extremes attached as supplement"
+        }
+      },
+      "config_summary": {
+        "initial_joint_angles_per_leg": {
+          "RF": [
+            -0.0003,
+            -0.5176,
+            -0.1873
+          ],
+          "RM": [
+            -0.0003,
+            -0.5176,
+            -0.1873
+          ],
+          "RB": [
+            0.0003,
+            -0.5176,
+            -0.2189
+          ],
+          "LF": [
+            -0.0003,
+            -0.5176,
+            -0.2189
+          ],
+          "LM": [
+            -0.0003,
+            -0.6894,
+            0.0388
+          ],
+          "LB": [
+            0.0003,
+            -0.5176,
+            -0.1873
+          ]
+        },
+        "final_joint_angles_per_leg": {
+          "RF": [
+            -0.0003,
+            -0.5418,
+            -0.2072
+          ],
+          "RM": [
+            -0.0003,
+            -0.5418,
+            -0.2072
+          ],
+          "RB": [
+            0.0003,
+            -0.5348,
+            -0.2337
+          ],
+          "LF": [
+            -0.0003,
+            -0.535,
+            -0.2342
+          ],
+          "LM": [
+            -0.0003,
+            -0.7075,
+            0.023
+          ],
+          "LB": [
+            0.0003,
+            -0.5428,
+            -0.2077
+          ]
+        }
+      },
+      "steps_completed": 1000,
+      "warnings": [],
+      "reference_sampling": {
+        "hex_params_safe_fit": {
+          "front_width": 0.4749,
+          "middle_width": 0.6118,
+          "back_width": 0.4986,
+          "forward_limit": 0.6409,
+          "backward_limit": -0.5295
+        },
+        "com_margin_m": 0.4446,
+        "max_tau_Nm": 29.235,
+        "drift_final_vs_sampling_safe_fit": {
+          "front_width": 0.0032548163489709014,
+          "middle_width": 0.005146320882115196,
+          "back_width": 0.003560002490925529,
+          "forward_limit": 1.0924741021267614e-05,
+          "backward_limit": -3.570907574323989e-05
+        }
+      }
+    },
+    "b2": {
+      "case": "b2",
+      "source": "sampling_results.json use_cases_full['b2_min_backward_limit']",
+      "target_h_m": 0.42,
+      "start": {
+        "start_mode": "drop",
+        "start_base_z_m": 0.432,
+        "start_min_sole_z_m": -0.00605,
+        "start_base_z_minus_h_m": 0.012,
+        "note": [
+          "soles below floor at h+0.010; protocol fallback h+0.012 used",
+          "still -6.0 mm below floor at h+0.012 (tilted-foot sole vertex deeper than the ~8 mm level-foot offset); run proceeds, initial penetration recorded"
+        ]
+      },
+      "verdict": "FAIL",
+      "failed_checks": [
+        "base_z_max_dev_ok",
+        "contact_feet_ok",
+        "com_margin_ok"
+      ],
+      "checks": {
+        "finite_state_all_steps": true,
+        "no_mujoco_warnings": true,
+        "base_z_max_dev_m": 0.05952,
+        "base_z_max_dev_ok": false,
+        "mean_rmse_rad": 0.14612,
+        "mean_rmse_ok": true,
+        "contact_feet_end": 2,
+        "contact_feet_ok": false,
+        "com_margin_end_m": null,
+        "com_margin_ok": false
+      },
+      "settled": {
+        "base_z_final_m": 0.4024,
+        "base_z_settled_mean_last0p5s_m": 0.39495,
+        "settled_dev_from_h_m": -0.02505,
+        "body_height_final_m": 0.4024,
+        "body_height_initial_m": 0.42,
+        "body_height_drift_m": -0.0176
+      },
+      "torque": {
+        "max_abs_tau_per_joint_Nm": {
+          "RF_HAA": 25.509,
+          "RF_HFE": 46.484,
+          "RF_KFE": 24.792,
+          "RM_HAA": 26.827,
+          "RM_HFE": 80.0,
+          "RM_KFE": 80.0,
+          "RB_HAA": 14.855,
+          "RB_HFE": 80.0,
+          "RB_KFE": 80.0,
+          "LF_HAA": 24.454,
+          "LF_HFE": 38.296,
+          "LF_KFE": 25.479,
+          "LM_HAA": 51.679,
+          "LM_HFE": 80.0,
+          "LM_KFE": 80.0,
+          "LB_HAA": 13.875,
+          "LB_HFE": 80.0,
+          "LB_KFE": 80.0
+        },
+        "global_max_abs_tau_Nm": 80.0,
+        "global_max_tau_joint": "RM_HFE",
+        "torque_margin_Nm": 0.0
+      },
+      "com": {
+        "drift_xy_m": [
+          1.39089,
+          -0.39185
+        ],
+        "drift_norm_m": 1.44503,
+        "com_xy_initial": [
+          -0.05522,
+          0.00058
+        ],
+        "com_xy_final": [
+          1.33567,
+          -0.39127
+        ]
+      },
+      "joint_tracking": {
+        "rmse_per_joint_rad": {
+          "RF_HAA": 0.1371,
+          "RF_HFE": 0.21032,
+          "RF_KFE": 0.1385,
+          "RM_HAA": 0.03622,
+          "RM_HFE": 0.14265,
+          "RM_KFE": 0.25649,
+          "RB_HAA": 0.01893,
+          "RB_HFE": 0.11067,
+          "RB_KFE": 0.29417,
+          "LF_HAA": 0.11091,
+          "LF_HFE": 0.16798,
+          "LF_KFE": 0.11805,
+          "LM_HAA": 0.07372,
+          "LM_HFE": 0.1258,
+          "LM_KFE": 0.26087,
+          "LB_HAA": 0.01731,
+          "LB_HFE": 0.10863,
+          "LB_KFE": 0.30179
+        },
+        "worst_joint": "LB_KFE",
+        "worst_joint_rmse_rad": 0.30179,
+        "mean_rmse_rad": 0.14612,
+        "final_error_per_joint_rad": {
+          "RF_HAA": 0.14142,
+          "RF_HFE": -0.21459,
+          "RF_KFE": -0.16562,
+          "RM_HAA": -0.00828,
+          "RM_HFE": -0.0737,
+          "RM_KFE": 0.13357,
+          "RB_HAA": 0.00388,
+          "RB_HFE": -0.13168,
+          "RB_KFE": 0.4087,
+          "LF_HAA": 0.10287,
+          "LF_HFE": -0.18759,
+          "LF_KFE": -0.15707,
+          "LM_HAA": -0.02804,
+          "LM_HFE": -0.17184,
+          "LM_KFE": 0.30212,
+          "LB_HAA": 0.00655,
+          "LB_HFE": 0.06268,
+          "LB_KFE": 0.07235
+        }
+      },
+      "contacts": {
+        "feet_in_contact_end": [
+          "LF",
+          "RF"
+        ],
+        "n_con_end": 4
+      },
+      "end_state_meter": {
+        "n_stance_feet": 2,
+        "support_polygon_area_m2": null,
+        "com_margin_m": null,
+        "bottom_clearance_m": 0.13527,
+        "top_height_m": 0.42619,
+        "slope_deg": null,
+        "feet_airborne": false,
+        "min_sole_z_m": -0.00388
+      },
+      "hex": {
+        "initial": {
+          "meter_raw": {
+            "front_width": 0.6688919009658338,
+            "middle_width": 0.0,
+            "back_width": 0.17219020146592903,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -1.0114616101247413
+          },
+          "safe_fit": {
+            "front_width": 0.5391344715231823,
+            "middle_width": 0.29639653691538703,
+            "back_width": 0.16691453647694854,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -1.0114616101247413
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -1.0114616101247413,
+            "midship_max_abs_y_|x|<=0.03m": 0.2530027581117503,
+            "overall_max_abs_y": 0.46528815413729463
+          },
+          "mw_zero_in_meter_raw": true
+        },
+        "final": {
+          "meter_raw": {
+            "front_width": 0.8675794302410389,
+            "middle_width": 0.0,
+            "back_width": 0.16562969949464354,
+            "forward_limit": 0.6409109247410185,
+            "backward_limit": -0.9871713937682739
+          },
+          "safe_fit": {
+            "front_width": 0.6579402485654927,
+            "middle_width": 0.31840656117571864,
+            "back_width": 0.16131674750002192,
+            "forward_limit": 0.6409109247410185,
+            "backward_limit": -0.9871713937682739
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410185,
+            "backward_limit": -0.9871713937682739,
+            "midship_max_abs_y_|x|<=0.03m": 0.2530027581117497,
+            "overall_max_abs_y": 0.5236817523432561
+          },
+          "mw_zero_in_meter_raw": true
+        },
+        "drift_safe_fit": {
+          "front_width": 0.11880577704231043,
+          "middle_width": 0.022010024260331607,
+          "back_width": -0.005597788976926615,
+          "forward_limit": -1.1102230246251565e-15,
+          "backward_limit": 0.024290216356467442
+        },
+        "drift_meter_raw": {
+          "front_width": 0.19868752927520505,
+          "middle_width": 0.0,
+          "back_width": -0.006560501971285493,
+          "forward_limit": -1.1102230246251565e-15,
+          "backward_limit": 0.024290216356467442
+        },
+        "mw_zero_flag": {
+          "initial_meter_raw": true,
+          "final_meter_raw": true,
+          "note": "raw meter EA2 fit may report mw=0 (waist-pinching hull-reduction defect); drift conclusions use safe_fit (sampling-stage\u53e3\u5f84), physical extremes attached as supplement"
+        }
+      },
+      "config_summary": {
+        "initial_joint_angles_per_leg": {
+          "RF": [
+            -0.0003,
+            -0.2048,
+            -0.1228
+          ],
+          "RM": [
+            1.6613,
+            0.5312,
+            -1.5746
+          ],
+          "RB": [
+            1.571,
+            0.5089,
+            -1.5668
+          ],
+          "LF": [
+            -0.0004,
+            -0.2822,
+            0.0619
+          ],
+          "LM": [
+            1.5706,
+            0.5089,
+            -1.5668
+          ],
+          "LB": [
+            1.4803,
+            0.5312,
+            -1.5746
+          ]
+        },
+        "final_joint_angles_per_leg": {
+          "RF": [
+            0.1411,
+            -0.4193,
+            -0.2884
+          ],
+          "RM": [
+            1.653,
+            0.4575,
+            -1.441
+          ],
+          "RB": [
+            1.5749,
+            0.3772,
+            -1.1581
+          ],
+          "LF": [
+            0.1025,
+            -0.4698,
+            -0.0951
+          ],
+          "LM": [
+            1.5426,
+            0.337,
+            -1.2647
+          ],
+          "LB": [
+            1.4869,
+            0.5939,
+            -1.5022
+          ]
+        }
+      },
+      "steps_completed": 1000,
+      "warnings": [],
+      "reference_sampling": {
+        "hex_params_safe_fit": {
+          "front_width": 0.5391,
+          "middle_width": 0.2964,
+          "back_width": 0.1669,
+          "forward_limit": 0.6409,
+          "backward_limit": -1.0115
+        },
+        "com_margin_m": 0.3078,
+        "max_tau_Nm": 44.456,
+        "drift_final_vs_sampling_safe_fit": {
+          "front_width": 0.11884024856549269,
+          "middle_width": 0.022006561175718642,
+          "back_width": -0.00558325249997807,
+          "forward_limit": 1.0924741018492057e-05,
+          "backward_limit": 0.02432860623172617
+        }
+      },
+      "diagnostic_sole_clear_rerun": {
+        "purpose": "cause analysis for the FAIL: identical hold started sole-clear (deepest sole vertex +1 mm) instead of the protocol h+0.010/0.012 initial height; NOT part of the protocol verdict",
+        "start_base_z_m": 0.43905,
+        "start_min_sole_z_m": 0.001,
+        "verdict": "FAIL",
+        "failed_checks": [
+          "base_z_max_dev_ok",
+          "contact_feet_ok",
+          "com_margin_ok"
+        ],
+        "checks": {
+          "finite_state_all_steps": true,
+          "no_mujoco_warnings": true,
+          "base_z_max_dev_m": 0.0638,
+          "base_z_max_dev_ok": false,
+          "mean_rmse_rad": 0.14322,
+          "mean_rmse_ok": true,
+          "contact_feet_end": 3,
+          "contact_feet_ok": false,
+          "com_margin_end_m": null,
+          "com_margin_ok": false
+        },
+        "settled": {
+          "base_z_final_m": 0.3831,
+          "base_z_settled_mean_last0p5s_m": 0.39448,
+          "settled_dev_from_h_m": -0.02552,
+          "body_height_final_m": 0.3831,
+          "body_height_initial_m": 0.42,
+          "body_height_drift_m": -0.0369
+        },
+        "torque": {
+          "max_abs_tau_per_joint_Nm": {
+            "RF_HAA": 25.97,
+            "RF_HFE": 45.321,
+            "RF_KFE": 25.858,
+            "RM_HAA": 17.673,
+            "RM_HFE": 80.0,
+            "RM_KFE": 80.0,
+            "RB_HAA": 15.557,
+            "RB_HFE": 80.0,
+            "RB_KFE": 80.0,
+            "LF_HAA": 22.4,
+            "LF_HFE": 40.958,
+            "LF_KFE": 26.395,
+            "LM_HAA": 32.618,
+            "LM_HFE": 80.0,
+            "LM_KFE": 80.0,
+            "LB_HAA": 11.631,
+            "LB_HFE": 80.0,
+            "LB_KFE": 80.0
+          },
+          "global_max_abs_tau_Nm": 80.0,
+          "global_max_tau_joint": "RM_HFE",
+          "torque_margin_Nm": 0.0
+        },
+        "contacts": {
+          "feet_in_contact_end": [
+            "LF",
+            "LM",
+            "RF"
+          ],
+          "n_con_end": 4
+        },
+        "com": {
+          "drift_xy_m": [
+            1.58118,
+            -0.28404
+          ],
+          "drift_norm_m": 1.60649,
+          "com_xy_initial": [
+            -0.05522,
+            0.00058
+          ],
+          "com_xy_final": [
+            1.52596,
+            -0.28346
+          ]
+        },
+        "hex_drift_safe_fit": {
+          "front_width": 0.12063929872009527,
+          "middle_width": 0.003831843968116422,
+          "back_width": -0.014778252275472109,
+          "forward_limit": -2.220446049250313e-15,
+          "backward_limit": -0.023320390298450455
+        }
+      }
+    },
+    "c": {
+      "case": "c",
+      "source": "sampling_results.json use_cases_full['c_min_h']",
+      "target_h_m": 0.32,
+      "start": {
+        "start_mode": "drop",
+        "start_base_z_m": 0.332,
+        "start_min_sole_z_m": -0.00011,
+        "start_base_z_minus_h_m": 0.012,
+        "note": [
+          "soles below floor at h+0.010; protocol fallback h+0.012 used",
+          "still -0.1 mm below floor at h+0.012 (tilted-foot sole vertex deeper than the ~8 mm level-foot offset); run proceeds, initial penetration recorded"
+        ]
+      },
+      "verdict": "PASS",
+      "failed_checks": [],
+      "checks": {
+        "finite_state_all_steps": true,
+        "no_mujoco_warnings": true,
+        "base_z_max_dev_m": 0.01189,
+        "base_z_max_dev_ok": true,
+        "mean_rmse_rad": 0.0149,
+        "mean_rmse_ok": true,
+        "contact_feet_end": 6,
+        "contact_feet_ok": true,
+        "com_margin_end_m": 0.4576,
+        "com_margin_ok": true
+      },
+      "settled": {
+        "base_z_final_m": 0.32134,
+        "base_z_settled_mean_last0p5s_m": 0.32134,
+        "settled_dev_from_h_m": 0.00134,
+        "body_height_final_m": 0.31157,
+        "body_height_initial_m": 0.32,
+        "body_height_drift_m": -0.00843
+      },
+      "torque": {
+        "max_abs_tau_per_joint_Nm": {
+          "RF_HAA": 0.383,
+          "RF_HFE": 10.067,
+          "RF_KFE": 3.141,
+          "RM_HAA": 0.341,
+          "RM_HFE": 10.875,
+          "RM_KFE": 3.177,
+          "RB_HAA": 0.278,
+          "RB_HFE": 8.606,
+          "RB_KFE": 2.18,
+          "LF_HAA": 0.307,
+          "LF_HFE": 5.857,
+          "LF_KFE": 2.197,
+          "LM_HAA": 0.31,
+          "LM_HFE": 4.973,
+          "LM_KFE": 3.806,
+          "LB_HAA": 0.338,
+          "LB_HFE": 7.12,
+          "LB_KFE": 3.17
+        },
+        "global_max_abs_tau_Nm": 10.875,
+        "global_max_tau_joint": "RM_HFE",
+        "torque_margin_Nm": 69.125
+      },
+      "com": {
+        "drift_xy_m": [
+          -1e-05,
+          0.0001
+        ],
+        "drift_norm_m": 0.0001,
+        "com_xy_initial": [
+          0.00525,
+          -0.00289
+        ],
+        "com_xy_final": [
+          0.00524,
+          -0.00278
+        ]
+      },
+      "joint_tracking": {
+        "rmse_per_joint_rad": {
+          "RF_HAA": 0.00054,
+          "RF_HFE": 0.02805,
+          "RF_KFE": 0.0237,
+          "RM_HAA": 0.00047,
+          "RM_HFE": 0.02822,
+          "RM_KFE": 0.02397,
+          "RB_HAA": 0.00037,
+          "RB_HFE": 0.01895,
+          "RB_KFE": 0.01641,
+          "LF_HAA": 0.00044,
+          "LF_HFE": 0.01905,
+          "LF_KFE": 0.0165,
+          "LM_HAA": 0.00024,
+          "LM_HFE": 0.00978,
+          "LM_KFE": 0.0288,
+          "LB_HAA": 0.00053,
+          "LB_HFE": 0.02825,
+          "LB_KFE": 0.02388
+        },
+        "worst_joint": "LM_KFE",
+        "worst_joint_rmse_rad": 0.0288,
+        "mean_rmse_rad": 0.0149,
+        "final_error_per_joint_rad": {
+          "RF_HAA": 0.0,
+          "RF_HFE": -0.02767,
+          "RF_KFE": -0.02416,
+          "RM_HAA": 0.0,
+          "RM_HFE": -0.02778,
+          "RM_KFE": -0.02444,
+          "RB_HAA": -0.0,
+          "RB_HFE": -0.0186,
+          "RB_KFE": -0.01675,
+          "LF_HAA": -0.0,
+          "LF_HFE": -0.01877,
+          "LF_KFE": -0.01688,
+          "LM_HAA": -1e-05,
+          "LM_HFE": -0.00964,
+          "LM_KFE": -0.0292,
+          "LB_HAA": -0.0,
+          "LB_HFE": -0.02793,
+          "LB_KFE": -0.02438
+        }
+      },
+      "contacts": {
+        "feet_in_contact_end": [
+          "LB",
+          "LF",
+          "LM",
+          "RB",
+          "RF",
+          "RM"
+        ],
+        "n_con_end": 15
+      },
+      "end_state_meter": {
+        "n_stance_feet": 6,
+        "support_polygon_area_m2": 0.8906147396397,
+        "com_margin_m": 0.4575941888433559,
+        "bottom_clearance_m": 0.11196,
+        "top_height_m": 0.31127,
+        "slope_deg": 0.099,
+        "feet_airborne": false,
+        "min_sole_z_m": -0.00167
+      },
+      "hex": {
+        "initial": {
+          "meter_raw": {
+            "front_width": 0.3901658956758084,
+            "middle_width": 0.5131950163937193,
+            "back_width": 0.40758164963372406,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.55018554978546
+          },
+          "safe_fit": {
+            "front_width": 0.3901658956758084,
+            "middle_width": 0.5131950163937193,
+            "back_width": 0.40758164963372406,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.55018554978546
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.55018554978546,
+            "midship_max_abs_y_|x|<=0.03m": 0.5127274241252567,
+            "overall_max_abs_y": 0.5127274241252567
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "final": {
+          "meter_raw": {
+            "front_width": 0.3943872106208917,
+            "middle_width": 0.5200837458661677,
+            "back_width": 0.4121386717893026,
+            "forward_limit": 0.640910924741022,
+            "backward_limit": -0.5501881561520371
+          },
+          "safe_fit": {
+            "front_width": 0.3943872106208917,
+            "middle_width": 0.5200837458661677,
+            "back_width": 0.4121386717893026,
+            "forward_limit": 0.640910924741022,
+            "backward_limit": -0.5501881561520371
+          },
+          "physical": {
+            "forward_limit": 0.640910924741022,
+            "backward_limit": -0.5501881561520371,
+            "midship_max_abs_y_|x|<=0.03m": 0.5195526743364376,
+            "overall_max_abs_y": 0.5195526743364376
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "drift_safe_fit": {
+          "front_width": 0.004221314945083321,
+          "middle_width": 0.0068887294724483406,
+          "back_width": 0.004557022155578516,
+          "forward_limit": 2.3314683517128287e-15,
+          "backward_limit": -2.606366577118102e-06
+        },
+        "drift_meter_raw": {
+          "front_width": 0.004221314945083321,
+          "middle_width": 0.0068887294724483406,
+          "back_width": 0.004557022155578516,
+          "forward_limit": 2.3314683517128287e-15,
+          "backward_limit": -2.606366577118102e-06
+        },
+        "mw_zero_flag": {
+          "initial_meter_raw": false,
+          "final_meter_raw": false,
+          "note": "raw meter EA2 fit may report mw=0 (waist-pinching hull-reduction defect); drift conclusions use safe_fit (sampling-stage\u53e3\u5f84), physical extremes attached as supplement"
+        }
+      },
+      "config_summary": {
+        "initial_joint_angles_per_leg": {
+          "RF": [
+            -0.1655,
+            -0.8531,
+            0.2951
+          ],
+          "RM": [
+            -0.0004,
+            -0.8687,
+            0.3151
+          ],
+          "RB": [
+            0.1655,
+            -0.8531,
+            0.2635
+          ],
+          "LF": [
+            -0.1655,
+            -0.8531,
+            0.2635
+          ],
+          "LM": [
+            -0.0004,
+            -1.0792,
+            0.5269
+          ],
+          "LB": [
+            0.1655,
+            -0.8531,
+            0.2951
+          ]
+        },
+        "final_joint_angles_per_leg": {
+          "RF": [
+            -0.1655,
+            -0.8808,
+            0.271
+          ],
+          "RM": [
+            -0.0004,
+            -0.8965,
+            0.2907
+          ],
+          "RB": [
+            0.1655,
+            -0.8717,
+            0.2468
+          ],
+          "LF": [
+            -0.1655,
+            -0.8719,
+            0.2466
+          ],
+          "LM": [
+            -0.0004,
+            -1.0888,
+            0.4977
+          ],
+          "LB": [
+            0.1655,
+            -0.881,
+            0.2707
+          ]
+        }
+      },
+      "steps_completed": 1000,
+      "warnings": [],
+      "reference_sampling": {
+        "hex_params_safe_fit": {
+          "front_width": 0.3902,
+          "middle_width": 0.5132,
+          "back_width": 0.4076,
+          "forward_limit": 0.6409,
+          "backward_limit": -0.5502
+        },
+        "com_margin_m": 0.4501,
+        "max_tau_Nm": 20.714,
+        "drift_final_vs_sampling_safe_fit": {
+          "front_width": 0.004187210620891724,
+          "middle_width": 0.00688374586616769,
+          "back_width": 0.004538671789302562,
+          "forward_limit": 1.0924741021933748e-05,
+          "backward_limit": 1.1843847962933474e-05
+        }
+      }
+    },
+    "d": {
+      "case": "d",
+      "source": "sampling_results.json use_cases_full['d_max_h']",
+      "target_h_m": 0.5,
+      "start": {
+        "start_mode": "drop",
+        "start_base_z_m": 0.51,
+        "start_min_sole_z_m": 0.0016,
+        "start_base_z_minus_h_m": 0.01,
+        "note": []
+      },
+      "verdict": "PASS",
+      "failed_checks": [],
+      "checks": {
+        "finite_state_all_steps": true,
+        "no_mujoco_warnings": true,
+        "base_z_max_dev_m": 0.02207,
+        "base_z_max_dev_ok": true,
+        "mean_rmse_rad": 0.03304,
+        "mean_rmse_ok": true,
+        "contact_feet_end": 6,
+        "contact_feet_ok": true,
+        "com_margin_end_m": 0.4444,
+        "com_margin_ok": true
+      },
+      "settled": {
+        "base_z_final_m": 0.48793,
+        "base_z_settled_mean_last0p5s_m": 0.48794,
+        "settled_dev_from_h_m": -0.01206,
+        "body_height_final_m": 0.48256,
+        "body_height_initial_m": 0.5,
+        "body_height_drift_m": -0.01744
+      },
+      "torque": {
+        "max_abs_tau_per_joint_Nm": {
+          "RF_HAA": 0.806,
+          "RF_HFE": 11.788,
+          "RF_KFE": 6.662,
+          "RM_HAA": 0.982,
+          "RM_HFE": 11.833,
+          "RM_KFE": 6.999,
+          "RB_HAA": 0.806,
+          "RB_HFE": 13.091,
+          "RB_KFE": 8.21,
+          "LF_HAA": 0.665,
+          "LF_HFE": 12.145,
+          "LF_KFE": 9.231,
+          "LM_HAA": 0.876,
+          "LM_HFE": 11.607,
+          "LM_KFE": 8.534,
+          "LB_HAA": 0.606,
+          "LB_HFE": 10.176,
+          "LB_KFE": 6.52
+        },
+        "global_max_abs_tau_Nm": 13.091,
+        "global_max_tau_joint": "RB_HFE",
+        "torque_margin_Nm": 66.909
+      },
+      "com": {
+        "drift_xy_m": [
+          -3e-05,
+          -0.0045
+        ],
+        "drift_norm_m": 0.0045,
+        "com_xy_initial": [
+          0.00539,
+          -0.00179
+        ],
+        "com_xy_final": [
+          0.00536,
+          -0.00629
+        ]
+      },
+      "joint_tracking": {
+        "rmse_per_joint_rad": {
+          "RF_HAA": 0.00099,
+          "RF_HFE": 0.08152,
+          "RF_KFE": 0.01653,
+          "RM_HAA": 0.00119,
+          "RM_HFE": 0.08276,
+          "RM_KFE": 0.01735,
+          "RB_HAA": 0.00095,
+          "RB_HFE": 0.09518,
+          "RB_KFE": 0.0124,
+          "LF_HAA": 0.00089,
+          "LF_HFE": 0.0856,
+          "LF_KFE": 0.01559,
+          "LM_HAA": 0.00115,
+          "LM_HFE": 0.08305,
+          "LM_KFE": 0.01614,
+          "LB_HAA": 0.00075,
+          "LB_HFE": 0.06758,
+          "LB_KFE": 0.01509
+        },
+        "worst_joint": "RB_HFE",
+        "worst_joint_rmse_rad": 0.09518,
+        "mean_rmse_rad": 0.03304,
+        "final_error_per_joint_rad": {
+          "RF_HAA": 5e-05,
+          "RF_HFE": -0.0873,
+          "RF_KFE": -0.01991,
+          "RM_HAA": 5e-05,
+          "RM_HFE": -0.08756,
+          "RM_KFE": -0.02006,
+          "RB_HAA": 8e-05,
+          "RB_HFE": -0.10061,
+          "RB_KFE": -0.00029,
+          "LF_HAA": 0.00013,
+          "LF_HFE": -0.09337,
+          "LF_KFE": -8e-05,
+          "LM_HAA": 0.00014,
+          "LM_HFE": -0.08926,
+          "LM_KFE": 0.00061,
+          "LB_HAA": 8e-05,
+          "LB_HFE": -0.07042,
+          "LB_KFE": -0.01553
+        }
+      },
+      "contacts": {
+        "feet_in_contact_end": [
+          "LB",
+          "LF",
+          "LM",
+          "RB",
+          "RF",
+          "RM"
+        ],
+        "n_con_end": 8
+      },
+      "end_state_meter": {
+        "n_stance_feet": 6,
+        "support_polygon_area_m2": 0.8060257310816057,
+        "com_margin_m": 0.44437788571329306,
+        "bottom_clearance_m": 0.2815,
+        "top_height_m": 0.48335,
+        "slope_deg": 0.033,
+        "feet_airborne": false,
+        "min_sole_z_m": -0.00411
+      },
+      "hex": {
+        "initial": {
+          "meter_raw": {
+            "front_width": 0.3775675588305027,
+            "middle_width": 0.5199922087729516,
+            "back_width": 0.4023125085039623,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295568732792565
+          },
+          "safe_fit": {
+            "front_width": 0.3775675588305027,
+            "middle_width": 0.5199922087729516,
+            "back_width": 0.4023125085039623,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295568732792565
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295568732792565,
+            "midship_max_abs_y_|x|<=0.03m": 0.5193000739726433,
+            "overall_max_abs_y": 0.5193000739726433
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "final": {
+          "meter_raw": {
+            "front_width": 0.40150591870433505,
+            "middle_width": 0.5440645455357871,
+            "back_width": 0.42086699813683487,
+            "forward_limit": 0.640910924741019,
+            "backward_limit": -0.52956728858036
+          },
+          "safe_fit": {
+            "front_width": 0.40150591870433505,
+            "middle_width": 0.5440645455357871,
+            "back_width": 0.42086699813683487,
+            "forward_limit": 0.640910924741019,
+            "backward_limit": -0.52956728858036
+          },
+          "physical": {
+            "forward_limit": 0.640910924741019,
+            "backward_limit": -0.52956728858036,
+            "midship_max_abs_y_|x|<=0.03m": 0.543405527210863,
+            "overall_max_abs_y": 0.543405527210863
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "drift_safe_fit": {
+          "front_width": 0.02393835987383236,
+          "middle_width": 0.02407233676283549,
+          "back_width": 0.018554489632872595,
+          "forward_limit": -6.661338147750939e-16,
+          "backward_limit": -1.0415301103461339e-05
+        },
+        "drift_meter_raw": {
+          "front_width": 0.02393835987383236,
+          "middle_width": 0.02407233676283549,
+          "back_width": 0.018554489632872595,
+          "forward_limit": -6.661338147750939e-16,
+          "backward_limit": -1.0415301103461339e-05
+        },
+        "mw_zero_flag": {
+          "initial_meter_raw": false,
+          "final_meter_raw": false,
+          "note": "raw meter EA2 fit may report mw=0 (waist-pinching hull-reduction defect); drift conclusions use safe_fit (sampling-stage\u53e3\u5f84), physical extremes attached as supplement"
+        }
+      },
+      "config_summary": {
+        "initial_joint_angles_per_leg": {
+          "RF": [
+            -0.0004,
+            0.1503,
+            -0.1905
+          ],
+          "RM": [
+            -0.0004,
+            0.1503,
+            -0.1905
+          ],
+          "RB": [
+            0.0004,
+            0.1546,
+            -0.0583
+          ],
+          "LF": [
+            -0.0004,
+            0.1546,
+            -0.0583
+          ],
+          "LM": [
+            -0.0004,
+            0.1546,
+            -0.0583
+          ],
+          "LB": [
+            0.0004,
+            0.1503,
+            -0.1905
+          ]
+        },
+        "final_joint_angles_per_leg": {
+          "RF": [
+            -0.0003,
+            0.063,
+            -0.2104
+          ],
+          "RM": [
+            -0.0003,
+            0.0627,
+            -0.2106
+          ],
+          "RB": [
+            0.0005,
+            0.054,
+            -0.0586
+          ],
+          "LF": [
+            -0.0003,
+            0.0613,
+            -0.0584
+          ],
+          "LM": [
+            -0.0003,
+            0.0654,
+            -0.0577
+          ],
+          "LB": [
+            0.0004,
+            0.0798,
+            -0.2061
+          ]
+        }
+      },
+      "steps_completed": 1000,
+      "warnings": [],
+      "reference_sampling": {
+        "hex_params_safe_fit": {
+          "front_width": 0.3776,
+          "middle_width": 0.52,
+          "back_width": 0.4023,
+          "forward_limit": 0.6409,
+          "backward_limit": -0.5296
+        },
+        "com_margin_m": 0.4399,
+        "max_tau_Nm": 21.208,
+        "drift_final_vs_sampling_safe_fit": {
+          "front_width": 0.02390591870433506,
+          "middle_width": 0.024064545535787074,
+          "back_width": 0.018566998136834878,
+          "forward_limit": 1.0924741018936146e-05,
+          "backward_limit": 3.271141964000801e-05
+        }
+      }
+    },
+    "e": {
+      "case": "e",
+      "source": "constructed: z0=0.40, q=0 stand foot xy (right legs per sampling record, left legs measured), z=-0.40, meter.leg_ik branch closest to q=0",
+      "target_h_m": 0.4,
+      "start": {
+        "start_mode": "drop",
+        "start_base_z_m": 0.41,
+        "start_min_sole_z_m": 0.00101,
+        "start_base_z_minus_h_m": 0.01,
+        "note": []
+      },
+      "verdict": "PASS",
+      "failed_checks": [],
+      "checks": {
+        "finite_state_all_steps": true,
+        "no_mujoco_warnings": true,
+        "base_z_max_dev_m": 0.02556,
+        "base_z_max_dev_ok": true,
+        "mean_rmse_rad": 0.0427,
+        "mean_rmse_ok": true,
+        "contact_feet_end": 6,
+        "contact_feet_ok": true,
+        "com_margin_end_m": 0.4441,
+        "com_margin_ok": true
+      },
+      "settled": {
+        "base_z_final_m": 0.38444,
+        "base_z_settled_mean_last0p5s_m": 0.38444,
+        "settled_dev_from_h_m": -0.01556,
+        "body_height_final_m": 0.3791,
+        "body_height_initial_m": 0.4,
+        "body_height_drift_m": -0.0209
+      },
+      "torque": {
+        "max_abs_tau_per_joint_Nm": {
+          "RF_HAA": 0.088,
+          "RF_HFE": 12.425,
+          "RF_KFE": 5.836,
+          "RM_HAA": 0.131,
+          "RM_HFE": 12.327,
+          "RM_KFE": 5.57,
+          "RB_HAA": 0.13,
+          "RB_HFE": 11.822,
+          "RB_KFE": 5.318,
+          "LF_HAA": 0.237,
+          "LF_HFE": 12.142,
+          "LF_KFE": 6.12,
+          "LM_HAA": 0.278,
+          "LM_HFE": 11.745,
+          "LM_KFE": 5.883,
+          "LB_HAA": 0.196,
+          "LB_HFE": 11.858,
+          "LB_KFE": 5.479
+        },
+        "global_max_abs_tau_Nm": 12.425,
+        "global_max_tau_joint": "RF_HFE",
+        "torque_margin_Nm": 67.575
+      },
+      "com": {
+        "drift_xy_m": [
+          0.00041,
+          -0.00062
+        ],
+        "drift_norm_m": 0.00074,
+        "com_xy_initial": [
+          0.00538,
+          -0.00166
+        ],
+        "com_xy_final": [
+          0.00579,
+          -0.00228
+        ]
+      },
+      "joint_tracking": {
+        "rmse_per_joint_rad": {
+          "RF_HAA": 0.00024,
+          "RF_HFE": 0.09071,
+          "RF_KFE": 0.04118,
+          "RM_HAA": 0.00026,
+          "RM_HFE": 0.08764,
+          "RM_KFE": 0.0395,
+          "RB_HAA": 0.00023,
+          "RB_HFE": 0.08403,
+          "RB_KFE": 0.03751,
+          "LF_HAA": 0.00031,
+          "LF_HFE": 0.08975,
+          "LF_KFE": 0.04308,
+          "LM_HAA": 0.00034,
+          "LM_HFE": 0.08705,
+          "LM_KFE": 0.04144,
+          "LB_HAA": 0.00036,
+          "LB_HFE": 0.08621,
+          "LB_KFE": 0.0388
+        },
+        "worst_joint": "RF_HFE",
+        "worst_joint_rmse_rad": 0.09071,
+        "mean_rmse_rad": 0.0427,
+        "final_error_per_joint_rad": {
+          "RF_HAA": 0.00023,
+          "RF_HFE": -0.09331,
+          "RF_KFE": -0.04489,
+          "RM_HAA": 0.00022,
+          "RM_HFE": -0.08995,
+          "RM_KFE": -0.04284,
+          "RB_HAA": 0.0002,
+          "RB_HFE": -0.08619,
+          "RB_KFE": -0.0409,
+          "LF_HAA": 0.00022,
+          "LF_HFE": -0.09258,
+          "LF_KFE": -0.04707,
+          "LM_HAA": 0.00021,
+          "LM_HFE": -0.08969,
+          "LM_KFE": -0.04526,
+          "LB_HAA": 0.00022,
+          "LB_HFE": -0.0887,
+          "LB_KFE": -0.04215
+        }
+      },
+      "contacts": {
+        "feet_in_contact_end": [
+          "LB",
+          "LF",
+          "LM",
+          "RB",
+          "RF",
+          "RM"
+        ],
+        "n_con_end": 6
+      },
+      "end_state_meter": {
+        "n_stance_feet": 6,
+        "support_polygon_area_m2": 0.8019071447852728,
+        "com_margin_m": 0.44412659859559556,
+        "bottom_clearance_m": 0.17827,
+        "top_height_m": 0.37933,
+        "slope_deg": 0.042,
+        "feet_airborne": false,
+        "min_sole_z_m": -0.00396
+      },
+      "hex": {
+        "initial": {
+          "meter_raw": {
+            "front_width": 0.3517886398059577,
+            "middle_width": 0.4942132897484065,
+            "back_width": 0.37654556896682523,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295040281243977
+          },
+          "safe_fit": {
+            "front_width": 0.3517886398059577,
+            "middle_width": 0.4942132897484065,
+            "back_width": 0.37654556896682523,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295040281243977
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295040281243977,
+            "midship_max_abs_y_|x|<=0.03m": 0.4935858369838537,
+            "overall_max_abs_y": 0.4935858369838537
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "final": {
+          "meter_raw": {
+            "front_width": 0.3748719753871123,
+            "middle_width": 0.5160311770877614,
+            "back_width": 0.39803732748632414,
+            "forward_limit": 0.6409109247410192,
+            "backward_limit": -0.5295321487871327
+          },
+          "safe_fit": {
+            "front_width": 0.3748719753871123,
+            "middle_width": 0.5160311770877614,
+            "back_width": 0.39803732748632414,
+            "forward_limit": 0.6409109247410192,
+            "backward_limit": -0.5295321487871327
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410192,
+            "backward_limit": -0.5295321487871327,
+            "midship_max_abs_y_|x|<=0.03m": 0.5154179300877852,
+            "overall_max_abs_y": 0.5154179300877852
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "drift_safe_fit": {
+          "front_width": 0.023083335581154607,
+          "middle_width": 0.021817887339354858,
+          "back_width": 0.021491758519498916,
+          "forward_limit": -4.440892098500626e-16,
+          "backward_limit": -2.812066273505387e-05
+        },
+        "drift_meter_raw": {
+          "front_width": 0.023083335581154607,
+          "middle_width": 0.021817887339354858,
+          "back_width": 0.021491758519498916,
+          "forward_limit": -4.440892098500626e-16,
+          "backward_limit": -2.812066273505387e-05
+        },
+        "mw_zero_flag": {
+          "initial_meter_raw": false,
+          "final_meter_raw": false,
+          "note": "raw meter EA2 fit may report mw=0 (waist-pinching hull-reduction defect); drift conclusions use safe_fit (sampling-stage\u53e3\u5f84), physical extremes attached as supplement"
+        }
+      },
+      "config_summary": {
+        "initial_joint_angles_per_leg": {
+          "RF": [
+            -0.0,
+            -0.4326,
+            0.2489
+          ],
+          "RM": [
+            -0.0,
+            -0.4326,
+            0.2489
+          ],
+          "RB": [
+            0.0,
+            -0.445,
+            0.2554
+          ],
+          "LF": [
+            -0.0,
+            -0.4449,
+            0.2554
+          ],
+          "LM": [
+            -0.0,
+            -0.445,
+            0.2554
+          ],
+          "LB": [
+            0.0,
+            -0.4326,
+            0.2489
+          ]
+        },
+        "final_joint_angles_per_leg": {
+          "RF": [
+            0.0002,
+            -0.5259,
+            0.204
+          ],
+          "RM": [
+            0.0002,
+            -0.5226,
+            0.2061
+          ],
+          "RB": [
+            0.0002,
+            -0.5311,
+            0.2145
+          ],
+          "LF": [
+            0.0002,
+            -0.5375,
+            0.2083
+          ],
+          "LM": [
+            0.0002,
+            -0.5347,
+            0.2102
+          ],
+          "LB": [
+            0.0002,
+            -0.5213,
+            0.2068
+          ]
+        }
+      },
+      "steps_completed": 1000,
+      "warnings": [],
+      "case_e_ik": {
+        "RF": {
+          "target_base": [
+            0.4499,
+            -0.3764,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": -2.8e-05,
+              "HFE": -0.432604,
+              "KFE": 0.248943
+            }
+          ],
+          "chosen": {
+            "HAA": -2.8e-05,
+            "HFE": -0.432604,
+            "KFE": 0.248943
+          }
+        },
+        "RM": {
+          "target_base": [
+            -0.0001,
+            -0.4764,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": -2.8e-05,
+              "HFE": -0.432604,
+              "KFE": 0.248943
+            }
+          ],
+          "chosen": {
+            "HAA": -2.8e-05,
+            "HFE": -0.432604,
+            "KFE": 0.248943
+          }
+        },
+        "RB": {
+          "target_base": [
+            -0.4499,
+            -0.3669,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": 2.6e-05,
+              "HFE": -0.444953,
+              "KFE": 0.255417
+            }
+          ],
+          "chosen": {
+            "HAA": 2.6e-05,
+            "HFE": -0.444953,
+            "KFE": 0.255417
+          }
+        },
+        "LF": {
+          "target_base": [
+            0.4499,
+            0.3669,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": -2.1e-05,
+              "HFE": -0.444949,
+              "KFE": 0.255405
+            }
+          ],
+          "chosen": {
+            "HAA": -2.1e-05,
+            "HFE": -0.444949,
+            "KFE": 0.255405
+          }
+        },
+        "LM": {
+          "target_base": [
+            -0.0001,
+            0.4669,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": -2e-05,
+              "HFE": -0.44498,
+              "KFE": 0.255432
+            }
+          ],
+          "chosen": {
+            "HAA": -2e-05,
+            "HFE": -0.44498,
+            "KFE": 0.255432
+          }
+        },
+        "LB": {
+          "target_base": [
+            -0.4499,
+            0.3764,
+            -0.4
+          ],
+          "n_branches": 1,
+          "branches": [
+            {
+              "HAA": 3.2e-05,
+              "HFE": -0.43262,
+              "KFE": 0.248941
+            }
+          ],
+          "chosen": {
+            "HAA": 3.2e-05,
+            "HFE": -0.43262,
+            "KFE": 0.248941
+          }
+        }
+      },
+      "case_e_foot_xy_error": {
+        "RF": 0.0,
+        "RM": 0.0,
+        "RB": 0.0,
+        "LF": 0.0,
+        "LM": 0.0,
+        "LB": 0.0
+      }
+    },
+    "stand": {
+      "case": "stand",
+      "source": "keyframe 'stand' (q=0) of el_4090_lidar.xml + floor, verify_stance.py behaviour inside this tool chain",
+      "target_h_m": 0.47293,
+      "start": {
+        "start_mode": "keyframe",
+        "start_base_z_m": 0.48601,
+        "start_min_sole_z_m": 0.005,
+        "start_base_z_minus_h_m": 0.01308,
+        "note": [
+          "keyframe start (no +1 cm drop), verify_stance.py style"
+        ]
+      },
+      "verdict": "PASS",
+      "failed_checks": [],
+      "checks": {
+        "finite_state_all_steps": true,
+        "no_mujoco_warnings": true,
+        "base_z_max_dev_m": 0.02646,
+        "base_z_max_dev_ok": true,
+        "mean_rmse_rad": 0.0331,
+        "mean_rmse_ok": true,
+        "contact_feet_end": 6,
+        "contact_feet_ok": true,
+        "com_margin_end_m": 0.4443,
+        "com_margin_ok": true
+      },
+      "settled": {
+        "base_z_final_m": 0.4606,
+        "base_z_settled_mean_last0p5s_m": 0.4606,
+        "settled_dev_from_h_m": -0.01232,
+        "body_height_final_m": 0.45549,
+        "body_height_initial_m": 0.47293,
+        "body_height_drift_m": -0.01744
+      },
+      "torque": {
+        "max_abs_tau_per_joint_Nm": {
+          "RF_HAA": 0.158,
+          "RF_HFE": 13.689,
+          "RF_KFE": 7.83,
+          "RM_HAA": 0.185,
+          "RM_HFE": 13.781,
+          "RM_KFE": 7.885,
+          "RB_HAA": 0.115,
+          "RB_HFE": 13.618,
+          "RB_KFE": 7.906,
+          "LF_HAA": 0.176,
+          "LF_HFE": 13.602,
+          "LF_KFE": 8.788,
+          "LM_HAA": 0.199,
+          "LM_HFE": 13.389,
+          "LM_KFE": 8.633,
+          "LB_HAA": 0.166,
+          "LB_HFE": 12.563,
+          "LB_KFE": 7.541
+        },
+        "global_max_abs_tau_Nm": 13.781,
+        "global_max_tau_joint": "RM_HFE",
+        "torque_margin_Nm": 66.219
+      },
+      "com": {
+        "drift_xy_m": [
+          -2e-05,
+          -0.00496
+        ],
+        "drift_norm_m": 0.00496,
+        "com_xy_initial": [
+          0.00538,
+          -0.00154
+        ],
+        "com_xy_final": [
+          0.00536,
+          -0.0065
+        ]
+      },
+      "joint_tracking": {
+        "rmse_per_joint_rad": {
+          "RF_HAA": 0.00049,
+          "RF_HFE": 0.08483,
+          "RF_KFE": 0.01583,
+          "RM_HAA": 0.00057,
+          "RM_HFE": 0.0844,
+          "RM_KFE": 0.01578,
+          "RB_HAA": 0.00032,
+          "RB_HFE": 0.08465,
+          "RB_KFE": 0.01396,
+          "LF_HAA": 0.0005,
+          "LF_HFE": 0.08489,
+          "LF_KFE": 0.01496,
+          "LM_HAA": 0.00064,
+          "LM_HFE": 0.08365,
+          "LM_KFE": 0.01474,
+          "LB_HAA": 0.00034,
+          "LB_HFE": 0.08017,
+          "LB_KFE": 0.01509
+        },
+        "worst_joint": "LF_HFE",
+        "worst_joint_rmse_rad": 0.08489,
+        "mean_rmse_rad": 0.0331,
+        "final_error_per_joint_rad": {
+          "RF_HAA": 9e-05,
+          "RF_HFE": -0.09047,
+          "RF_KFE": -0.01773,
+          "RM_HAA": 9e-05,
+          "RM_HFE": -0.08925,
+          "RM_KFE": -0.01733,
+          "RB_HAA": 9e-05,
+          "RB_HFE": -0.08901,
+          "RB_KFE": -0.0143,
+          "LF_HAA": 0.00011,
+          "LF_HFE": -0.09067,
+          "LF_KFE": -0.01562,
+          "LM_HAA": 0.00011,
+          "LM_HFE": -0.0886,
+          "LM_KFE": -0.01495,
+          "LB_HAA": 9e-05,
+          "LB_HFE": -0.08438,
+          "LB_KFE": -0.01597
+        }
+      },
+      "contacts": {
+        "feet_in_contact_end": [
+          "LB",
+          "LF",
+          "LM",
+          "RB",
+          "RF",
+          "RM"
+        ],
+        "n_con_end": 8
+      },
+      "end_state_meter": {
+        "n_stance_feet": 6,
+        "support_polygon_area_m2": 0.7993387247316388,
+        "com_margin_m": 0.44428434699057595,
+        "bottom_clearance_m": 0.2549,
+        "top_height_m": 0.45578,
+        "slope_deg": 0.006,
+        "feet_airborne": false,
+        "min_sole_z_m": -0.00322
+      },
+      "hex": {
+        "initial": {
+          "meter_raw": {
+            "front_width": 0.35465234955708086,
+            "middle_width": 0.4970769994995296,
+            "back_width": 0.3794064608029669,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295009670680518
+          },
+          "safe_fit": {
+            "front_width": 0.35465234955708086,
+            "middle_width": 0.4970769994995296,
+            "back_width": 0.3794064608029669,
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295009670680518
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410196,
+            "backward_limit": -0.5295009670680518,
+            "midship_max_abs_y_|x|<=0.03m": 0.4964118437429511,
+            "overall_max_abs_y": 0.4964118437429511
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "final": {
+          "meter_raw": {
+            "front_width": 0.37631022518021456,
+            "middle_width": 0.5182693055646926,
+            "back_width": 0.3991759058428998,
+            "forward_limit": 0.6409109247410195,
+            "backward_limit": -0.5295127370383431
+          },
+          "safe_fit": {
+            "front_width": 0.37631022518021456,
+            "middle_width": 0.5182693055646926,
+            "back_width": 0.3991759058428998,
+            "forward_limit": 0.6409109247410195,
+            "backward_limit": -0.5295127370383431
+          },
+          "physical": {
+            "forward_limit": 0.6409109247410195,
+            "backward_limit": -0.5295127370383431,
+            "midship_max_abs_y_|x|<=0.03m": 0.5176333581364736,
+            "overall_max_abs_y": 0.5176333581364736
+          },
+          "mw_zero_in_meter_raw": false
+        },
+        "drift_safe_fit": {
+          "front_width": 0.021657875623133704,
+          "middle_width": 0.021192306065163036,
+          "back_width": 0.019769445039932887,
+          "forward_limit": -1.1102230246251565e-16,
+          "backward_limit": -1.1769970291286569e-05
+        },
+        "drift_meter_raw": {
+          "front_width": 0.021657875623133704,
+          "middle_width": 0.021192306065163036,
+          "back_width": 0.019769445039932887,
+          "forward_limit": -1.1102230246251565e-16,
+          "backward_limit": -1.1769970291286569e-05
+        },
+        "mw_zero_flag": {
+          "initial_meter_raw": false,
+          "final_meter_raw": false,
+          "note": "raw meter EA2 fit may report mw=0 (waist-pinching hull-reduction defect); drift conclusions use safe_fit (sampling-stage\u53e3\u5f84), physical extremes attached as supplement"
+        }
+      },
+      "config_summary": {
+        "initial_joint_angles_per_leg": {
+          "RF": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RM": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "RB": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "LF": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "LM": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "LB": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "final_joint_angles_per_leg": {
+          "RF": [
+            0.0001,
+            -0.0905,
+            -0.0177
+          ],
+          "RM": [
+            0.0001,
+            -0.0893,
+            -0.0173
+          ],
+          "RB": [
+            0.0001,
+            -0.089,
+            -0.0143
+          ],
+          "LF": [
+            0.0001,
+            -0.0907,
+            -0.0156
+          ],
+          "LM": [
+            0.0001,
+            -0.0886,
+            -0.015
+          ],
+          "LB": [
+            0.0001,
+            -0.0844,
+            -0.016
+          ]
+        }
+      },
+      "steps_completed": 1000,
+      "warnings": [],
+      "stand_control_extra": {
+        "keyframe_base_z_m": 0.48601,
+        "foot_origin_z_at_keyframe": {
+          "RF": 0.01314,
+          "RM": 0.01314,
+          "RB": 0.01303,
+          "LF": 0.01303,
+          "LM": 0.01303,
+          "LB": 0.01314
+        },
+        "settled_dev_from_keyframe_base_z_m": -0.02541
+      }
+    }
+  },
+  "n_pass": 5,
+  "n_total": 7
+}

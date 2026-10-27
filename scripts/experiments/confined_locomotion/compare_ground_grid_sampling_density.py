@@ -45,8 +45,9 @@ ROUTINE_COUNT = 9
 
 def parse(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--source", type=Path,
-                   default=ROOT/"logs/verification/stageA_B8_ground_support_20261019_v3")
+    p.add_argument("--source", type=Path, required=True,
+                   help="existing analyze_ground_sampling_support.py run directory "
+                        "containing report.json and probes_support_matrix.npz")
     p.add_argument("--output", type=Path, required=True, help="new, non-existing directory")
     return p.parse_args(argv)
 

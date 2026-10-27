@@ -66,14 +66,10 @@ def test_hit10_formal_selection_is_the_frozen_6x10_experiment():
     from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog, load_sparse_selection
     root = Path(__file__).resolve().parents[2]
     current = root / "src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_hit10/near_x6_far_x10.npz"
-    frozen = root / "logs/verification/confined_locomotion_2/sparse_rays/stage5_hit_only_select_20261023/near_x6_far_x10.npz"
     catalog = build_channel_catalog()
     ids, identity = load_sparse_selection(current, catalog)
     assert len(ids) == 2816 and catalog.near_mask[ids].sum() == 1536
     assert identity["selection"]["far_count"] == 1280
-    # Compare frozen experiment if its optional local evidence is available.
-    if frozen.is_file():
-        assert current.read_bytes() == frozen.read_bytes()
     with np.load(current, allow_pickle=False) as data:
         near_old = root / "src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_independent/near_x6_far_x8.npz"
         with np.load(near_old, allow_pickle=False) as old:

@@ -25,7 +25,7 @@ GAIT_IDS = ['height_0.40_width_1.00','height_0.44_width_1.00','height_0.48_width
 def main():
     ap=argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--xml',type=Path,default=DEFAULT_XML)
-    ap.add_argument('--legacy',type=Path,default=TOOLS.parents[2]/'logs/morphology/legacy-glm-20261003/hold_results.json')
+    ap.add_argument('--legacy',type=Path,default=TOOLS.parents[2]/'docs/research/morphology/evidence/hold_results.json')
     ap.add_argument('--workers',type=int,default=12)
     ap.add_argument('--out-dir',type=Path,required=True)
     a=ap.parse_args()
