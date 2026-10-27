@@ -18,12 +18,11 @@ from hexapod_mjlab.rl.confined_locomotion.distribution import derive_action_gene
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
 from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
 from ..collector import TrainingCollector
-from ..rl.runner import (
-    ConfinedLocomotionRunner,
-    environment_semantics,
+from ..rl.reporting import (
     format_iteration_summary,
     optimizer_scalar_summary,
 )
+from ..rl.runner import ConfinedLocomotionRunner, environment_semantics
 from ..scanner import ConfinedLidarCfg
 from .actuator import ACTUATOR_PATH
 from .legacy import reward_scales
