@@ -88,7 +88,7 @@ def main():
         from hexapod_mjlab.tasks.confined_locomotion_2.channels import load_sparse_selection
         from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_geometry import make_geometry_env_cfg
         from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import TASK_ID
-        from hexapod_mjlab.tasks.confined_locomotion_2.runtime import _reset_env_preserving_unselected_physics
+        from hexapod_mjlab.common.reset import reset_env_preserving_unselected_physics
         from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightGridCfg, TerrainGeometryQuery
         from hexapod_mjlab.common.diagnostics import ContactTableReader
 
@@ -280,7 +280,7 @@ def main():
                 before = {name: wp.to_torch(getattr(env.sim.wp_data,name))[1].clone()
                           for name in ("qpos","qvel","qacc_warmstart","time")}
                 untouched = query.height_labels(rows[1:], episodes[1:], env.episode_length_buf[1:].clone(), grid)
-                _reset_env_preserving_unselected_physics(env, rows[:1])
+                reset_env_preserving_unselected_physics(env, rows[:1])
                 episodes[0] += 1
                 for name, values in before.items():
                     check(torch.equal(values, wp.to_torch(getattr(env.sim.wp_data,name))[1]), "partial reset changed unselected physics")

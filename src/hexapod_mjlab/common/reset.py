@@ -104,3 +104,67 @@ def lifted_witness_state() -> tuple[tuple, tuple, float, float]:
 def settled_reset_joint_pos() -> tuple:
   """Reset joint angles = the settled T1 witness qpos (NOT q_ref)."""
   return tuple(frozen_witness().joint_pos)
+
+
+def reset_env_preserving_unselected_physics(env, env_ids):
+  """Run the real env reset while preserving other rows' persistent physics.
+
+  mjlab's selected reset still calls a batch-wide ``sim.forward()`` and
+  ``sim.sense()``. MuJoCo may rewrite persistent solver state such as
+  ``qacc_warmstart`` during that forward, so preserve the unselected rows of
+  every non-empty checkpoint physics field around the ordinary reset. The
+  selected rows still receive the real reset, forward, sensing and manager
+  updates. We deliberately do not forward again after restoring warmstart:
+  that would overwrite the value we are restoring.
+  """
+  import torch
+
+  from .checkpoint import EXTRA_PERSISTENT_PHYSICS_FIELDS
+  from .transition import PERSISTENT_PHYSICS_FIELDS
+
+  num_envs = int(env.num_envs)
+  selected_rows = env_ids.detach().to(dtype=torch.long)
+  selected_mask = torch.ones(
+    num_envs, dtype=torch.bool, device=selected_rows.device
+  )
+  selected_mask[selected_rows] = False
+  unselected_rows = torch.nonzero(selected_mask, as_tuple=False).flatten()
+  if unselected_rows.numel() == 0:
+    # Whole-batch resets need no snapshots or post-reset copies.
+    return env.reset(env_ids=env_ids)
+
+  import warp as wp
+
+  data = env.sim.wp_data
+  required_fields = set(PERSISTENT_PHYSICS_FIELDS)
+  field_names = (*PERSISTENT_PHYSICS_FIELDS, *EXTRA_PERSISTENT_PHYSICS_FIELDS)
+  snapshots = []
+  for name in field_names:
+    array = getattr(data, name, None)
+    if array is None:
+      if name in required_fields:
+        raise RuntimeError(
+          f"backend persistent physics field absent during partial reset: {name}"
+        )
+      continue
+    if not array.size:
+      continue
+    tensor = wp.to_torch(array)
+    if tensor.ndim == 0 or tensor.shape[0] != num_envs:
+      raise RuntimeError(
+        f"persistent physics field {name} has no env-row axis: "
+        f"shape={tuple(tensor.shape)}, num_envs={num_envs}"
+      )
+    field_rows = unselected_rows.to(device=tensor.device)
+    snapshots.append(
+      (tensor, field_rows, tensor.index_select(0, field_rows).clone())
+    )
+
+  try:
+    return env.reset(env_ids=env_ids)
+  finally:
+    # Copy into the existing Warp-backed tensors to retain their storage
+    # identity (including any captured CUDA-graph references).
+    with torch.no_grad():
+      for tensor, rows, saved in snapshots:
+        tensor.index_copy_(0, rows, saved)

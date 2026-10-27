@@ -20,7 +20,7 @@ from hexapod_mjlab.tasks.confined_locomotion_2 import collector as collector_mod
 from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import make_training_env_cfg
 from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import TerrainGeometryQuery, HeightGridCfg
 from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET, ObservationPerturbations
-from hexapod_mjlab.tasks.confined_locomotion_2.runtime import _reset_env_preserving_unselected_physics
+from hexapod_mjlab.common.reset import reset_env_preserving_unselected_physics
 from hexapod_mjlab.rl.confined_locomotion_2.network import TerrainMemoryNetwork
 
 
@@ -80,7 +80,7 @@ def main():
         retained = None
         for index, rows in enumerate(([3,1,0,2], [2], [], [0,3], [3,1,0])):
             if index == 4:
-                _reset_env_preserving_unselected_physics(env,torch.tensor([1],device=device))
+                reset_env_preserving_unselected_physics(env,torch.tensor([1],device=device))
                 runtime.episode_ids[1] += 1
             numbers = {row:counts[row]+1 for row in rows}
             frames = [pipe.scan_rows(rows,perturbations=noise,persistent_scan_numbers=numbers) for pipe,noise in zip(pipelines,noises)]

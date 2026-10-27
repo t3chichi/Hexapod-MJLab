@@ -6,10 +6,11 @@ import json
 
 import torch
 
+from hexapod_mjlab.common.reset import reset_env_preserving_unselected_physics
 from hexapod_mjlab.common.transition import TransitionContext, require_finite
 from hexapod_mjlab.common.robot import FOOT_BODIES
 from hexapod_mjlab.rl.confined_locomotion_2.history import ScanWindow
-from ..runtime import TrainingRuntime, TrainingTransition, _reset_env_preserving_unselected_physics
+from ..runtime import TrainingRuntime, TrainingTransition
 from ..observation import ControlInputCache, clone_prepared
 from ..scanner import ConfinedLidarCfg, ConfinedScanPipeline
 from .env import TASK_ID, owners
@@ -185,7 +186,7 @@ class LegacyRuntime(TrainingRuntime):
         return prepared
 
     def _reset_selected(self, env_ids):
-        _reset_env_preserving_unselected_physics(self.env, env_ids)
+        reset_env_preserving_unselected_physics(self.env, env_ids)
         if self.mode == "play":
             self.env._tripod_commands.commands[env_ids] = 0.
         self.episode_ids[env_ids] += 1

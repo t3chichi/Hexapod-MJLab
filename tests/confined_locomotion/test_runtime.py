@@ -164,9 +164,7 @@ def test_partial_reset_restores_every_unselected_physics_row_without_reallocatio
     import numpy as np
     import warp as wp
 
-    from hexapod_mjlab.tasks.confined_locomotion.runtime import (
-        _reset_env_preserving_unselected_physics,
-    )
+    from hexapod_mjlab.common.reset import reset_env_preserving_unselected_physics
     from hexapod_mjlab.common.transition import PERSISTENT_PHYSICS_FIELDS
 
     shapes = {
@@ -200,7 +198,7 @@ def test_partial_reset_restores_every_unselected_physics_row_without_reallocatio
             return "reset-result"
 
     env = Env()
-    result = _reset_env_preserving_unselected_physics(env, torch.tensor([0], dtype=torch.long))
+    result = reset_env_preserving_unselected_physics(env, torch.tensor([0], dtype=torch.long))
     assert result == "reset-result"
     assert len(env.reset_calls) == 1
     assert torch.equal(env.reset_calls[0], torch.tensor([0]))
@@ -213,9 +211,7 @@ def test_partial_reset_restores_every_unselected_physics_row_without_reallocatio
 
 
 def test_full_reset_does_not_read_or_snapshot_physics():
-    from hexapod_mjlab.tasks.confined_locomotion.runtime import (
-        _reset_env_preserving_unselected_physics,
-    )
+    from hexapod_mjlab.common.reset import reset_env_preserving_unselected_physics
 
     class Env:
         num_envs = 2
@@ -228,7 +224,7 @@ def test_full_reset_does_not_read_or_snapshot_physics():
             assert torch.equal(env_ids, torch.tensor([0, 1]))
             return env_ids
 
-    result = _reset_env_preserving_unselected_physics(Env(), torch.tensor([0, 1]))
+    result = reset_env_preserving_unselected_physics(Env(), torch.tensor([0, 1]))
     assert torch.equal(result, torch.tensor([0, 1]))
 
 
