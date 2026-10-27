@@ -1,5 +1,9 @@
 #!/usr/bin/env python
-"""Stage A: real B8 near-cloud ground support under rigid body pose variations.
+"""Real near-cloud ground support under rigid body pose variations.
+
+The historical label B8 is retained only in evidence schemas/filenames and
+denotes the current widened near-field grouping (theta=28, tilt=56, BASE
+x <= 3.5m); it is not a current stage or entry name.
 
 This is an ENGINEERING DIAGNOSTIC, not ground-grid implementation or training.
 Use the live confined task's compiled floor plane, actual Airy 86,400-ray
@@ -24,8 +28,8 @@ The 40-point runtime ground grid is a bootstrap fixture; not used in the
 analysis, proposal, ranking or visualization.
 
 Usage:
-  python scripts/experiments/confined_locomotion/analyze_B8_ground_support.py \\
-      --output logs/verification/stageA_B8_ground_support_YYYYMMDD_v1
+  python scripts/experiments/confined_locomotion/analyze_ground_sampling_support.py \\
+      --output logs/verification/ground_sampling_support_YYYYMMDD
 """
 from __future__ import annotations
 

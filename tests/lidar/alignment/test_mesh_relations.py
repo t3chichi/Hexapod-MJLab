@@ -8,7 +8,7 @@ import numpy as np
 from scipy.optimize import minimize
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / 'scripts/experiments/joint_passage/lidar_setup'))
+sys.path.insert(0, str(ROOT / 'scripts/tools/lidar'))
 import mesh_relations as geometry
 
 

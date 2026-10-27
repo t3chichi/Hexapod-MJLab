@@ -1,9 +1,11 @@
 #!/usr/bin/env python
-"""Run the formal confined-locomotion recipe with the current S1-187 task grid.
+"""Run the formal confined-locomotion recipe with the current 17x11 task grid.
 
-B8 is the scanner default; the grid defaults to the confirmed S1-187
-coordinates. Seed, environment count, budget and GPU are separately
-validated. Custom grids still require two explicit ordered axes.
+The current near-field grouping (theta=28, tilt=56, BASE x<=3.5m; historical
+label B8) is the scanner default; the grid defaults to the confirmed 17x11
+(187-point) layout (historical label S1-187). Seed, environment count, budget
+and GPU are separately validated. Custom grids still require two explicit
+ordered axes.
 """
 
 from __future__ import annotations
@@ -28,8 +30,8 @@ from hexapod_mjlab.tasks.confined_locomotion.rl.entry import (
 def _parser() -> argparse.ArgumentParser:
   parser = argparse.ArgumentParser(
     description=(
-      "Train confined locomotion with the current B8 scanner and S1-187 "
-      "ground-grid baseline; seed/env/budget must be explicit. An optional "
+      "Train confined locomotion with the current near-field scanner and "
+      "17x11 ground-grid baseline; seed/env/budget must be explicit. An optional "
       "grid preset or both axes override the baseline."
     )
   )

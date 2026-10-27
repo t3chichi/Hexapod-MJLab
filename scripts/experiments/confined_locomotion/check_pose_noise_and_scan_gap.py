@@ -1,11 +1,13 @@
 #!/usr/bin/env python
-"""Stage-A B8 pose and observation-perturbation gates (STATIC diagnostic).
+"""Current near-field pose and observation-perturbation gates (STATIC diagnostic).
 
 One production T1 reset provides the calibrated lidar mount and 86,400 RAW
 directions. For each prescribed rigid-body root pose, the real CUDA LidarSensor
 raycasts a fixed diagnostic ground + finite wall mesh; independent analytical
 intersections must match every raw range and hit mask. Production 256-point
-metric FPS and 64-point angular far sampling are reused for A0 and B8.
+metric FPS and 64-point angular far sampling are reused for the production and
+widened near-field groupings. The historical candidate labels A0/B8 are kept
+only in evidence schemas, filenames and candidate IDs; they are not entry names.
 
 The scene includes NO robot self-occlusion, walking dynamics or joint-motion
 geometry. Pose changes are external rigid-root changes, NOT physics execution.
@@ -27,7 +29,7 @@ from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[3]
 sys.path.insert(0,str(ROOT/"src"))
-from compare_B8_corridors import (
+from compare_corridor_wall_sampling import (
     build_mesh,analytic,xy_cells,MAX_RANGE_M,
     WALL_X_START_M,WALL_X_END_M,
 )
@@ -284,7 +286,7 @@ def main(argv=None):
     out=args.output.expanduser().resolve()
     out.mkdir(parents=True,exist_ok=False)
     paths=(Path(__file__),
-           ROOT/"scripts/experiments/confined_locomotion/compare_B8_corridors.py",
+           ROOT/"scripts/experiments/confined_locomotion/compare_corridor_wall_sampling.py",
            ROOT/"src/hexapod_mjlab/tasks/confined_locomotion/scanner.py",
            ROOT/"src/hexapod_mjlab/tasks/confined_locomotion/perturbations.py",
            ROOT/"src/hexapod_mjlab/utils/lidar/lidar_sensor.py")

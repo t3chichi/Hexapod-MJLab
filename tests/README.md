@@ -1,114 +1,74 @@
 # 功能回归与验收入口
 
-测试按功能维护。`tests/`存放自动回归、独立参考实现和固定输入；数据采样、训练、重放与科学实验工具在`scripts/`或任务自身CLI中维护。测试不会因为作者不同而保留重复入口。
+测试按功能和设备维护。`tests/` 保存自动回归、独立参考实现和固定输入；训练、采集与科学实验工具在 `scripts/` 或任务自身 CLI 中维护。测试不会因为作者不同而保留重复入口。
 
-在仓库根目录使用`hp_mjlab`环境：
+所有命令从仓库根目录运行，并使用 `hp_mjlab` 环境：
 
 ```bash
 conda activate hp_mjlab
 python tests/run.py --profile cpu
 python tests/run.py --profile gpu
-# 列出所选组，不执行
-python tests/run.py --profile gpu --list
-# 只复查有改动的功能
-python tests/run.py --profile cpu --only envelope_geometry envelope_supervision
+python tests/run.py --profile confined_cpu
+python tests/run.py --profile confined_gpu --list
 ```
 
-运行器按顺序为每项检查启动独立进程；失败和超时返回非零状态，仍执行同组其余检查。新目录下保存逐项日志、命令、耗时和`summary.json`；已有输出目录拒绝覆盖。默认位置为`logs/verification/<组>-<时间>/`。不得使用`python -O`关闭断言。
+运行器为每项检查启动独立进程；失败和超时返回非零状态，同时继续执行同组其余检查。输出目录保存逐项日志、命令、耗时和 `summary.json`，已有输出目录拒绝覆盖。默认输出在 `logs/verification/<组>-<时间>/`，不得使用 `python -O` 关闭断言。
 
-## confined_locomotion_2
+## 基础 CPU profile
 
-Flat Baseline与Terrain Memory的CPU、GPU和资源打包检查见[任务测试](confined_locomotion_2/README.md)。
+`python tests/run.py --profile cpu` 当前包含 8 项：
 
-## 日常CPU组
+| 功能 | 实现 |
+|---|---|
+| 运行器 | `tests/test_runner.py` |
+| 初版任务 partial reset | `tests/confined_locomotion/test_runtime.py` |
+| 雷达挂载参考 | `tests/lidar_sensor/mount_check.py` |
+| 雷达光学对齐 | `tests/lidar/alignment/test_alignment.py` |
+| 雷达 mesh 几何 | `tests/lidar/alignment/test_mesh_relations.py` |
+| 雷达采样 | `tests/lidar_sensor/pool_sampler_check.py` |
+| 基础 PD 姿态 | `tests/robot/verify_stance.py` |
+| 形态测量 | `scripts/tools/morphology/run_checks.py` |
 
-| 功能 | 实现 | 主要覆盖 |
-|---|---|---|
-| 运行器 | `tests/test_runner.py` | 失败/超时传播、无空选择、无重复、输出不可覆盖 |
-| 雷达挂载参考 | `tests/lidar_sensor/mount_check.py` | AIRY通道与旧fallback解析旋转；不检查实际模型site |
-| 雷达光学对齐 | `tests/joint_passage/lidar_setup/test_alignment.py` | 实际URDF/MJCF光学三轴、真实挂载函数、非单位BASE变换与35快照的实体物理不变性 |
-| 雷达采样 | `tests/lidar_sensor/pool_sampler_check.py` | 形状、固定种子、索引、轮转覆盖 |
-| 雷达镜像 | `tests/lidar_sensor/symmetry_check.py` | 本体状态、动作与点云镜像 |
-| 地形 | `tests/terrain/test_terrain_parity.py` | 与冻结高度场逐位一致 |
-| 基础PD | `tests/robot/verify_stance.py` | 原stand姿态保持 |
-| 网络转换 | `tests/rl_parity/test_parity_forward.py` | 原/新actor、critic、分布与辅助输出数值对齐 |
-| 包络几何 | `tests/ea2/test_oracle.py` | 解析墙/通道/转向、完整多边形、因果前视、部分reset、形态有效性 |
-| 监督学习 | `tests/ea2/test_supervision.py` | 时序/窗口复位、有效掩码、NaN隔离、五档辅助梯度、多地图损失、指标、数据和checkpoint |
-| T0统计与契约 | `tests/t0/test_units.py` | 假成功、早终止、镜像offset、身份篡改、缺门与报告定位反例 |
-| 形态测量 | `scripts/tools/morphology/run_checks.py` | 18项完整碰撞体、实际足底/支撑、根平衡、归一化反例 |
+基础 CPU 组不执行任务级 PPO 训练；形态测量使用真实碰撞几何和独立静态复核。雷达光学与 mesh 诊断工具位于 `scripts/tools/lidar/`，测试通过动态加载调用。
 
-CPU组不需要原团队仓库，也不执行任务级PPO训练。监督单元包含极小合成数据上的优化与保存重载，以检查真实梯度和数据生命周期；不能解释为模型性能验收。
-
-## 受限空间当前源码回归与验收
-
-当前回归入口由`tests/run.py`维护。`--help`列出`confined_cpu`和`confined_gpu`。2026-10-12整理批的14入口/170项见[CPU迁移记录](../logs/maintenance/20261011_confined_final_cleanup/execution/cpu_test_migration.md)；2026-10-13点云特征复用的最终CPU14入口/178项通过，默认零次`optimizer.step()`。当前结果和原始证据统一见[工程验收](../docs/tasks/confined_locomotion/training/工程验收与复现.md)。
+## 初版 Flat 任务
 
 ```bash
 python tests/run.py --profile confined_cpu
 python tests/run.py --profile confined_gpu --list
 ```
 
-第二条只列出GPU门，不执行测试。本次由根代理独立通过15种相关GPU模式，范围与命令见[工程验收与复现](../docs/tasks/confined_locomotion/training/工程验收与复现.md)；不是全部26种profile的重验。任务play使用单独CLI，必须显式给`--checkpoint`；其六种实际GPU检查独立记录，不以profile列表或CLI帮助代替PASS。
+- `confined_cpu`：14 个测试模块，共 186 个测试函数；覆盖 runtime、transition、scanner、ground、visualization、policy、采集/更新、checkpoint、扰动、Play、对称和训练入口。
+- `confined_gpu`：26 种真实 GPU 模式，包含 runtime、collection、update、entry、checkpoint、perturbations、symmetry 和 lifecycle。
+- 真实 GPU 检查使用 2 个环境、固定 seed，并通过 `--output` 写入新目录；不同模式的超时和前置条件不同，先运行 `--list` 查看。
 
-点云特征复用的CPU边界继续在`confined_policy`/`confined_checkpoint`中维护；真实计数、逐行reset、同快照输出和GPU分项耗时由`confined_collection_feature_cache`模式检查，已注册到`confined_gpu`。该模式最多2环境、每个缓存开关分支24控制步、零optimizer，无固定速度门限；先以`tests/run.py --profile confined_gpu --list`定位入口。缓存改变调用入口后，Play暂停/快照检查直接核对缓存策略调用计数。当前验收、原始失败及性能范围统一见[工程验收](../docs/tasks/confined_locomotion/training/工程验收与复现.md#2026-10-13点云特征复用验收)。
+当前 GPU profile 的完整清单由 [tests/run.py](run.py) 维护；单项训练/checkpoint 检查会实际推进仿真并更新临时模型参数，输出不是正式学习效果验收。
 
-2026-10-05纯计算快照的106项CPU检查与21项独立输入/梯度复核是历史证据；它们不替代当前源码profile或真实GPU门。当前接口和历史边界见[接口与约定](../docs/tasks/confined_locomotion/framework/接口与约定.md)，旧详细证据按[精简证据索引](../logs/maintenance/20261012_confined_archive_retirement/README.md)查证，未保留原件不再承诺恢复。
-
-## 独立时间记忆任务 _2
-
-`_2` 使用独立入口，不包含在原任务的 `confined_cpu`/`confined_gpu` profile中：
+## Flat_2 与 Terrain Memory
 
 ```bash
 python -B tests/confined_locomotion_2/run_checks.py
-# 构建wheel后，验证包资源、45个通道文件及21个选集
-python -m pip wheel --no-deps . -w /tmp/hexapod-wheels
-python -B tests/confined_locomotion_2/check_package.py \
-  /tmp/hexapod-wheels/hexapod_mjlab-0.1.0-py3-none-any.whl \
-  --output logs/verification/confined_locomotion_2/package_check.json
 ```
 
-真实GPU部署检查、固定配置及验收范围见[部署与基线](../docs/tasks/confined_locomotion_2/training/部署与基线.md)。Play与采集切换检查显式传入匹配sampling的checkpoint；历史 `logs/` 模型不随仓库交付。有限工程更新不构成学习效果验收。
+该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **149** 项 CPU 检查，覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化和指标。
 
-## 日常GPU组
+真实 GPU、checkpoint、Play 与打包检查位于同一目录：
 
-| 功能 | 实现 | 固定范围 |
-|---|---|---|
-| MuJoCo Warp | `tests/robot/warp_check.py` | 8环境×50步，有限状态和CPU对照 |
-| 原行走环境 | `tests/env/gate_a.py` | 8环境×40步，注册/观测/奖励/接触/地形 |
-| 原雷达环境 | `tests/env/gate_b.py` | 8环境×40步，真实扫描、近远池、时钟/reset/mount |
-| 包络环境 | `tests/ea2/test_environment.py` | 平台、传感器/脚本运动、姿态回放、teacher离在线一致、局部reset、采集与回灌 |
-| T0配置 | `scripts/tools/t0/contract_gate.py` | 16环境，确定性平地、指令、时间、绝对镜像 |
-| T0接触 | `scripts/tools/t0/contact_gate.py` | 8环境，足底/非足/自碰、只读性、NaN与真实overflow |
-| T0保持 | `scripts/tools/t0/hold_gate.py` | 32环境×5秒，200Hz状态、支撑、力矩与根受力 |
-| T0终止 | `scripts/tools/t0/terminal_gate.py` | 8环境，首步真实终止状态与其余环境20秒连续性 |
+- `check_gpu.py`：Flat_2 的有限训练、保存、恢复和同轨迹优化器重放。
+- `check_terrain_geometry_gpu.py`、`check_terrain_sequence_gpu.py`、`check_terrain_auxiliary_gpu.py`：真实 Heightfield、标签、时序重放和辅助更新。
+- `check_terrain_checkpoint_gpu.py`、`check_terrain_play_gpu.py`：需要匹配当前源码与配方的 Terrain checkpoint。
+- `check_sampling_gpu.py`、`check_fixed_sparse_gpu.py`、`check_far_hit_gpu.py`、`check_far_shorttrain_gpu.py`、`benchmark_fixed_training_gpu.py`：采样与性能专项，部分需要匹配 checkpoint 或 selection。
+- `check_viewer_gpu.py`：双 viewer 共存验证，使用独立端口。
+- `check_package.py`：隔离 wheel 资源与固定 selection 检查。
 
-GPU组不执行任务训练。EA2也可按功能独立运行，例如`python tests/ea2/test_environment.py --check teacher collection`。显示检查`tests/ea2/visualization_gate.py [--full-lidar]`需要GUI；wheel检查`tests/ea2/packaging_gate.py <wheel路径>`需先构建wheel，两者按相关改动单独运行。
+详细命令、固定配方和新输出目录要求见 [v2 测试说明](confined_locomotion_2/README.md)。GPU 检查并非全部能在无 checkpoint、无 wheel 的环境中直接运行，不要求全部塞进一个默认 profile。
 
-## 可选对照与较长测试
+## 固定输入与历史数据
 
-```bash
-# 冻结原项目的纯数值/模型/窗口对照
-python tests/run.py --profile legacy
-# 原脚本运动对照，需要CUDA和原项目
-python tests/run.py --profile optional --only envelope_source_motion
-# hfield物理诊断，或合成环境PPO学习回归，按相关改动单独选择
-python tests/run.py --profile optional --only hfield_contacts
-python tests/run.py --profile optional --only ppo_learning
-```
+- 当前固定输入：`tests/data/lidar_alignment_baseline.json`、`tests/robot/joint_table.json`、`tests/robot/joint_table.md`。
+- 平台迁移时期的五份历史数据已移至 `docs/development/history/evidence/platform_migration/`，保留原始内容和运行身份，不作为当前测试输入。
+- 历史 `logs/` 和测试 evidence 只用于查证当时结果；当前测试从源码、固定资产和新输出目录生成自己的结果。
 
-原项目默认`~/el4090_legged_gym`，可用`EA2_LEGACY_ROOT`指定另一路径。参考文件先核对`tests/data/ea2/source_manifest.json`；运行时任务和日常回归不依赖该项目。
+## 失败处理
 
-`hfield_contacts`曾出现GPU HFIELD–BOX抖动，历史现象见[平台迁移历史](../docs/development/history/平台迁移.md)。失败必须保留并分析，不用重跑PASS覆盖之前FAIL。合成PPO回归属于较长检查，默认CPU/GPU组均不包含它；它也不能替代真实机器人学习行走。
-
-## 科学实验与完整任务验收
-
-- oracle全语料比较、敏感性/heldout分析、报告与冻结四图重放：[`scripts/experiments/ea2/`](../scripts/experiments/ea2/README.md)。这些需要相应语料与独立新输出名称，不属于日常回归。
-- EA2采集/训练/评估/导出/play：使用[任务说明](../docs/tasks/envelope_adaptive_2/使用说明.md)中的公共CLI；一次性固定名称发布脚本已删除。
-- T0-A完整固定预算验收：`python scripts/tools/t0/run_acceptance.py`。它包含真实5迭代训练和64条评测，范围与结果见[使用与验收](../docs/tasks/el_4090_lidar/T0-A使用与验收.md)。GPU回归通过不等于重新完成这套科学验收。
-- T1完整测量、分层库和冻结复验：见[形态测量](../docs/research/morphology/形态可达性测量.md)。
-- 雷达光学坐标、当前全帧采样与地面查询边界见[受限空间当前雷达配置](../docs/tasks/confined_locomotion/lidar_setup/配置与边界.md)。历史固定35构型×五静态场景×四采样配方、175次CPU扫描、700组采样及原始STL表面核查结果位于对应logs；候选没有自动采用，不作为动态净空或学习验收。`lidar_mesh_geometry`日常回归用解析/独立凸优化验证诊断几何，不依赖logs或整套STL扫描。
-- 圆锥参数比较用`replay_cone_tilt.py`重放相同原始扫描及精确池输入，`verify_cone_tilt.py`独立复核空间统计和既有配置逐点一致性。原始分类边界的浮点并列逐条记录；输入身份、固定查询和候选分母保持不变。复现与范围见同一核查文档，不属于日常小型回归。
-
-2026-10-04整理前源码/文档保存在`logs/maintenance/stage-cleanup-20261004/source_snapshot/`和Git提交`f9b907a`中。历史证据的源码/模型SHA不改写；源码身份改变后使用该run的冻结实现重放，不绕过身份守卫。
-
-固定输入保留在`tests/data/`及`tests/robot/joint_table.json`。实验结果、权重、编译模型和临时报告继续位于被Git忽略的`logs/`。来源记录属于复现信息；当前测试入口只按功能和设备分类。
+失败和超时必须保留并分析。不得通过放宽数值阈值、跳过断言、修改算法或恢复废弃兼容层来掩盖由路径变动、导入变化或文件删除造成的问题。路径调整后应同时核查 `__file__` 根目录定位、`sys.path`、动态加载和测试 profile 中的实际路径。

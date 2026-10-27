@@ -1,17 +1,14 @@
 #!/usr/bin/env python
-"""B8 candidate static corridor check using REAL CUDA LidarSensor raycasts.
+"""Static corridor wall-sampling check using REAL CUDA LidarSensor raycasts.
 
 This diagnostic does not alter production scanner, physical MuJoCo environment,
 runtime, or PPO. It takes the real T1 reset's lidar pose + all 86,400 original
 sensor-ray directions, constructs independent Warp meshes of the physical
 floor and *diagnostic* corridor walls, and raycasts those meshes with the same
 LidarSensor backend. It then reapplies EXACT production near FPS and far64
-sampling to two candidate grouping rules:
-
-  A0: original cone theta=32 tilt=56, no x cutoff
-  B8: widened cone theta=28 tilt=56, observed BASE x <= 3.5m
-
-A third optional candidate B9 (4m) is comparison-only, not the selected default.
+sampling to candidate grouping rules. The historical candidate IDs A0/B8/B9
+are retained in report schemas and filenames; B8 denotes the selected widened
+near-field grouping (theta=28, tilt=56, observed BASE x <= 3.5m).
 Ground supervision grid is an unchanged placeholder solely to instantiate the
 official TrainingRuntime, never used for scoring. This first pass uses exactly
 one settled robot pose per scene; no robot self-occlusion, collision physics,

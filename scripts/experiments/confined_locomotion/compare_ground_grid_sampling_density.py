@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-"""S1 fixed rectangular ground-supervision point-set comparisons (offline only).
+"""Fixed rectangular ground-supervision point-set comparisons (offline only).
 
 Does NOT alter production GroundGridCfg, model ground_head, runner, PPO or
-training recipe. Reuses measured B8 15-pose TRUE CUDA raycast evidence from
-analyze_B8_ground_support.py to evaluate actual prospective sampling
-coordinates. The dense source probes are at 0.1m intervals.
+training recipe. Reuses measured near-field 15-pose TRUE CUDA raycast evidence
+from analyze_ground_sampling_support.py. The historical labels B8/S1 are kept
+in evidence schemas and candidate IDs only; they denote the widened near-field
+grouping and the fixed rectangular supervision range, not current stages.
 
 Metrics are true positive ground-hit/FPS 3D-neighbor distances (r in
 0.15,0.20,0.25,0.30 m), NOT terrain prediction accuracy or actual observation

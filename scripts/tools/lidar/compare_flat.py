@@ -14,7 +14,7 @@ import mujoco
 import torch
 from scipy.spatial.transform import Rotation
 
-ROOT = Path(__file__).resolve().parents[4]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT/'src'))
 from hexapod_mjlab.utils.lidar.sensor_pattern.sensor_lidar.genera_lidar_scan_pattern import SpinningLidarGenerator
 from hexapod_mjlab.utils.lidar.pool_samplers import AngleStrideSampler

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Select fixed robust rectangular ground labels from TRUE B8 pose-scans.
+"""Select fixed robust rectangular ground labels from measured pose scans.
 
 Strict geometry membership is a necessary cone/range condition checked on all
 points in 9 routine poses. The second, independent criterion is a sampled
@@ -7,9 +7,10 @@ near-FPS TRUE FLOOR return within r metres in 3D. An in-cone position is not
 automatically observed, especially on non-flat or occluded terrain.
 
 This is deliberately NOT an installation of GroundGridCfg/MLP/PPO. Uses
-artifact from analyze_B8_ground_support.py v4 (15 poses, 1833 probes, static
-real CUDA 86400-ray returns) and validates grid order/mirror against production
-GroundGridCfg and GridPermutation.
+artifact from analyze_ground_sampling_support.py v4 (15 poses, 1833 probes,
+static real CUDA 86400-ray returns) and validates grid order/mirror against
+production GroundGridCfg and GridPermutation. B8/S1 labels remain only in
+historical evidence fields and candidate IDs.
 """
 from __future__ import annotations
 import argparse

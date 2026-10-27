@@ -7,7 +7,7 @@ import numpy as np
 import mujoco
 from scipy.spatial.transform import Rotation
 ROOT=Path(__file__).resolve().parents[3]
-spec=importlib.util.spec_from_file_location('flat_diagnostic',ROOT/'scripts/experiments/joint_passage/lidar_setup/compare_flat.py')
+spec=importlib.util.spec_from_file_location('flat_diagnostic',ROOT/'scripts/tools/lidar/compare_flat.py')
 mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
 
 class Alignment(unittest.TestCase):

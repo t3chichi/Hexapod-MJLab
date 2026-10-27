@@ -10,7 +10,7 @@
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含148项CPU检查。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
+该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含149项CPU检查。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
 
 ## 真实 GPU 工程检查
 
