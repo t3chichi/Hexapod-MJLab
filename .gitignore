@@ -26,3 +26,6 @@ venv/
 .vscode/
 .idea/
 *.swp
+
+# Original source snapshots for strictly source-bound historical checkpoints.
+/.checkpoint_sources/
