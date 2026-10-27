@@ -1,6 +1,7 @@
 """CPU contract checks for the fixed raw-channel catalog and artifacts."""
 from __future__ import annotations
 
+import ast
 import json
 import hashlib
 import importlib.util
@@ -9,6 +10,8 @@ from pathlib import Path
 
 import numpy as np
 
+from hexapod_mjlab.common import robot as common_robot, witness as common_witness
+from hexapod_mjlab.common.reset import settled_reset_joint_pos
 from hexapod_mjlab.tasks.confined_locomotion_2.channels import (
     ChannelCatalog,
     build_channel_catalog,
@@ -211,4 +214,38 @@ def test_far_cli_is_mutually_exclusive_and_legacy_spelling_is_compatible(tmp_pat
         assert exc.code == 2
     else:
         raise AssertionError("mutually exclusive far multiplier arguments were accepted")
+
+
+def test_common_witness_matches_frozen_asset_and_catalog_identity():
+    tree = ast.parse(common_witness.FROZEN_WITNESS_PATH.read_text(encoding="utf-8"))
+    frozen = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 \
+                and isinstance(node.targets[0], ast.Name):
+            try:
+                frozen[node.targets[0].id] = ast.literal_eval(node.value)
+            except (ValueError, TypeError):
+                pass
+    for name in (
+        "WITNESS_ID", "SETTLED_ROOT_HEIGHT_M", "SETTLED_QPOS", "JOINT_TARGETS",
+        "PD_KP", "PD_KD", "TORQUE_CLIP_NM", "FOOT_CLEARANCE_M", "FOOT_BODIES",
+        "JOINT_ORDER",
+    ):
+        assert getattr(common_witness, name) == frozen[name], name
+    witness = common_witness.frozen_witness()
+    assert witness.settled_qpos == frozen["SETTLED_QPOS"]
+    assert witness.joint_targets == frozen["JOINT_TARGETS"]
+    assert common_robot.JOINT_NAMES == tuple(frozen["JOINT_ORDER"])
+    assert common_robot.FOOT_BODIES == tuple(frozen["FOOT_BODIES"])
+    assert common_robot.FOOT_CLEARANCE_M == float(frozen["FOOT_CLEARANCE_M"])
+    assert common_robot.PD_STIFFNESS == float(frozen["PD_KP"])
+    assert common_robot.PD_DAMPING == float(frozen["PD_KD"])
+    assert common_robot.TORQUE_LIMIT_NM == float(frozen["TORQUE_CLIP_NM"])
+    assert settled_reset_joint_pos() == frozen["SETTLED_QPOS"][7:25]
+
+    catalog_identity = globals()["catalog"]().identity
+    witness_sha = hashlib.sha256(common_witness.FROZEN_WITNESS_PATH.read_bytes()).hexdigest()
+    assert witness_sha == catalog_identity["source_sha256"]["t1_witness_sha256"]
+    qpos = np.asarray(frozen["SETTLED_QPOS"], dtype="<f8")
+    assert hashlib.sha256(qpos.tobytes()).hexdigest() == catalog_identity["pose_sha256"]
 

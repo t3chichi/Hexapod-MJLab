@@ -79,7 +79,7 @@ def _mapping_checks(out: Path, device: str, recipe: dict, *, args, grid) -> dict
     mirror_ground_values, mirror_observation, mirror_point_block,
     mirror_polar_vector,
   )
-  from hexapod_mjlab.tasks.el_4090_lidar.mdp.lidar import resolve_lidar_mount
+  from hexapod_mjlab.common.lidar import resolve_lidar_mount
 
   env, wrapper, runtime = _build_runtime(out, args=args, grid=grid)
   checks = {}
@@ -88,7 +88,7 @@ def _mapping_checks(out: Path, device: str, recipe: dict, *, args, grid) -> dict
     labels = runtime.labels()
     action = env.action_manager.get_term("residual_pd")
     joint = JointPermutation.from_joint_names(tuple(action._target_names))
-    from hexapod_mjlab.tasks.el_4090_lidar.t0.witness import frozen_witness
+    from hexapod_mjlab.common.witness import frozen_witness
 
     t1 = frozen_witness()
     t1_targets = torch.tensor(t1.joint_targets, dtype=torch.float32, device=device)
@@ -681,7 +681,7 @@ def _window_rotation_checks(runtime, *, grid, num_envs: int,
 
 def _window_rotation(out: Path, device: str, recipe: dict, *, args, grid) -> dict:
   from confined_locomotion.support.snapshots import cpu_tree, live_window_snapshot
-  from hexapod_mjlab.tasks.el_4090_lidar.t0.witness import frozen_witness
+  from hexapod_mjlab.common.witness import frozen_witness
 
   if args.num_envs != 2:
     raise ValueError("window_rotation requires exactly two rows for unselected-row isolation")

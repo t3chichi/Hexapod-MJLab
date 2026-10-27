@@ -7,6 +7,5 @@ the official external-task discovery mechanism (``mjlab/__init__.py::
 _import_registered_packages``).
 """
 
-from . import el_4090_lidar  # noqa: F401  (registers the EL4090 LiDAR task)
-from . import confined_locomotion  # noqa: F401  (registers El-4090-Confined-Locomotion-Flat, M1)
-from . import confined_locomotion_2  # noqa: F401  (independent temporal-memory variant)
+from . import confined_locomotion  # noqa: F401  (registers El-4090-Confined-Locomotion-Flat)
+from . import confined_locomotion_2  # noqa: F401  (registers the Flat_2 and Terrain-Memory_2 tasks)

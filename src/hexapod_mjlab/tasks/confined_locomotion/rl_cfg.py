@@ -20,7 +20,7 @@ from hexapod_mjlab.rl.confined_locomotion.ppo import (
 )
 from .ground import VALIDITY_GEOMETRY_ONLY_FLAT_TRAINING, GroundGridCfg
 from .ground_presets import s1_187_ground_grid
-from .perturbations import ALL_THREE_PRESET, ObservationPerturbationCfg
+from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET, ObservationPerturbationCfg
 
 __all__ = [
   "ConfinedLocomotionRlCfg",

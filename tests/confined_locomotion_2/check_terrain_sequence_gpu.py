@@ -32,6 +32,44 @@ def fingerprint(module):
     return digest.hexdigest()
 
 
+CROSS_PATH_TOLERANCE = 1e-5
+# cuDNN picks different GRU kernels/accumulation orders for a PackedSequence and
+# a one-step call. The bound was measured on the RTX 4050 Laptop run
+# (PyTorch 2.11, CUDA 13.0, IEEE fp32); it is not a cross-device guarantee.
+
+
+def stepwise_replay(network, steps, *, mirrored=False, joint_permutation=None, mount_quat_xyzw=None):
+    """Same-path reference: recompute frames and GRU one control step at a time.
+
+    Reads only the rollout's stored raw inputs and its stored initial hidden
+    state; the recurrent state is advanced here, never taken from the batched
+    replay output under comparison.
+    """
+    from hexapod_mjlab.rl.confined_locomotion_2.symmetry import mirror_prepared
+
+    inputs = []
+    for step in steps:
+        check(step.prepared is not None, "stepwise replay requires stored prepared inputs")
+        inputs.append(mirror_prepared(step.prepared, joint_permutation, mount_quat_xyzw=mount_quat_xyzw)
+                      if mirrored else step.prepared)
+    initial = steps[0].mirror_hidden_before if mirrored else steps[0].hidden_before
+    check(initial is not None, "stepwise replay requires the stored initial hidden state")
+    hidden = initial.detach().clone()
+    outputs = []
+    with torch.no_grad():
+        for t, (step, p) in enumerate(zip(steps, inputs)):
+            if t:
+                done = steps[t-1].terminated | steps[t-1].truncated
+                hidden = torch.where(done[:, None], torch.zeros_like(hidden), hidden)
+            frame = network.encode_points(
+                p.near_points, p.near_valid, p.far_points, p.far_valid,
+                near_angle_keys=p.near_angle_keys, far_angle_keys=p.far_angle_keys)
+            output = network.forward_from_features(p.observation, frame, hidden)
+            outputs.append(output)
+            hidden = output.hidden
+    return outputs
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
@@ -55,7 +93,7 @@ def main():
         from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
         from hexapod_mjlab.tasks.confined_locomotion_2.collector import TrainingCollector
         from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightGridCfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.perturbations import ALL_THREE_PRESET
+        from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET
         from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider, derive_action_generator_seed
         from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
         from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
@@ -95,7 +133,9 @@ def main():
         live_outputs = []
         def observe(transition, output, envelope):
             check(torch.equal(envelope.step_ids, transition.step_ids), "observer/envelope control identity mismatch")
-            live_outputs.append((transition.episode_ids.clone(), transition.step_ids.clone(), output.temporal_feature.clone()))
+            live_outputs.append((transition.episode_ids.clone(), transition.step_ids.clone(),
+                                 output.frame_feature.clone(), output.temporal_feature.clone(),
+                                 output.hidden.clone()))
         collector = TrainingCollector(runtime, network, provider, symmetry_enabled=True,
                                       joint_permutation=permutation, mount_quat_xyzw=mount, transition_observer=observe)
         if not args.flat:
@@ -110,7 +150,11 @@ def main():
             a, b = runtime.labels()["height"], runtime.labels()["height"]
             check(a is b and len(label_calls)==1, "same-identity labels repeat geometry query")
         retained = None
-        max_replay, max_mirror, max_height = 0., 0., 0.
+        stepwise_frame_max = stepwise_temporal_max = stepwise_hidden_max = 0.
+        stepwise_progress_max = stepwise_mirror_max = 0.
+        cross_frame_max = cross_temporal_max = cross_hidden_max = 0.
+        cross_progress_max = cross_bootstrap_max = cross_mirror_max = 0.
+        max_height = 0.
         scan_counts = []
         buffers = []
         for batch_index in range(2 if args.flat else 3):
@@ -154,16 +198,52 @@ def main():
                 outputs = replay_sequence(network, buffer.steps)
                 mirrored = replay_sequence(network, buffer.steps, mirrored=True,
                                            joint_permutation=permutation, mount_quat_xyzw=mount)
-            for t, (step, output) in enumerate(zip(buffer.steps, outputs)):
-                episode, control, online = live_outputs[offset+t]
+                stepwise = stepwise_replay(network, buffer.steps)
+                stepwise_mirror = stepwise_replay(
+                    network, buffer.steps, mirrored=True,
+                    joint_permutation=permutation, mount_quat_xyzw=mount)
+            for t, (step, output, reference) in enumerate(zip(buffer.steps, outputs, stepwise)):
+                episode, control, online_frame, online, online_hidden = live_outputs[offset+t]
                 check(torch.equal(episode, step.observation.episode_ids) and torch.equal(control, step.observation.step_ids), "output/rollout control identity mismatch")
-                error = float((online-output.temporal_feature).abs().max())
-                max_replay = max(max_replay,error)
-                check(error < 2e-6, "collection/replay temporal output mismatch")
+                stepwise_frame = float((online_frame-reference.frame_feature).abs().max())
+                stepwise_temporal = float((online-reference.temporal_feature).abs().max())
+                stepwise_hidden = float((online_hidden-reference.hidden).abs().max())
+                stepwise_frame_max = max(stepwise_frame_max,stepwise_frame)
+                stepwise_temporal_max = max(stepwise_temporal_max,stepwise_temporal)
+                stepwise_hidden_max = max(stepwise_hidden_max,stepwise_hidden)
+                check(stepwise_frame < 2e-6, "stepwise frame encoding differs from online collection")
+                check(stepwise_temporal < 2e-6, "stepwise temporal output differs from online collection")
+                check(stepwise_hidden < 2e-6, "stepwise hidden output differs from online collection")
                 if t+1 < 24:
-                    expected_hidden = output.hidden.clone()
+                    expected_hidden = reference.hidden.clone()
                     expected_hidden[step.terminated | step.truncated] = 0
-                    check(torch.allclose(buffer.steps[t+1].hidden_before, expected_hidden, atol=2e-6,rtol=0), "done boundary or hidden progression is wrong")
+                    progress = float((buffer.steps[t+1].hidden_before-expected_hidden).abs().max())
+                    stepwise_progress_max = max(stepwise_progress_max,progress)
+                    check(progress < 2e-6, "done boundary or hidden progression is wrong")
+                    expected_mirror = stepwise_mirror[t].hidden.clone()
+                    expected_mirror[step.terminated | step.truncated] = 0
+                    mirror_progress = float((buffer.steps[t+1].mirror_hidden_before-expected_mirror).abs().max())
+                    stepwise_mirror_max = max(stepwise_mirror_max,mirror_progress)
+                    check(mirror_progress < 2e-6, "mirror hidden progression is wrong")
+                cross_frame = float((reference.frame_feature-output.frame_feature).abs().max())
+                cross_temporal = float((online-output.temporal_feature).abs().max())
+                cross_hidden = float((reference.hidden-output.hidden).abs().max())
+                cross_frame_max = max(cross_frame_max,cross_frame)
+                cross_temporal_max = max(cross_temporal_max,cross_temporal)
+                cross_hidden_max = max(cross_hidden_max,cross_hidden)
+                check(cross_frame < CROSS_PATH_TOLERANCE, "packed-sequence frame encoding exceeds the documented cross-path numerical bound")
+                check(cross_temporal < CROSS_PATH_TOLERANCE, "packed-sequence temporal output exceeds the documented cross-path numerical bound")
+                check(cross_hidden < CROSS_PATH_TOLERANCE, "packed-sequence hidden output exceeds the documented cross-path numerical bound")
+                if t+1 < 24:
+                    expected_batch = output.hidden.clone()
+                    expected_batch[step.terminated | step.truncated] = 0
+                    batch_progress = float((buffer.steps[t+1].hidden_before-expected_batch).abs().max())
+                    cross_progress_max = max(cross_progress_max,batch_progress)
+                    check(batch_progress < CROSS_PATH_TOLERANCE, "batch replay hidden progression exceeds the documented cross-path bound")
+                    batch_mirror = mirrored[t].hidden.clone()
+                    batch_mirror[step.terminated | step.truncated] = 0
+                    cross_mirror_max = max(cross_mirror_max,float((buffer.steps[t+1].mirror_hidden_before-batch_mirror).abs().max()))
+                    check(cross_mirror_max < CROSS_PATH_TOLERANCE, "packed-sequence mirror history exceeds the documented cross-path bound")
                 if args.flat:
                     check(step.height_label is None, "Flat created terrain labels")
                 else:
@@ -176,9 +256,16 @@ def main():
                     max_height = max(max_height,float(abs(label.heights.cpu().numpy()[valid]-target[valid]).max()))
                     mh,mv = mirror_height_targets(label.heights,label.valid)
                     check(torch.equal(mh.flip(-2),label.heights) and torch.equal(mv.flip(-2),label.valid), "mirrored grid target is wrong")
-            check(torch.allclose(collector.hidden,outputs[-1].hidden * (~(buffer.steps[-1].terminated|buffer.steps[-1].truncated))[:,None],atol=2e-6,rtol=0), "bootstrap committed an extra hidden update")
-            max_mirror = max(max_mirror,float((collector.mirror_hidden-mirrored[-1].hidden * (~(buffer.steps[-1].terminated|buffer.steps[-1].truncated))[:,None]).abs().max()))
-            check(max_mirror < 2e-6,"mirror online/replay history mismatch")
+            committed = (~(buffer.steps[-1].terminated|buffer.steps[-1].truncated))[:,None]
+            check(torch.allclose(collector.hidden,stepwise[-1].hidden * committed,atol=2e-6,rtol=0), "bootstrap committed an extra hidden update")
+            bootstrap = float((collector.hidden-outputs[-1].hidden * committed).abs().max())
+            cross_bootstrap_max = max(cross_bootstrap_max,bootstrap)
+            check(bootstrap < CROSS_PATH_TOLERANCE, "packed-sequence bootstrap hidden exceeds the documented cross-path bound")
+            stepwise_mirror_max = max(stepwise_mirror_max,float((collector.mirror_hidden-stepwise_mirror[-1].hidden * committed).abs().max()))
+            check(torch.allclose(collector.mirror_hidden,stepwise_mirror[-1].hidden * committed,atol=2e-6,rtol=0), "mirror online/stepwise history mismatch")
+            mirror_final = float((collector.mirror_hidden-mirrored[-1].hidden * committed).abs().max())
+            cross_mirror_max = max(cross_mirror_max,mirror_final)
+            check(mirror_final < CROSS_PATH_TOLERANCE, "packed-sequence mirror history exceeds the documented cross-path bound")
             if batch_index == 1:
                 check(bool(buffer.steps[0].truncated[0]) and not bool(buffer.steps[0].terminated[0]), "real timeout fixture did not truncate")
                 check(int(buffer.steps[1].observation.step_ids[0])==0, "reset row did not enter fresh episode")
@@ -197,7 +284,26 @@ def main():
         check(weights_before==fingerprint(network) and distribution_before==fingerprint(provider),"collection/replay changed network/distribution weights")
         check(all(p.grad is None for p in network.parameters()), "gate accumulated gradients")
         report.update(passed=True, control_steps=24*len(buffers), environment_transitions=48*len(buffers),
-                      temporal_replay_max_error=max_replay, mirror_history_max_error=max_mirror,
+                      stepwise_reference={
+                          "path": "per-control-step encode_points + forward_from_features",
+                          "tolerance": 2e-6,
+                          "frame_max_error": stepwise_frame_max,
+                          "temporal_max_error": stepwise_temporal_max,
+                          "hidden_max_error": stepwise_hidden_max,
+                          "hidden_progression_max_error": stepwise_progress_max,
+                          "mirror_history_max_error": stepwise_mirror_max,
+                      },
+                      packed_sequence_cross_path={
+                          "path": "batched encode_point_sequence + forward_sequence_from_features",
+                          "tolerance": CROSS_PATH_TOLERANCE,
+                          "scope": "measured on RTX 4050 Laptop / PyTorch 2.11 / CUDA 13.0 / cuDNN IEEE fp32; not a cross-device guarantee",
+                          "frame_max_error": cross_frame_max,
+                          "temporal_max_error": cross_temporal_max,
+                          "hidden_max_error": cross_hidden_max,
+                          "hidden_progression_max_error": cross_progress_max,
+                          "bootstrap_max_error": cross_bootstrap_max,
+                          "mirror_history_max_error": cross_mirror_max,
+                      },
                       height_reference_max_error_m=max_height, scan_counts_per_rollout=scan_counts,
                       labels_created=0 if args.flat else len(label_calls),
                       weights_unchanged=True, gradients_absent=True, registry_unmodified=True,

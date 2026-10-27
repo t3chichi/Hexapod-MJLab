@@ -192,7 +192,7 @@ def _check_actual_physics_and_rewards(env, runtime, transition) -> dict:
   # Rebuild the six world net-force vectors from the raw contact table using
   # the same primary-body sign convention documented by the original witness.
   context = runtime._context
-  from hexapod_mjlab.tasks.el_4090_lidar.t0.witness import FOOT_BODIES
+  from hexapod_mjlab.common.witness import FOOT_BODIES
 
   foot_names = {name.split("/")[-1] for name in FOOT_BODIES}
   expected_force = np.zeros((env.num_envs, 6, 3), dtype=np.float32)

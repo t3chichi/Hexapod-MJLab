@@ -17,13 +17,9 @@ from pathlib import Path
 
 import numpy as np
 
-from hexapod_mjlab.tasks.confined_locomotion.visualization.geometry import (
-    cone_axis_base,
-    cone_wireframe,
-    quat_wxyz_to_matrix,
-)
-from hexapod_mjlab.tasks.confined_locomotion.visualization.play import (
+from hexapod_mjlab.common.visualization import (
     PendingControls,
+    quat_wxyz_to_matrix,
     robot_meshes_at_qpos,
 )
 

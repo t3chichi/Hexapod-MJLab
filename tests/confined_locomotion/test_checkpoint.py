@@ -559,13 +559,17 @@ def test_current_source_identity_hashes_function_dependencies():
   required = {
     "hexapod_mjlab.tasks.confined_locomotion.runtime",
     "hexapod_mjlab.tasks.confined_locomotion.collector",
-    "hexapod_mjlab.tasks.confined_locomotion.transition",
-    "hexapod_mjlab.tasks.confined_locomotion.diagnostics",
     "hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint",
     "hexapod_mjlab.tasks.confined_locomotion.rl.runner",
     "hexapod_mjlab.rl.confined_locomotion.inference",
+    "common/checkpoint.py",
+    "common/transition.py",
+    "common/diagnostics.py",
+    "common/mdp/actions.py",
+    "common/mdp/rewards.py",
   }
   assert required <= set(sources)
+  assert not any(key.startswith("hexapod_mjlab.tasks.el_4090_lidar") for key in sources)
   assert all(len(digest) == 64 for digest in sources.values())
 
 

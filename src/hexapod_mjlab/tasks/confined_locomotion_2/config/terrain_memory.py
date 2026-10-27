@@ -16,8 +16,8 @@ IMPLEMENTED = True
 def make_collection_env_cfg(*, terrain, num_envs: int, seed: int):
     """Real Heightfield MDP for collection only; deliberately unregistered."""
     from .terrain_geometry import make_geometry_env_cfg
-    from ..mdp.rewards import build_training_reward_cfgs
-    from ..mdp.terminations import build_training_termination_cfgs
+    from hexapod_mjlab.common.mdp.rewards import build_training_reward_cfgs
+    from hexapod_mjlab.common.mdp.terminations import build_training_termination_cfgs
 
     cfg = make_geometry_env_cfg(terrain=terrain, num_envs=num_envs, seed=seed)
     cfg.observations["policy"].nan_policy = "error"

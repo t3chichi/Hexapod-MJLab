@@ -37,7 +37,7 @@ AUTHORITY_WEIGHTS = {
 
 def test_training_environment_config_is_fresh_and_keeps_flat_defaults_separate():
     from hexapod_mjlab.tasks.confined_locomotion.flat_env_cfg import make_flat_env_cfg
-    from hexapod_mjlab.tasks.confined_locomotion.mdp.terminations import (
+    from hexapod_mjlab.common.mdp.terminations import (
         TRAINING_TERMINATION_TIME_OUT_FLAGS,
     )
 
@@ -167,7 +167,7 @@ def test_partial_reset_restores_every_unselected_physics_row_without_reallocatio
     from hexapod_mjlab.tasks.confined_locomotion.runtime import (
         _reset_env_preserving_unselected_physics,
     )
-    from hexapod_mjlab.tasks.confined_locomotion.transition import PERSISTENT_PHYSICS_FIELDS
+    from hexapod_mjlab.common.transition import PERSISTENT_PHYSICS_FIELDS
 
     shapes = {
         "time": (2,), "qpos": (2, 3), "qvel": (2, 3),

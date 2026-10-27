@@ -68,9 +68,9 @@ def _wait_http(url: str, timeout_s: float = 8.0) -> int:
 
 def _causal_state(session):
     """Copy every task-owned causal state plus physics/managers for pure UI checks."""
-    from hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint import (
-        _manager_tensors,
-        _physics_arrays,
+    from hexapod_mjlab.common.checkpoint import (
+        manager_tensors as _manager_tensors,
+        physics_arrays as _physics_arrays,
     )
 
     physics, _manifest = _physics_arrays(session.env)

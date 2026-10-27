@@ -60,7 +60,7 @@ from ..rl_cfg import (
 from ..runtime import TrainingRuntime, TrainingRuntimeFrozenError
 from ..collector import TrainingCollector, model_state_fingerprint
 from ..ground import GroundGridCfg, VALIDITY_GEOMETRY_ONLY_FLAT_TRAINING
-from ..perturbations import ALL_THREE_PRESET, ObservationPerturbationCfg
+from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET, ObservationPerturbationCfg
 
 _GROUND_GRID_FIELDS = {
   "x_coords", "y_coords", "validity_mode", "parallel_tol", "body_xyz_semantics"
@@ -351,7 +351,7 @@ def _resolve_engineering_cfg(train_cfg: dict) -> dict:
   if perturbation_dict is None:
     perturbation_cfg = None
   elif isinstance(perturbation_dict, dict):
-    from ..perturbations import ObservationPerturbationCfg, PerturbationContractError
+    from hexapod_mjlab.common.perturbations import ObservationPerturbationCfg, PerturbationContractError
 
     try:
       perturbation_cfg = ObservationPerturbationCfg.from_dict(perturbation_dict)
@@ -744,7 +744,7 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
     self.grid_permutation = GridPermutation.from_axes(
       self.grid_cfg.x_coords, self.grid_cfg.y_coords
     )
-    from hexapod_mjlab.tasks.el_4090_lidar.mdp.lidar import resolve_lidar_mount
+    from hexapod_mjlab.common.lidar import resolve_lidar_mount
 
     resolved_mount = resolve_lidar_mount()
     if resolved_mount is None:

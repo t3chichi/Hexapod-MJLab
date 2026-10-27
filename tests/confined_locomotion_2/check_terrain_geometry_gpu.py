@@ -90,7 +90,7 @@ def main():
         from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import TASK_ID
         from hexapod_mjlab.tasks.confined_locomotion_2.runtime import _reset_env_preserving_unselected_physics
         from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightGridCfg, TerrainGeometryQuery
-        from hexapod_mjlab.tasks.confined_locomotion.diagnostics import ContactTableReader
+        from hexapod_mjlab.common.diagnostics import ContactTableReader
 
         device = f"cuda:{args.gpu}"
         registered_before = list_tasks()

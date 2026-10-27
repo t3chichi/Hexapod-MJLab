@@ -76,14 +76,19 @@ from hexapod_mjlab.rl.confined_locomotion.contracts import (
 from hexapod_mjlab.rl.confined_locomotion.history import WindowAngleKeys
 from hexapod_mjlab.rl.confined_locomotion.integration import PreparedControlInputs
 
-from .geometry import (
+from hexapod_mjlab.common.visualization import (
     H_REF_M,
-    STARTUP_ENVELOPE,
+    PendingControls,
     cone_axis_base,
     cone_wireframe,
-    clip_segments_base_x,
     hex_vertices,
     quat_wxyz_to_matrix,
+    robot_meshes_at_qpos,
+)
+
+from .geometry import (
+    STARTUP_ENVELOPE,
+    clip_segments_base_x,
     root_height_marker_world,
     world_to_base,
 )
@@ -301,147 +306,6 @@ def resolve_point_sources(
         "method": "exact stable angle-key permutation + sampled raw-id "
                   "metadata (XYZ equality is never used)",
     }
-
-
-# ═════════════════════════ real mesh placement (visual only) ═══════════════
-
-
-def robot_meshes_at_qpos(mj_model, qpos, *, mj_data=None) -> list[dict]:
-    """World vertices/faces of every MESH geom at the given qpos.
-
-    Host ``mj_forward`` on the live compiled template model — kinematics for
-    display ONLY (the same approach as the accepted M3 replay viewer's
-    ``robot_meshes``); the sim's own state is never touched. ``mj_data`` may
-    be a reused MjData (viewer cache); a fresh one is created when omitted.
-    """
-    import mujoco
-
-    q = np.asarray(qpos, dtype=np.float64).reshape(-1)
-    if int(q.size) != int(mj_model.nq):
-        raise ValueError(
-            f"display qpos size {int(q.size)} != compiled model nq "
-            f"{int(mj_model.nq)}"
-        )
-    data = mj_data if mj_data is not None else mujoco.MjData(mj_model)
-    data.qpos[:] = q
-    mujoco.mj_forward(mj_model, data)
-    out = []
-    for gid in range(mj_model.ngeom):
-        if int(mj_model.geom_type[gid]) != int(mujoco.mjtGeom.mjGEOM_MESH):
-            continue
-        mid = int(mj_model.geom_dataid[gid])
-        if mid < 0:
-            continue
-        vs = int(mj_model.mesh_vertadr[mid])
-        vc = int(mj_model.mesh_vertnum[mid])
-        fs = int(mj_model.mesh_faceadr[mid])
-        fc = int(mj_model.mesh_facenum[mid])
-        verts = np.asarray(mj_model.mesh_vert[vs : vs + vc], dtype=np.float64)
-        faces = np.asarray(mj_model.mesh_face[fs : fs + fc], dtype=np.int64)
-        r = np.asarray(data.geom_xmat[gid], dtype=np.float64).reshape(3, 3)
-        t = np.asarray(data.geom_xpos[gid], dtype=np.float64)
-        name = (
-            mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_GEOM, gid) or f"geom{gid}"
-        )
-        body = int(mj_model.geom_bodyid[gid])
-        body_name = (
-            mujoco.mj_id2name(mj_model, mujoco.mjtObj.mjOBJ_BODY, body) or ""
-        )
-        out.append(
-            {
-                "geom": name,
-                "body": body_name,
-                "vertices": verts @ r.T + t,
-                "faces": faces,
-            }
-        )
-    return out
-
-
-# ═════════════════════════ GUI intent mailbox ══════════════════════════════
-
-
-class PendingControls:
-    """Thread-safe intent mailbox: GUI threads only SUBMIT, the single owner
-    loop TAKES. No runtime/env/network/scanner call ever happens from a GUI
-    callback — the owner validates every intent before acting on it."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._command = None          # (vx, vy, wz) raw slider values
-        self._zero_command = False
-        self._pause_toggle = False    # owner toggles its current state
-        self._step = False
-        self._reset = False
-        self._exit = False
-        self._rerender = False
-        self._pick = None             # ("near"|"far", index)
-        self._env_row = None
-
-    def submit_command(self, vx: float, vy: float, omega: float) -> None:
-        with self._lock:
-            self._command = (float(vx), float(vy), float(omega))
-
-    def submit_zero_command(self) -> None:
-        with self._lock:
-            self._zero_command = True
-
-    def submit_pause_toggle(self) -> None:
-        with self._lock:
-            self._pause_toggle = not self._pause_toggle
-
-    def submit_step(self) -> None:
-        with self._lock:
-            self._step = True
-
-    def submit_reset(self) -> None:
-        with self._lock:
-            self._reset = True
-
-    def submit_exit(self) -> None:
-        with self._lock:
-            self._exit = True
-
-    def submit_rerender(self) -> None:
-        with self._lock:
-            self._rerender = True
-
-    def submit_pick(self, kind: str, index: int) -> None:
-        with self._lock:
-            self._pick = (str(kind), int(index))
-
-    def submit_env_row(self, row: int) -> None:
-        with self._lock:
-            self._env_row = int(row)
-
-    def take(self) -> dict:
-        with self._lock:
-            pending = {
-                "command": self._command,
-                "zero_command": self._zero_command,
-                "pause_toggle": self._pause_toggle,
-                "step": self._step,
-                "reset": self._reset,
-                "exit": self._exit,
-                "rerender": self._rerender,
-                "pick": self._pick,
-                "env_row": self._env_row,
-            }
-            self._command = None
-            self._zero_command = False
-            self._pause_toggle = False
-            self._step = False
-            self._reset = False
-            self._rerender = False
-            self._pick = None
-            self._env_row = None
-            # Exit is sticky until this owner-loop read, then consumed.
-            self._exit = False
-        return pending
-
-    def exit_requested(self) -> bool:
-        with self._lock:
-            return bool(self._exit)
 
 
 # ═════════════════════════ the live viewer ═════════════════════════════════

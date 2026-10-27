@@ -137,7 +137,7 @@ def perturbation_replay(points,source_dists,labels,frame,pipeline,seed):
     """
     import torch
     import numpy as np
-    from hexapod_mjlab.tasks.confined_locomotion.perturbations import (
+    from hexapod_mjlab.common.perturbations import (
         ObservationPerturbations,ObservationPerturbationCfg,
         GapPerturbationCfg,RangePerturbationCfg,apply_range_noise
     )

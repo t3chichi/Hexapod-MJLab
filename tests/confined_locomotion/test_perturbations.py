@@ -62,7 +62,7 @@ from hexapod_mjlab.rl.confined_locomotion.contracts import (
   OnlineObservation,
 )
 from hexapod_mjlab.rl.confined_locomotion.history import ScanWindow
-from hexapod_mjlab.tasks.confined_locomotion.perturbations import (
+from hexapod_mjlab.common.perturbations import (
   ALL_THREE_PRESET,
   GAP_FIXED_JITTER_OFF_PRESET,
   GAP_ONLY_PRESET,

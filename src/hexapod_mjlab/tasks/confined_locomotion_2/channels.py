@@ -16,10 +16,12 @@ from typing import Any
 
 import numpy as np
 
+from hexapod_mjlab.common.witness import FROZEN_WITNESS_PATH, SETTLED_QPOS
+
 _PACKAGE = Path(__file__).resolve().parents[2]
 _MJCF = _PACKAGE / "assets/robots/el_4090/mjcf/el_4090_lidar.xml"
 _GENERATOR = _PACKAGE / "utils/lidar/sensor_pattern/sensor_lidar/genera_lidar_scan_pattern.py"
-_WITNESS = _PACKAGE / "tasks/el_4090_lidar/t0/witness.py"
+_WITNESS = FROZEN_WITNESS_PATH
 _N_AZ = 900
 _N_EL = 96
 _N_RAYS = _N_AZ * _N_EL
@@ -56,7 +58,6 @@ def airy_directions() -> np.ndarray:
 def _t1_pose_and_mount() -> tuple[dict[str, Any], np.ndarray, np.ndarray, np.ndarray]:
     """Load compiled MJCF at the frozen T1 qpos and resolve BASE/site transform."""
     import mujoco
-    from hexapod_mjlab.tasks.el_4090_lidar.t0.witness import SETTLED_QPOS
 
     model = mujoco.MjModel.from_xml_path(str(_MJCF))
     data = mujoco.MjData(model)

@@ -197,7 +197,7 @@ def _trainer_for(runtime, adapter, *, grid, device: str, seed: int, mirror: bool
   symmetry = MirrorTrainingConfig(enabled=mirror, mean_loss_coeff=0.6)
   if mirror:
     from hexapod_mjlab.rl.confined_locomotion.symmetry import GridPermutation, JointPermutation
-    from hexapod_mjlab.tasks.el_4090_lidar.mdp.lidar import resolve_lidar_mount
+    from hexapod_mjlab.common.lidar import resolve_lidar_mount
 
     action = runtime.env.action_manager.get_term("residual_pd")
     joint = JointPermutation.from_joint_names(tuple(action._target_names))

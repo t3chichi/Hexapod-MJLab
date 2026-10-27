@@ -238,7 +238,7 @@ def test_near_pole_optical_key_uses_stable_householder_for_pitch_and_actual_moun
     # scanner does. The actual optical mount has tiny quaternion component
     # asymmetries that FP32 collapses; this near-pole witness exercises that
     # real pipeline precision without running a simulator or changing scans.
-    from hexapod_mjlab.tasks.el_4090_lidar.mdp.lidar import resolve_lidar_mount
+    from hexapod_mjlab.common.lidar import resolve_lidar_mount
 
     resolved = resolve_lidar_mount()
     assert resolved is not None

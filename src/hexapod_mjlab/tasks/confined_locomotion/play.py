@@ -92,14 +92,14 @@ from .rl.checkpoint import (
   load_weights,
 )
 from .commands import TrainingCommandScheduler
-from .mdp.terminations import get_termination_state
+from hexapod_mjlab.common.mdp.terminations import get_termination_state
 from .observation import clone_prepared
-from .perturbations import ObservationPerturbationCfg, preset_by_name
+from hexapod_mjlab.common.perturbations import ObservationPerturbationCfg, preset_by_name
+from hexapod_mjlab.common.transition import require_finite
 from .flat_env_cfg import make_training_env_cfg
 from .ground import GroundGridCfg, VALIDITY_GEOMETRY_ONLY_FLAT_TRAINING
 from .runtime import TrainingRuntime, TrainingRuntimeFrozenError
 from .visualization.play import PLAY_SNAPSHOT_SCHEMA, resolve_point_sources
-from .transition import require_finite
 
 __all__ = [
   "COMMAND_RANGES",
@@ -765,8 +765,8 @@ class PlaySession:
 
   def _current_runtime_identity(self) -> dict:
     from .flat_env_cfg import DECIMATION, SIM_TIMESTEP_S
-    from .mdp.rewards import CONTROL_DT_S, TRAINING_REWARD_WEIGHTS
-    from .mdp.terminations import (
+    from hexapod_mjlab.common.mdp.rewards import CONTROL_DT_S, TRAINING_REWARD_WEIGHTS
+    from hexapod_mjlab.common.mdp.terminations import (
       FLIP_THRESHOLD_COS,
       LOW_HEIGHT_PERSISTENCE_STEPS,
       LOW_HEIGHT_THRESHOLD_M,
@@ -863,7 +863,7 @@ class PlaySession:
     current_sources = _source_identity()
     critical_source_keys = (
       "hexapod_mjlab.tasks.confined_locomotion.flat_env_cfg",
-      "hexapod_mjlab.tasks.confined_locomotion.mdp.actions",
+      "common/mdp/actions.py",
       Path(__file__).resolve().parents[2].joinpath(
         "assets", "robots", "el_4090", "mjcf", "el_4090_lidar.xml"
       ).name,

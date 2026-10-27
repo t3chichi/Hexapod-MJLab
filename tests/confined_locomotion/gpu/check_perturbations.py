@@ -103,7 +103,7 @@ def _range_consumption_audit(frame, pipeline) -> dict:
 
 def _observation_reuse(out: Path, device: str, recipe: dict, *, args, grid) -> dict:
   from confined_locomotion.support.snapshots import cpu_tree, runtime_snapshot, tree_equal
-  from hexapod_mjlab.tasks.confined_locomotion.perturbations import ALL_THREE_PRESET
+  from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET
 
   env, runtime = _build_runtime(out, args=args, grid=grid, preset=ALL_THREE_PRESET)
   checks = {}
@@ -185,7 +185,7 @@ def _observation_reuse(out: Path, device: str, recipe: dict, *, args, grid) -> d
 
 def _schedule(out: Path, device: str, recipe: dict, *, args, grid) -> dict:
   from confined_locomotion.support.snapshots import cpu_tree
-  from hexapod_mjlab.tasks.confined_locomotion.perturbations import GAP_ONLY_PRESET
+  from hexapod_mjlab.common.perturbations import GAP_ONLY_PRESET
 
   env, runtime = _build_runtime(out, args=args, grid=grid, preset=GAP_ONLY_PRESET)
   checks = {}

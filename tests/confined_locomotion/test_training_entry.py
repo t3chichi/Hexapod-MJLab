@@ -24,10 +24,8 @@ Checks:
 * illegal configs rejected (0/over-budget iterations, wrong steps, clipped
   actions, resume, wandb logger, missing grid, tampered ConfinedPPOConfig
   values, non-CUDA device, unsupported entry kwargs, learn-arg budget);
-* old-task regression: every OTHER registered id (enumerated from the live
-  registry, ids taken from their own config modules — not guessed) keeps its
-  rl_cfg defaults (asdict-equal to its own factory), its runner class, and
-  unaffected deep-copied env loads.
+* legacy removal: the retired El-4090-Lidar ids are absent while all three
+  formal task ids remain registered.
 """
 from __future__ import annotations
 
@@ -59,22 +57,21 @@ from hexapod_mjlab.tasks.confined_locomotion import (
 )
 from support.fixtures import m12_training_grid
 from hexapod_mjlab.tasks.confined_locomotion.rl import runner as runner_module
-from hexapod_mjlab.tasks.confined_locomotion.mdp.rewards import (
+from hexapod_mjlab.common.mdp.rewards import (
   TRAINING_REWARD_WEIGHTS,
   build_training_reward_cfgs,
 )
-from hexapod_mjlab.tasks.confined_locomotion.mdp.terminations import (
+from hexapod_mjlab.common.mdp.terminations import (
   build_training_termination_cfgs,
 )
-from hexapod_mjlab.tasks.el_4090_lidar.config import (
-  EL4090_TASK_ID,
-  T0_TASK_ID,
-  el_4090_lidar_ppo_runner_cfg,
-  el_4090_t0_flat_ppo_runner_cfg,
-)
-from hexapod_mjlab.tasks.el_4090_lidar.rl import El4090LidarRunner
-
 _DUMMY_LOG_DIR = "/tmp/confined_entry_guard_probe_never_created"
+
+LEGACY_TASK_IDS = ("El-4090-Lidar", "El-4090-Lidar-T0-Flat")
+FORMAL_TASK_IDS = (
+  TASK_ID,
+  "El-4090-Confined-Locomotion-Flat_2",
+  "El-4090-Confined-Locomotion-Terrain-Memory_2",
+)
 
 
 # ═══════════════════════════ 注册与环境绑定 ═══════════════════════════
@@ -764,29 +761,13 @@ def test_formal_resume_preflight_checks_v3_kind_mode_grid_seed_and_source():
       preflight_formal_train_config(bad_seed)
 
 
-# ═══════════════════════════ 旧任务注册回归（实际枚举） ═══════════════════════════
+# ═══════════════════════════ 历史任务退出（实际枚举） ═══════════════════════════
 
 
-def test_old_task_registrations_unchanged():
-  tasks = list_tasks()
-  # enumerate from the live registry; ids come from their own config modules
-  old_ids = [task for task in tasks if task != TASK_ID]
-  assert {EL4090_TASK_ID, T0_TASK_ID}.issubset(old_ids), old_ids
-  factories = {
-    EL4090_TASK_ID: el_4090_lidar_ppo_runner_cfg,
-    T0_TASK_ID: el_4090_t0_flat_ppo_runner_cfg,
-  }
-  for task_id in factories:
-    registered = load_rl_cfg(task_id)
-    fresh = factories[task_id]()
-    assert dataclasses.asdict(registered) == dataclasses.asdict(fresh), task_id
-    assert load_runner_cls(task_id) is El4090LidarRunner, task_id
-    env_cfg = load_env_cfg(task_id)
-    original_envs = int(env_cfg.scene.num_envs)
-    env_cfg.scene.num_envs = 2  # mutation must not leak into the registry
-    assert int(load_env_cfg(task_id).scene.num_envs) == original_envs, task_id
-  # our new registration never touched the old runner binding
-  assert load_runner_cls(EL4090_TASK_ID) is not ConfinedLocomotionRunner
+def test_legacy_tasks_removed_and_formal_tasks_registered():
+  tasks = set(list_tasks())
+  assert not (set(LEGACY_TASK_IDS) & tasks), tasks
+  assert set(FORMAL_TASK_IDS) <= tasks, tasks
 
 
 # ═══════════════════════════ stdlib 驱动（无 pytest） ═══════════════════════════

@@ -22,7 +22,7 @@ from hexapod_mjlab.rl.lidar_wrapper import LidarWrapper
 MODEL = ROOT/'src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml'
 URDF = MODEL.parent.parent/'urdf/el_4090_lidar.urdf'
 LIBRARY = ROOT/'docs/research/morphology/evidence/library.json'
-MOUNT_SOURCE = ROOT/'src/hexapod_mjlab/tasks/el_4090_lidar/mdp/lidar.py'
+MOUNT_SOURCE = ROOT/'src/hexapod_mjlab/common/lidar.py'
 
 
 def load_model(path, legacy_optical_frame=False):

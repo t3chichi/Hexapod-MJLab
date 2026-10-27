@@ -135,7 +135,7 @@ class PlayOwner:
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
         from hexapod_mjlab.tasks.confined_locomotion_2.play import PlaySession, make_play_env_cfg
         from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.perturbations import preset_by_name
+        from hexapod_mjlab.common.perturbations import preset_by_name
         env_factory = self.env_factory or make_play_env_cfg
         session_class = self.session_class or PlaySession
         env = ManagerBasedRlEnv(env_factory(num_envs=self.args.num_envs, seed=self.args.seed),

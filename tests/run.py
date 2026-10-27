@@ -36,35 +36,11 @@ CPU = (
     Check("lidar_optical_alignment", "tests/joint_passage/lidar_setup/test_alignment.py"),
     Check("lidar_mesh_geometry", "tests/joint_passage/lidar_setup/test_mesh_relations.py"),
     Check("lidar_sampling", "tests/lidar_sensor/pool_sampler_check.py"),
-    Check("lidar_symmetry", "tests/lidar_sensor/symmetry_check.py"),
-    Check("terrain_parity", "tests/terrain/test_terrain_parity.py"),
     Check("robot_stance", "tests/robot/verify_stance.py"),
-    Check("policy_parity", "tests/rl_parity/test_parity_forward.py"),
-    Check("envelope_geometry", "tests/ea2/test_oracle.py"),
-    Check("envelope_supervision", "tests/ea2/test_supervision.py"),
-    Check("t0_contracts", "tests/t0/test_units.py"),
     Check("morphology_geometry", "scripts/tools/morphology/run_checks.py", output="--out"),
 )
 GPU = (
     Check("robot_warp", "tests/robot/warp_check.py"),
-    Check("locomotion_environment", "tests/env/gate_a.py", ("--num-envs", "8", "--steps", "40")),
-    Check("locomotion_lidar", "tests/env/gate_b.py", ("--num-envs", "8", "--steps", "40")),
-    Check("envelope_environment", "tests/ea2/test_environment.py"),
-    Check(
-        "t0_configuration", "scripts/tools/t0/contract_gate.py", ("--num-envs", "16"), "--run-dir"
-    ),
-    Check("t0_contacts", "scripts/tools/t0/contact_gate.py", ("--num-envs", "8"), "--run-dir"),
-    Check("t0_hold", "scripts/tools/t0/hold_gate.py", ("--num-envs", "32"), "--run-dir"),
-    Check("t0_terminal", "scripts/tools/t0/terminal_gate.py", output="--run-dir"),
-)
-LEGACY = (
-    Check("envelope_source_parity", "tests/ea2/test_legacy_parity.py"),
-    Check("envelope_model_parity", "tests/ea2/test_supervision.py", ("--legacy-source",)),
-)
-OPTIONAL = (
-    Check("envelope_source_motion", "tests/ea2/test_environment.py", ("--check", "legacy-motion")),
-    Check("hfield_contacts", "tests/terrain/hfield_check.py"),
-    Check("ppo_learning", "tests/rl_parity/test_dummy_train.py", timeout_s=1200),
 )
 CONFINED_CPU = tuple(
     Check(
@@ -102,7 +78,7 @@ CONFINED_GPU = tuple(
     for mode in modes
 )
 PROFILES = {
-    "cpu": CPU, "gpu": GPU, "legacy": LEGACY, "optional": OPTIONAL,
+    "cpu": CPU, "gpu": GPU,
     "confined_cpu": CONFINED_CPU,
     "confined_gpu": CONFINED_GPU,
 }

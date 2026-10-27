@@ -389,7 +389,7 @@ def _verify_plane_body_static(mj_model, body_id: int) -> list[str]:
     body first, world last); raises on the first violation."""
     import mujoco
 
-    from .scanner import PlaneValidationError
+    from hexapod_mjlab.common.ground_validation import PlaneValidationError
 
     checked: list[str] = []
     bid = int(body_id)
@@ -451,7 +451,7 @@ class FlatGroundProvider:
         if not math.isfinite(atol) or atol <= 0.0:
             raise ValueError(f"quat_norm_atol must be positive and finite, got {atol!r}")
         # Lazy import keeps this module free of warp/mjlab at import time.
-        from .scanner import validate_single_horizontal_plane
+        from hexapod_mjlab.common.ground_validation import validate_single_horizontal_plane
 
         self.grid_cfg = grid_cfg
         self.quat_norm_atol = atol

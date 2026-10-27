@@ -14,9 +14,11 @@ import numpy as np
 import torch
 
 from hexapod_mjlab.tasks.confined_locomotion_2.sampling import sampling_identity
-from hexapod_mjlab.tasks.confined_locomotion.rl.checkpoint import (
-    _compiled_model_identity, _manager_tensors, _physics_arrays,
-    _write_persistent_fields,
+from hexapod_mjlab.common.checkpoint import (
+    compiled_model_identity as _compiled_model_identity,
+    manager_tensors as _manager_tensors,
+    physics_arrays as _physics_arrays,
+    write_persistent_fields as _write_persistent_fields,
 )
 
 SCHEMA = "confined_locomotion_2.full/v1"
@@ -65,13 +67,18 @@ def architecture_identity(far_sampling="all_endpoints", *, terrain_memory=False)
 
 
 def identity(runner):
+    from hexapod_mjlab.common.witness import FROZEN_WITNESS_PATH
     source = {}
     root = Path(__file__).resolve().parents[2]
     for directory in (root / "confined_locomotion_2", root.parent / "rl" / "confined_locomotion_2",
-                      root / "confined_locomotion", root.parent / "rl" / "confined_locomotion",
-                      root.parent / "utils" / "lidar", root / "el_4090_lidar"):
+                      root.parent / "rl" / "confined_locomotion",
+                      root.parent / "common", root.parent / "utils" / "lidar"):
         for path in sorted(directory.rglob("*.py")):
             source[str(path.relative_to(root.parent))] = hashlib.sha256(path.read_bytes()).hexdigest()
+    if not FROZEN_WITNESS_PATH.is_file():
+        raise FileNotFoundError(f"frozen witness asset missing: {FROZEN_WITNESS_PATH}")
+    source[str(FROZEN_WITNESS_PATH.relative_to(root.parent))] = hashlib.sha256(
+        FROZEN_WITNESS_PATH.read_bytes()).hexdigest()
     return {"architecture": runner.recipe_identity["architecture"], "seed": runner.seed,
             "num_envs": runner.num_envs, "device": str(runner.device),
             "cuda_name": torch.cuda.get_device_name(runner.device) if runner.device.type == "cuda" else None,

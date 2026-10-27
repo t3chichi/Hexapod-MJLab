@@ -470,7 +470,7 @@ def main(argv=None) -> None:
         from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg
         from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg, ConfinedScanPipeline
         from hexapod_mjlab.tasks.confined_locomotion_2.runtime import TrainingRuntime
-        from hexapod_mjlab.tasks.confined_locomotion_2.perturbations import (
+        from hexapod_mjlab.common.perturbations import (
             GapPerturbationCfg, ObservationPerturbationCfg, ObservationPerturbations,
             RangePerturbationCfg,
         )

@@ -437,7 +437,7 @@ def main() -> None:
         # Recreate identical gap/range streams for each implementation. These
         # are consumption-only perturbations; the raw sensor return must stay
         # bit-identical, and consumed validity/range/FPS must follow source IDs.
-        from hexapod_mjlab.tasks.confined_locomotion_2.perturbations import (
+        from hexapod_mjlab.common.perturbations import (
             GAP_FIXED_JITTER_OFF_PRESET, ObservationPerturbations,
             RangePerturbationCfg,
         )

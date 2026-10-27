@@ -553,7 +553,7 @@ def main():
         from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg
         from hexapod_mjlab.tasks.confined_locomotion_2.runtime import TrainingRuntime
         from hexapod_mjlab.tasks.confined_locomotion_2 import scanner, sampling
-        from hexapod_mjlab.tasks.confined_locomotion.perturbations import preset_by_name
+        from hexapod_mjlab.common.perturbations import preset_by_name
 
         required = (
             "farthest_point_sampling_indices",

@@ -21,7 +21,7 @@ import math
 
 import torch
 
-from ..mdp.rewards import CONTROL_DT_S, ROOT_HEIGHT_TARGET_M
+from hexapod_mjlab.common.mdp.rewards import CONTROL_DT_S, ROOT_HEIGHT_TARGET_M
 
 
 class LearningMetrics:
@@ -99,7 +99,7 @@ class LearningMetrics:
         if self.terrain_query is None:
             root_ground = self.plane_world_z
         else:
-            from ..mdp.rewards import ground_world_z
+            from hexapod_mjlab.common.mdp.rewards import ground_world_z
             root_ground = ground_world_z(self.terrain_query.env, root_pos)
         height = root_pos[:, 2] - root_ground
         self._add("Proprio/root_height_error_abs_m", (height - ROOT_HEIGHT_TARGET_M).abs())

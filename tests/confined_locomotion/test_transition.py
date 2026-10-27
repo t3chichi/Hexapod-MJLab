@@ -9,7 +9,7 @@ import numpy as np
 
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion.mdp.rewards import (
+from hexapod_mjlab.common.mdp.rewards import (
     FootAirTimeState,
     TRAINING_REWARD_WEIGHTS,
     foot_clearance_cost,
@@ -19,12 +19,12 @@ from hexapod_mjlab.tasks.confined_locomotion.mdp.rewards import (
     motion_gate,
     read_current_foot_support,
 )
-from hexapod_mjlab.tasks.confined_locomotion.mdp.terminations import (
+from hexapod_mjlab.common.mdp.terminations import (
     TRAINING_TERMINATION_TIME_OUT_FLAGS,
     TrainingTerminationState,
     advance_fall_state,
 )
-from hexapod_mjlab.tasks.confined_locomotion.transition import require_finite
+from hexapod_mjlab.common.transition import require_finite
 
 
 def test_finite_guard_returns_good_input_and_rejects_nonfinite_values():

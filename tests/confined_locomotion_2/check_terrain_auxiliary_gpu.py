@@ -35,7 +35,7 @@ def main():
         from hexapod_mjlab.tasks.confined_locomotion_2.collector import TrainingCollector
         from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
         from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightGridCfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.perturbations import ALL_THREE_PRESET
+        from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET
         from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import JOINT_NAMES
         from hexapod_mjlab.rl.confined_locomotion_2.network import TerrainMemoryNetwork
         from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import replay_sequence

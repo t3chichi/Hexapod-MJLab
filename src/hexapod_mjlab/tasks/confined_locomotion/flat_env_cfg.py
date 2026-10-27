@@ -29,15 +29,11 @@ separate from the training and play factories below.
 
 from __future__ import annotations
 
-import functools
 from dataclasses import dataclass
-from pathlib import Path
 
 import mujoco
 import numpy as np
 
-from mjlab.actuator.xml_actuator import XmlActuatorCfg
-from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs import mdp as envs_mdp
 from mjlab.managers.event_manager import EventTermCfg
@@ -45,6 +41,7 @@ from mjlab.managers.observation_manager import (
   ObservationGroupCfg,
   ObservationTermCfg,
 )
+from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.scene import SceneCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
@@ -56,169 +53,43 @@ from mjlab.terrains.terrain_generator import (
   TerrainOutput,
 )
 
-from hexapod_mjlab.tasks.el_4090_lidar.t0 import witness as t1_witness
-
-from . import mdp
-from .mdp.actions import ResidualPDActionCfg
-
-TASK_ID = "El-4090-Confined-Locomotion-Flat"
-
-#: Radar-variant MJCF (read-only asset; same file the old tasks compile).
-_ROBOT_XML = (
-  Path(__file__).parents[2] / "assets" / "robots" / "el_4090" / "mjcf" / "el_4090_lidar.xml"
+from hexapod_mjlab.common.reset import lifted_witness_state, settled_reset_joint_pos
+# Re-exported for existing task/checkpoint callers; common.robot owns the values.
+from hexapod_mjlab.common.robot import (
+  ACTION_CLIP,
+  ACTION_SCALE,
+  DECIMATION,
+  FOOT_BODIES,
+  FOOT_CLEARANCE_M,
+  JOINT_NAMES,
+  NOMINAL_JOINT_LIMIT_RAD,
+  PD_DAMPING,
+  PD_STIFFNESS,
+  ROBOT_XML as _ROBOT_XML,
+  SIM_TIMESTEP_S,
+  SOFT_JOINT_POS_LIMIT_FACTOR,
+  TORQUE_LIMIT_NM,
+  get_confined_robot_cfg,
+  get_robot_spec,
+  verify_nominal_joint_limits,
 )
 
-#: Single source of the joint order: the frozen T1 witness JOINT_ORDER.
-JOINT_NAMES = tuple(t1_witness.JOINT_ORDER)
-_JOINT_NAME_SET = frozenset(JOINT_NAMES)
+from hexapod_mjlab.common.mdp.actions import ResidualPDActionCfg
+from hexapod_mjlab.common.mdp.events import (
+  clear_action_runtime,
+  reset_joints_witness,
+  reset_root_witness,
+)
+from hexapod_mjlab.common.mdp.observations import clipped_prev_action
+
+TASK_ID = "El-4090-Confined-Locomotion-Flat"
 
 #: Fixed ground friction (sliding, torsional, rolling) — declared sim value.
 FLAT_GROUND_FRICTION = (1.0, 0.005, 0.0001)
 
-#: Confirmed action/PD constants (平地学习与基准测量.md §2).
-ACTION_CLIP = 100.0
-ACTION_SCALE = 0.25
-PD_STIFFNESS = float(t1_witness.PD_KP)  # 130
-PD_DAMPING = float(t1_witness.PD_KD)  # 2
-TORQUE_LIMIT_NM = float(t1_witness.TORQUE_CLIP_NM)  # 80
-SIM_TIMESTEP_S = 0.005
-DECIMATION = 4  # 50 Hz control, 200 Hz physics
-FOOT_CLEARANCE_M = float(t1_witness.FOOT_CLEARANCE_M)  # 0.002 (plan min 1 mm)
-
-#: Nominal hinge limits stay ENABLED (contrast: T0-A disables them in memory).
-NOMINAL_JOINT_LIMIT_RAD = 3.0
-SOFT_JOINT_POS_LIMIT_FACTOR = 0.9  # soft penalty range ±2.7 rad
-
 #: Generic registered defaults, separate from the explicit training recipe.
 GENERIC_NUM_ENVS = 64
 GENERIC_EPISODE_LENGTH_S = 20.0
-
-#: Feet (physical foot bodies of the asset; witness order).
-FOOT_BODIES = tuple(t1_witness.FOOT_BODIES)
-
-
-def verify_nominal_joint_limits(
-  xml_path: Path = _ROBOT_XML,
-  atol: float = 1e-9,
-) -> dict:
-  """Compile the asset and verify the 18 nominal hinge limits are enabled ±3.
-
-  Read-only revalidation of the CURRENT limited asset (old T0-A keeps its own
-  in-memory-unlocked spec; this module never unlocks limits). Returns the raw
-  per-joint table for independent checks; raises on any deviation.
-  """
-  model = mujoco.MjModel.from_xml_path(str(xml_path))
-  rows = {}
-  for name in JOINT_NAMES:
-    jid = int(mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name))
-    if jid < 0:
-      raise RuntimeError(f"joint {name!r} missing from {_ROBOT_XML}")
-    limited = int(model.jnt_limited[jid])
-    lo, hi = (float(model.jnt_range[jid][0]), float(model.jnt_range[jid][1]))
-    rows[name] = (limited, lo, hi)
-    if limited != 1:
-      raise RuntimeError(f"joint {name!r}: limits disabled (expected ±3 enabled)")
-    if (
-      abs(lo + NOMINAL_JOINT_LIMIT_RAD) > atol
-      or abs(hi - NOMINAL_JOINT_LIMIT_RAD) > atol
-    ):
-      raise RuntimeError(f"joint {name!r}: range ({lo}, {hi}) != ±{NOMINAL_JOINT_LIMIT_RAD}")
-  if len(rows) != 18:
-    raise RuntimeError(f"expected 18 joints, found {len(rows)}")
-  return rows
-
-
-def get_robot_spec() -> mujoco.MjSpec:
-  """Load the radar MJCF unchanged; verify the limits on the COMPILED model.
-
-  The asset compiles with autolimit enabled, so raw spec joints carry
-  ``mjLIMITED_AUTO`` (= 2) with an explicit ±3 range; ``limited == 1`` only
-  exists AFTER compilation (independently verified on the compiled
-  MjModel). Checking the raw enum therefore rejected a correctly limited
-  asset (real construction failed at RF_HAA with limited=2). The spec is
-  returned UNMODIFIED (±3 limits retained, no in-memory unlocking); instead
-  a throwaway model compiled from THIS spec instance is checked against the
-  same enabled-±3 contract as ``verify_nominal_joint_limits``.
-  """
-  spec = mujoco.MjSpec.from_file(str(_ROBOT_XML))
-  seen = 0
-  for joint in spec.joints:
-    if joint.name in _JOINT_NAME_SET:
-      seen += 1
-      lo, hi = float(joint.range[0]), float(joint.range[1])
-      if (
-        abs(lo + NOMINAL_JOINT_LIMIT_RAD) > 1e-9
-        or abs(hi - NOMINAL_JOINT_LIMIT_RAD) > 1e-9
-      ):
-        raise RuntimeError(
-          f"joint {joint.name!r} spec range ({lo}, {hi}) != "
-          f"±{NOMINAL_JOINT_LIMIT_RAD}"
-        )
-  if seen != 18:
-    raise RuntimeError(f"expected 18 hinge joints in spec, found {seen}")
-  model = spec.compile()
-  for name in JOINT_NAMES:
-    jid = int(mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, name))
-    if jid < 0:
-      raise RuntimeError(f"joint {name!r} missing from {_ROBOT_XML}")
-    limited = int(model.jnt_limited[jid])
-    lo, hi = (float(model.jnt_range[jid][0]), float(model.jnt_range[jid][1]))
-    if limited != int(mujoco.mjtLimited.mjLIMITED_TRUE) or (
-      abs(lo + NOMINAL_JOINT_LIMIT_RAD) > 1e-9
-      or abs(hi - NOMINAL_JOINT_LIMIT_RAD) > 1e-9
-    ):
-      raise RuntimeError(
-        f"joint {name!r} compiled limits not enabled ±3 "
-        f"(limited={limited}, range=({lo}, {hi}))"
-      )
-  return spec
-
-
-def get_confined_robot_cfg() -> EntityCfg:
-  """Robot entity with enabled nominal limits, soft factor 0.9, T1 q_ref.
-
-  ``init_state.joint_pos`` IS the PD default (q_ref = T1 JOINT_TARGETS) and
-  is deliberately DISTINCT from the reset state (settled witness qpos,
-  written by the reset events). The nominal root height here is only the
-  EntityCfg default; the real reset pose comes from the lifted witness.
-  """
-  w = t1_witness.frozen_witness()
-  return EntityCfg(
-    spec_fn=get_robot_spec,
-    articulation=EntityArticulationInfoCfg(
-      actuators=(XmlActuatorCfg(target_names_expr=JOINT_NAMES),),
-      soft_joint_pos_limit_factor=SOFT_JOINT_POS_LIMIT_FACTOR,
-    ),
-    init_state=EntityCfg.InitialStateCfg(
-      pos=(0.0, 0.0, w.settled_root_height_m),
-      joint_pos={name: float(v) for name, v in zip(w.joint_names, w.joint_targets)},
-    ),
-  )
-
-
-@functools.lru_cache(maxsize=1)
-def lifted_witness_state() -> tuple[tuple, tuple, float, float]:
-  """Lifted reset state from the frozen T1 witness, computed once.
-
-  Returns ``(root_pos_xyz, root_quat_wxyz, min_foot_z_before, min_foot_z_after)``.
-  The lift is computed from compiled collision meshes via the read-only T1
-  witness geometry utility (never from foot-origin kinematics), raising if
-  the achieved clearance is not 2 mm within 1e-6 m.
-  """
-  lifted, z_before, z_after = t1_witness.compute_lifted_root(
-    _ROBOT_XML, t1_witness.SETTLED_QPOS, clearance_m=FOOT_CLEARANCE_M
-  )
-  if abs(z_after - FOOT_CLEARANCE_M) > 1e-6:
-    raise RuntimeError(
-      f"witness lift failed: min foot z after lift = {z_after} "
-      f"(expected {FOOT_CLEARANCE_M})"
-    )
-  return tuple(lifted[0:3]), tuple(lifted[3:7]), float(z_before), float(z_after)
-
-
-def settled_reset_joint_pos() -> tuple:
-  """Reset joint angles = the settled T1 witness qpos (NOT q_ref)."""
-  return tuple(t1_witness.frozen_witness().joint_pos)
 
 
 # ── Single infinite physical plane ──────────────────────────────────────────
@@ -292,14 +163,14 @@ def make_flat_env_cfg(
     "projected_gravity": ObservationTermCfg(func=envs_mdp.projected_gravity),
     "joint_pos_rel": ObservationTermCfg(
       func=envs_mdp.joint_pos_rel,
-      params={"asset_cfg": mdp.SceneEntityCfg("robot", joint_names=(".*",))},
+      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
     ),
     "joint_vel_rel": ObservationTermCfg(
       func=envs_mdp.joint_vel_rel,
-      params={"asset_cfg": mdp.SceneEntityCfg("robot", joint_names=(".*",))},
+      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
     ),
     "clipped_prev_action": ObservationTermCfg(
-      func=mdp.clipped_prev_action,
+      func=clipped_prev_action,
       params={"action_name": "residual_pd"},
     ),
   }
@@ -326,10 +197,10 @@ def make_flat_env_cfg(
   # Deterministic reset: complete settled T1 witness (lifted 2 mm), zero
   # velocities; plus clearing the action runtime buffers of the reset envs.
   events = {
-    "reset_root_witness": EventTermCfg(func=mdp.reset_root_witness, mode="reset"),
-    "reset_joints_witness": EventTermCfg(func=mdp.reset_joints_witness, mode="reset"),
+    "reset_root_witness": EventTermCfg(func=reset_root_witness, mode="reset"),
+    "reset_joints_witness": EventTermCfg(func=reset_joints_witness, mode="reset"),
     "clear_action_runtime": EventTermCfg(
-      func=mdp.clear_action_runtime,
+      func=clear_action_runtime,
       mode="reset",
       params={"action_name": "residual_pd"},
     ),
@@ -414,8 +285,8 @@ def make_training_env_cfg(
   if seed is not None:
     cfg.seed = int(seed)
   cfg.observations["policy"].nan_policy = "error"
-  from .mdp.rewards import build_training_reward_cfgs
-  from .mdp.terminations import build_training_termination_cfgs
+  from hexapod_mjlab.common.mdp.rewards import build_training_reward_cfgs
+  from hexapod_mjlab.common.mdp.terminations import build_training_termination_cfgs
 
   cfg.rewards = build_training_reward_cfgs()
   cfg.terminations = build_training_termination_cfgs()

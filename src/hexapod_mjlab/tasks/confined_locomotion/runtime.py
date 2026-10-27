@@ -106,7 +106,7 @@ from hexapod_mjlab.rl.confined_locomotion.integration import (
 from .commands import TrainingCommandScheduler
 from .flat_env_cfg import DECIMATION, SIM_TIMESTEP_S
 from .ground import VALIDITY_GEOMETRY_ONLY_FLAT_TRAINING, FlatGroundProvider, GroundGridCfg
-from .mdp.rewards import (
+from hexapod_mjlab.common.mdp.rewards import (
     CONTROL_DT_S,
     TRAINING_REWARD_WEIGHTS,
     FootAirTimeState,
@@ -114,11 +114,18 @@ from .mdp.rewards import (
     plane_world_z,
     read_current_foot_support,
 )
-from .mdp.terminations import get_termination_state
+from hexapod_mjlab.common.mdp.terminations import get_termination_state
 from .observation import ControlInputCache, build_control_observation, clone_prepared
-from .perturbations import ObservationPerturbationCfg, ObservationPerturbations
+from hexapod_mjlab.common.perturbations import (
+    ObservationPerturbationCfg,
+    ObservationPerturbations,
+)
+from hexapod_mjlab.common.transition import (
+    PERSISTENT_PHYSICS_FIELDS,
+    TransitionContext,
+    require_finite,
+)
 from .scanner import ConfinedLidarCfg, ConfinedScanPipeline
-from .transition import PERSISTENT_PHYSICS_FIELDS, TransitionContext, require_finite
 
 __all__ = [
     "ENGINEERING_FALL_HEIGHT_M",

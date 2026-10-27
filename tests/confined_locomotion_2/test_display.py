@@ -36,7 +36,7 @@ def test_cli_owner_loop_paused_rerender_single_step_and_reset():
     spec = importlib.util.spec_from_file_location("v2_play_cli", ROOT / "scripts/experiments/confined_locomotion_2/play_flat.py")
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
-    from hexapod_mjlab.tasks.confined_locomotion.visualization.play import PendingControls
+    from hexapod_mjlab.common.visualization import PendingControls
 
     class Session:
         def __init__(self):
@@ -85,7 +85,7 @@ def test_cli_acquisition_switch_preserves_total_budget_and_drops_old_intents():
     spec = importlib.util.spec_from_file_location("v2_play_switch_cli", ROOT / "scripts/experiments/confined_locomotion_2/play_flat.py")
     cli = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(cli)
-    from hexapod_mjlab.tasks.confined_locomotion.visualization.play import PendingControls
+    from hexapod_mjlab.common.visualization import PendingControls
 
     class Session:
         def __init__(self):

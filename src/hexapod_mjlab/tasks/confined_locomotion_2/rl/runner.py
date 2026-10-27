@@ -24,7 +24,7 @@ from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
 from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork, TerrainMemoryNetwork
 from hexapod_mjlab.rl.confined_locomotion_2.auxiliary import HeightReconstructionAuxiliary
 from hexapod_mjlab.rl.confined_locomotion_2.ppo import TemporalPPOConfig, TemporalPPOTrainer
-from hexapod_mjlab.tasks.confined_locomotion.perturbations import ObservationPerturbationCfg
+from hexapod_mjlab.common.perturbations import ObservationPerturbationCfg
 
 from ..collector import TrainingCollector
 from ..flat_env_cfg import TASK_ID
@@ -127,7 +127,7 @@ def resolve_recipe(cfg):
     else:
         raise ValueError("lidar_config must be a mapping or ConfinedLidarCfg")
     if formal:
-        from hexapod_mjlab.tasks.confined_locomotion.perturbations import ALL_THREE_PRESET
+        from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET
         if not symmetry.enabled or symmetry.mean_loss_coeff != 0.6 or perturbations != ALL_THREE_PRESET:
             raise ValueError("formal _2 recipe retains all-three perturbations and mirror coefficient 0.6")
         count = cfg.get("formal_num_envs")
@@ -212,7 +212,7 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         self.recipe_identity["scan_identity"] = self.runtime.scan_identity
         try:
             from .metrics import LearningMetrics
-            from ..mdp.rewards import plane_world_z
+            from hexapod_mjlab.common.mdp.rewards import plane_world_z
             self.learning_metrics = LearningMetrics(
                 self.num_envs, self.device,
                 **({"terrain_query": self.runtime.terrain_query} if terrain else

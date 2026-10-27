@@ -24,7 +24,7 @@ from .channels import build_channel_catalog
 from .config.terrain_geometry import TERRAIN_GROUP
 from .sampling import far_candidate_mask, farthest_point_sampling_masked
 from .scanner import _quat_apply_xyzw, _quat_mul_xyzw
-from hexapod_mjlab.tasks.el_4090_lidar.mdp.lidar import resolve_lidar_mount
+from hexapod_mjlab.common.lidar import resolve_lidar_mount
 
 
 @dataclass(frozen=True)

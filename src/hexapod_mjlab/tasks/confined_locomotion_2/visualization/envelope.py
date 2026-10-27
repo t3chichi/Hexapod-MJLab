@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from hexapod_mjlab.tasks.confined_locomotion.visualization.geometry import (
+from hexapod_mjlab.common.visualization import (
     H_REF_M, HEX_VERTEX_ORDER, hex_vertices,
 )
 

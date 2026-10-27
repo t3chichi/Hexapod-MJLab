@@ -505,7 +505,7 @@ def _gate_fixtures(out: Path, *, args, grid) -> dict:
   from confined_locomotion.support.snapshots import (
     cpu_tree, persistent_physics_snapshot, tree_equal, runtime_snapshot, global_prng_snapshot,
   )
-  from hexapod_mjlab.tasks.confined_locomotion.mdp.terminations import get_termination_state
+  from hexapod_mjlab.common.mdp.terminations import get_termination_state
 
   session = _session(out, args=args, grid=grid, suffix="gate_fixtures")
   runtime = session.runtime

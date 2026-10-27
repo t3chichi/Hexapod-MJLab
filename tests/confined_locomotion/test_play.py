@@ -98,7 +98,7 @@ from hexapod_mjlab.tasks.confined_locomotion.rl.runner import (
 )
 from hexapod_mjlab.tasks.confined_locomotion.rl.runner import ConfinedLocomotionRunner
 from hexapod_mjlab.tasks.confined_locomotion.runtime import _FORMAL_FALL_TERM_NAMES
-from hexapod_mjlab.tasks.confined_locomotion.mdp.rewards import (
+from hexapod_mjlab.common.mdp.rewards import (
     TRAINING_REWARD_WEIGHTS,
 )
 
