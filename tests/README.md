@@ -50,7 +50,7 @@ python tests/run.py --profile confined_gpu --list
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **149** 项 CPU 检查，覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化和指标。
+该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **152** 项 CPU 检查（其中一个入口执行7个地形边界子用例），覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化和指标。
 
 真实 GPU、checkpoint、Play 与打包检查位于同一目录：
 
@@ -67,7 +67,7 @@ python -B tests/confined_locomotion_2/run_checks.py
 
 - 当前固定输入：`tests/data/lidar_alignment_baseline.json`、`tests/robot/joint_table.json`、`tests/robot/joint_table.md`。
 - 平台迁移时期的五份历史数据已移至 `docs/development/history/evidence/platform_migration/`，保留原始内容和运行身份，不作为当前测试输入。
-- 历史 `logs/` 和测试 evidence 只用于查证当时结果；当前测试从源码、固定资产和新输出目录生成自己的结果。
+- `logs/` 只作为运行时输出根；历史日志已在 2026-10-27 清理中删除，历史结论以 `docs/` 中的记录为准。当前测试从源码、固定资产和新输出目录生成自己的结果。
 
 ## 失败处理
 

@@ -131,11 +131,13 @@ def main():
         permutation = JointPermutation.from_joint_names(JOINT_NAMES)
         mount = runtime.pipeline.mount_q[0].clone()
         live_outputs = []
+        transitions = []
         def observe(transition, output, envelope):
             check(torch.equal(envelope.step_ids, transition.step_ids), "observer/envelope control identity mismatch")
             live_outputs.append((transition.episode_ids.clone(), transition.step_ids.clone(),
                                  output.frame_feature.clone(), output.temporal_feature.clone(),
                                  output.hidden.clone()))
+            transitions.append(transition)
         collector = TrainingCollector(runtime, network, provider, symmetry_enabled=True,
                                       joint_permutation=permutation, mount_quat_xyzw=mount, transition_observer=observe)
         if not args.flat:
@@ -157,7 +159,7 @@ def main():
         max_height = 0.
         scan_counts = []
         buffers = []
-        for batch_index in range(2 if args.flat else 3):
+        for batch_index in range(2 if args.flat else 4):
             if batch_index == 1:
                 # Explicit lifecycle fixture: actual manager timeout next step,
                 # no fabricated done/reward; the other row remains untouched.
@@ -183,6 +185,20 @@ def main():
                 finally:
                     root_reset.func = original_reset
                 report["termination_fixture"] = {"row":1,"roll_rad":float(np.pi),"root_z_m":1.5}
+            elif batch_index == 3:
+                # Root remains inside, but foot ground queries cross the edge.
+                root_reset = env.event_manager.get_term_cfg("reset_root_witness")
+                original_reset = root_reset.func
+                def edge_reset(target_env, env_ids, **kwargs):
+                    original_reset(target_env, env_ids, **kwargs)
+                    pose = torch.cat((torch.tensor([4.95,0.,.8],device=device), quat(0,0,0,device)))[None]
+                    target_env.scene["robot"].write_root_link_pose_to_sim(pose,env_ids=env_ids)
+                root_reset.func = edge_reset
+                try:
+                    runtime.reset(torch.tensor([0],device=device))
+                finally:
+                    root_reset.func = original_reset
+                unselected_step = int(runtime.step_in_episode[1])
             initial_hidden = collector.hidden.clone()
             initial_mirror = collector.mirror_hidden.clone()
             changed = runtime.episode_ids != collector.episode_ids
@@ -275,6 +291,23 @@ def main():
                 check(int(buffer.steps[1].observation.step_ids[1])==0, "terminated row did not enter fresh episode")
                 check(int(buffer.steps[1].observation.step_ids[0])==24, "termination reset changed unselected row")
                 check(float(buffer.steps[0].next_value[1])==0., "true terminal retained bootstrap value")
+            elif batch_index == 3:
+                first, following = buffer.steps[:2]
+                transition = transitions[offset]
+                check(bool(first.truncated[0]) and not bool(first.terminated[0]), "field boundary did not truncate")
+                check(transition.reset_env_ids.tolist() == [0], "field boundary reset another row")
+                check(bool(transition.diagnostics["termination_reasons"]["terrain_boundary"][0]), "boundary reason missing")
+                check(not bool(transition.diagnostics["termination_reasons"]["timeout"][0]), "boundary misreported as timeout")
+                check(int(following.observation.step_ids[0]) == 0 and int(following.observation.step_ids[1]) == unselected_step+1, "boundary reset identity mismatch")
+                final = transition.final_inputs
+                check(torch.equal(final.observation.episode_ids, first.observation.episode_ids), "bootstrap used reset episode")
+                with torch.no_grad():
+                    frame = network.encode_points(final.near_points,final.near_valid,final.far_points,final.far_valid,
+                                                  near_angle_keys=final.near_angle_keys,far_angle_keys=final.far_angle_keys)
+                    value = network.forward_from_features(final.observation,frame,live_outputs[offset][4]).value.squeeze(-1)
+                check(torch.allclose(first.next_value[0],value[0],atol=2e-6,rtol=0), "boundary lost pre-reset bootstrap")
+                check(not runtime._faulted and bool(torch.isfinite(first.reward).all()), "boundary faulted or produced invalid reward")
+                report["terrain_boundary"] = {"truncated_only_row":0,"bootstrap_pre_reset":True,"other_row_preserved":True}
             scan_counts.append((runtime.sensor_scan_counts-initial_scan).tolist())
             if retained is not None:
                 check(torch.equal(retained[0].heights,retained[1]),"retained rollout label mutated after another rollout/reset")

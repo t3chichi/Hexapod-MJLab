@@ -684,7 +684,8 @@ class PlayViewer:
         far_count = int(np.asarray(inp["far"]["valid"], dtype=bool).sum())
         height = snapshot["pose"]["root_height_m"]
         height_text = f"{height:.3f} m" if height is not None else "超出地形"
-        state = ("故障停止" if status["faulted"] else "跌倒暂停" if status["stopped"]
+        stop_text = "场地边界暂停" if status.get("stop_kind") == "play_terrain_boundary_stop" else "跌倒暂停"
+        state = ("故障停止" if status["faulted"] else stop_text if status["stopped"]
                  else "已暂停" if status["paused"] else "运行中")
         task_id = self.identity_header.get("task", "")
         task_name = "地形记忆" if "Terrain-Memory" in task_id else "平地基线"

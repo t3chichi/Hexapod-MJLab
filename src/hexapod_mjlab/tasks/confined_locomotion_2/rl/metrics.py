@@ -99,11 +99,17 @@ class LearningMetrics:
         if self.terrain_query is None:
             root_ground = self.plane_world_z
         else:
-            from hexapod_mjlab.common.mdp.rewards import ground_world_z
-            root_ground = ground_world_z(self.terrain_query.env, root_pos)
-        height = root_pos[:, 2] - root_ground
-        self._add("Proprio/root_height_error_abs_m", (height - ROOT_HEIGHT_TARGET_M).abs())
-        self._add("Proprio/root_height_m", height)
+            from hexapod_mjlab.common.mdp.rewards import terrain_clearances
+            terrain_height, terrain_valid = terrain_clearances(self.terrain_query.env, rec)
+        if self.terrain_query is None:
+            height = root_pos[:, 2] - root_ground
+            self._add("Proprio/root_height_error_abs_m", (height - ROOT_HEIGHT_TARGET_M).abs())
+            self._add("Proprio/root_height_m", height)
+        else:
+            height = terrain_height[:, 0][terrain_valid[:, 0]]
+            self._add("Proprio/root_height_valid_count", terrain_valid[:, 0])
+            self._add("Proprio/root_height_error_abs_m", (height - ROOT_HEIGHT_TARGET_M).abs())
+            self._add("Proprio/root_height_m", height)
 
         raw_action = torch.as_tensor(rec["raw_action"], device=self.device, dtype=torch.float32).detach()
         clipped = torch.as_tensor(rec["clipped_action"], device=self.device, dtype=torch.float32).detach()
@@ -146,8 +152,10 @@ class LearningMetrics:
             swing = ~support
             foot_ground = self.plane_world_z
             if self.terrain_query is not None:
-                foot_ground = ground_world_z(self.terrain_query.env, foot_pos)
-            foot_height = foot_pos[:, :, 2] - foot_ground
+                foot_height = terrain_height[:, 1:]
+                swing = swing & terrain_valid[:, 1:]
+            else:
+                foot_height = foot_pos[:, :, 2] - foot_ground
             tangential_speed = torch.linalg.vector_norm(foot_vel[:, :, :2], dim=2)
             self._add("Feet/swing_link_origin_clearance_m", foot_height * swing)
             self._add("Feet/swing_foot_count", swing.to(torch.float32))
@@ -208,7 +216,7 @@ class LearningMetrics:
         diagnostics = getattr(transition, "diagnostics", {}) or {}
         for key, value in diagnostics.get("termination_reasons", {}).items():
             flag = self._batch(value, (b,), f"termination_reasons.{key}", dtype=torch.bool)
-            kind = "truncation" if key == "timeout" else "termination"
+            kind = "truncation" if key in {"timeout", "terrain_boundary"} else "termination"
             self._add(f"Episode/{kind}_reason_{key}_count", flag.to(torch.float32))
         landing = diagnostics.get("foot_landing")
         landing_air = diagnostics.get("foot_landing_air_time_s")
@@ -237,6 +245,9 @@ class LearningMetrics:
         action_dim = int(getattr(self, "_action_dim", 0))
         out: dict[str, float] = {}
         for key, val in sums.items():
+            if key == "Proprio/root_height_valid_count":
+                out[key] = float(val)
+                continue
             if key.startswith("Episode/completed_"):
                 continue
             if key == "Action/element_count":
@@ -249,6 +260,10 @@ class LearningMetrics:
             if key.startswith("Envelope/") and sums.get("Envelope/valid_count", 0.0) == 0:
                 continue
             denom = env_samples
+            if key in {"Proprio/root_height_m", "Proprio/root_height_error_abs_m"}:
+                denom = sums.get("Proprio/root_height_valid_count", env_samples)
+                if not denom:
+                    continue
             if key.startswith("Action/"):
                 denom = denom * action_dim
             elif key == "Envelope/absolute_error":

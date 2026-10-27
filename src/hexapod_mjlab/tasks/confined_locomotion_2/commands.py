@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+import copy
 
 __all__ = [
     "COMMAND_PERIOD_CONTROL_STEPS",
@@ -309,10 +310,14 @@ class TrainingCommandScheduler:
             "manual": self._manual.clone(),
             "sampled_once": self._sampled_once.clone(),
             "resample_records_count": len(self.resample_records),
+            "resample_records": copy.deepcopy(self.resample_records),
             "total_resamples": self.total_resamples,
         }
 
     def load_state_dict(self, state: dict) -> None:
+        records = state["resample_records"]
+        if len(records) != state["resample_records_count"] or len(records) > MAX_RESAMPLE_RECORDS:
+            raise CommandContractError("resample record count mismatch")
         for key in ("num_envs", "seed", "period", "allow_manual"):
             if state.get(key) != getattr(self, key):
                 raise CommandContractError(
@@ -333,6 +338,7 @@ class TrainingCommandScheduler:
         self._manual = state["manual"].detach().to(dtype=torch.bool).clone()
         self._sampled_once = state["sampled_once"].detach().to(dtype=torch.bool).clone()
         self.total_resamples = int(state["total_resamples"])
+        self.resample_records = copy.deepcopy(records)
 
     # ── helpers ─────────────────────────────────────────────────────────────
 

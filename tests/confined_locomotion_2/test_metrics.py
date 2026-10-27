@@ -6,6 +6,30 @@ import torch
 from hexapod_mjlab.tasks.confined_locomotion_2.rl.metrics import LearningMetrics
 
 
+def test_terrain_boundary_metrics_exclude_undefined_heights_and_distinguish_timeout():
+    from hexapod_mjlab.common.transition import TransitionContext
+    transition = make_transition([.12, .12], [False, False], [True, False])
+    valid = torch.tensor([[False] * 7, [True] * 7])
+    heights = torch.tensor([[0.] * 7, [.46] + [.1] * 6])
+    transition.context_record["terrain_clearances"] = (heights, valid)
+    transition.diagnostics = {"termination_reasons": {
+        "terrain_boundary": torch.tensor([True, False]), "timeout": torch.tensor([False, False])}}
+    context = object.__new__(TransitionContext)
+    context.terrain_query = object()
+    env = SimpleNamespace(_confined_transition_context=context)
+    metrics = LearningMetrics(2, "cpu", terrain_query=SimpleNamespace(env=env))
+    metrics.begin_iteration()
+    envelope = torch.tensor([[.59, .69, .59, .89, -.89, 0.]] * 2)
+    metrics.observe(transition, SimpleNamespace(envelope=envelope),
+                    SimpleNamespace(values=envelope, valid=torch.ones(2, dtype=torch.bool)))
+    result = metrics.finish_iteration()
+    assert abs(result["Proprio/root_height_m"] - .46) < 1e-6
+    assert result["Proprio/root_height_valid_count"] == 1
+    assert abs(result["Feet/swing_link_origin_clearance_mean_m"] - .1) < 1e-6
+    assert result["Episode/truncation_reason_terrain_boundary_count"] == 1
+    assert result["Episode/truncation_reason_timeout_count"] == 0
+
+
 def make_transition(reward, terminated, truncated, *, near=(2, 1), far=(1, 2)):
     b = len(reward)
     return SimpleNamespace(

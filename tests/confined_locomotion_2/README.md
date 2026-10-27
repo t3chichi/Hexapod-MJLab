@@ -10,7 +10,7 @@
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含149项CPU检查。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
+该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含152项CPU检查，其中一个入口执行7个地形边界子用例。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
 
 ## 真实 GPU 工程检查
 
@@ -38,7 +38,7 @@ python -B tests/confined_locomotion_2/check_terrain_geometry_gpu.py \
   --gpu 0 --output "logs/verification/confined_locomotion_2/terrain_geometry_$(date +%Y%m%d_%H%M%S)"
 ```
 
-序列门核对真实采集、标签配对、重放和重置，不含网络头、损失或优化器。加 `--flat` 可核对 Flat 默认采集/重放路径：
+序列门核对真实采集、标签配对、重放和重置，不含网络头、损失或优化器。Terrain额外构造真实场地边界截断，检查只重置越界行、双GRU历史清零及重置前Critic bootstrap；加 `--flat` 可核对 Flat 默认采集/重放路径：
 
 ```bash
 python -B tests/confined_locomotion_2/check_terrain_sequence_gpu.py \

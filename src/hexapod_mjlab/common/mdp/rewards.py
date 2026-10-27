@@ -166,6 +166,26 @@ def ground_world_z(env, positions_w: torch.Tensor):
     return heights.reshape(positions_w.shape[:-1])
 
 
+def terrain_clearances(env, record):
+    """MDP-only root/foot clearances and coverage at one sealed boundary.
+
+    Missing terrain ends that row's episode; it is never an invented ground
+    height. Callers must exclude invalid entries from height-based terms.
+    The record owns this cache, so diagnostics after reset read the same truth.
+    Flat keeps its original plane path and returns None.
+    """
+    query = get_transition_context(env).terrain_query
+    if query is None:
+        return None
+    if "terrain_clearances" not in record:
+        positions = torch.cat((record["root_pos_w"][:, None], record["foot_pos_w"]), dim=1)
+        rows = torch.arange(env.num_envs, device=positions.device)
+        heights, valid = query.world_heights(rows, positions[..., :2])
+        clearance = torch.where(valid, positions[..., 2] - heights, torch.zeros_like(heights))
+        record["terrain_clearances"] = (clearance, valid)
+    return record["terrain_clearances"]
+
+
 def root_height_above_plane(env, root_pos_w: torch.Tensor) -> torch.Tensor:
     """World-VERTICAL root clearance using the task's real ground reference.
 
@@ -406,8 +426,13 @@ def pen_foot_stumble(env, *, weight: float) -> torch.Tensor:
 
 def pen_root_height(env, *, weight: float) -> torch.Tensor:
     record = get_transition_context(env).ensure_ready()
-    height = root_height_above_plane(env, record["root_pos_w"])
-    raw = (height - ROOT_HEIGHT_TARGET_M).square()
+    terrain = terrain_clearances(env, record)
+    if terrain is None:
+        height = root_height_above_plane(env, record["root_pos_w"])
+        raw = (height - ROOT_HEIGHT_TARGET_M).square()
+    else:
+        height, valid = terrain
+        raw = torch.where(valid[:, 0], (height[:, 0] - ROOT_HEIGHT_TARGET_M).square(), 0.)
     return _finish_term(env, "pen_root_height", raw, weight)
 
 
@@ -430,11 +455,19 @@ def reward_foot_air(env, *, weight: float) -> torch.Tensor:
 
 def pen_foot_clearance(env, *, weight: float) -> torch.Tensor:
     record = get_transition_context(env).ensure_ready()
-    plane_z = ground_world_z(env, record["foot_pos_w"])
-    h_foot = record["foot_pos_w"][:, :, 2] - plane_z
+    terrain = terrain_clearances(env, record)
+    if terrain is None:
+        plane_z = ground_world_z(env, record["foot_pos_w"])
+        h_foot = record["foot_pos_w"][:, :, 2] - plane_z
+        support = record["support"]
+    else:
+        height, valid = terrain
+        h_foot = height[:, 1:]
+        # Exclude only undefined clearance terms on the final boundary step.
+        support = record["support"] | ~valid[:, 1:]
     raw = torch.where(
         motion_gate(record["command"]),
-        foot_clearance_cost(h_foot, record["support"]),
+        foot_clearance_cost(h_foot, support),
         torch.zeros_like(record["command"][:, 0]),
     )
     return _finish_term(env, "pen_foot_clearance", raw, weight)

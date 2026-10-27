@@ -34,7 +34,7 @@ from __future__ import annotations
 import torch
 
 from hexapod_mjlab.common.transition import get_transition_context
-from .rewards import root_height_above_plane
+from .rewards import root_height_above_plane, terrain_clearances
 
 __all__ = [
     "TRAINING_TERMINATION_TIME_OUT_FLAGS",
@@ -128,10 +128,15 @@ class TrainingTerminationState:
         if self.control_id == int(control_id):
             return
         record = get_transition_context(env).ensure_ready()
-        height = root_height_above_plane(env, record["root_pos_w"])
+        terrain = terrain_clearances(env, record)
+        if terrain is None:
+            low_height = root_height_above_plane(env, record["root_pos_w"]) < LOW_HEIGHT_THRESHOLD_M
+        else:
+            height, valid = terrain
+            low_height = valid[:, 0] & (height[:, 0] < LOW_HEIGHT_THRESHOLD_M)
         up_dot = -record["gravity_b"][:, 2]
         advanced = advance_fall_state(
-            height < LOW_HEIGHT_THRESHOLD_M,
+            low_height,
             up_dot < TILT_THRESHOLD_COS,
             up_dot < FLIP_THRESHOLD_COS,
             self.low_height_count,
@@ -229,3 +234,15 @@ def episode_timeout(env) -> torch.Tensor:
     state.ensure_updated(env, context.control_id)
     reached = env.episode_length_buf >= EPISODE_TIMEOUT_CONTROL_STEPS
     return reached & ~state.any_fall
+
+
+def terrain_boundary(env) -> torch.Tensor:
+    """Artificial finite-field truncation; real falls retain terminal priority."""
+    context = get_transition_context(env)
+    record = context.ensure_ready()
+    terrain = terrain_clearances(env, record)
+    if terrain is None:
+        raise RuntimeError("terrain_boundary requires a real Heightfield")
+    state = get_termination_state(env)
+    state.ensure_updated(env, context.control_id)
+    return ~terrain[1].all(dim=1) & ~state.any_fall

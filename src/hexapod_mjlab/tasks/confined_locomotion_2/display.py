@@ -129,6 +129,7 @@ def retain_display(session, prepared, output, captured, *, preview, reason, grou
             "input": data["input"], "provenance": data["provenance"], "pool": data["pool"],
             "prediction": {"envelope": envelope[row], "action_mean": action[row], "preview": preview},
             "status": {"paused": True, "stopped": bool(runtime._stopped),
+                       "stop_kind": (getattr(runtime, "stop_record", None) or {}).get("kind"),
                        "faulted": bool(runtime._faulted), "command": data["command"],
                        "reason": str(reason)},
             "checkpoint": {"path": str(session.checkpoint_path.resolve())},

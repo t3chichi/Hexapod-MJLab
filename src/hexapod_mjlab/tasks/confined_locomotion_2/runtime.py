@@ -38,7 +38,8 @@ one initial first scan, and then owns the whole control-step lifecycle:
    takeover ``sample_reset`` (no random command is ever drawn and then
    overwritten), the play env cfg removes the ``episode_timeout``
    truncation term (the 20 s/1000-step values stay as RECORDED metadata
-   and the runtime refuses any truncation flag), and a step fall decided
+   and the runtime refuses unexpected truncation flags). Terrain's finite-field
+   boundary remains a truncation and pauses play until manual reset. A step fall decided
    ONLY by the confirmed formal gates (10-step persisted low height /
    10-step persisted tilt / immediate flip — never the engineering
    instantaneous gate) saves the stop scene and PAUSES: ``step`` refuses
@@ -112,6 +113,7 @@ from hexapod_mjlab.common.mdp.rewards import (
     get_foot_air_state,
     root_height_above_plane,
     read_current_foot_support,
+    terrain_clearances,
 )
 from hexapod_mjlab.common.mdp.terminations import get_termination_state
 from .observation import ControlInputCache, build_control_observation, clone_prepared
@@ -344,24 +346,27 @@ class TrainingRuntime:
         # Engineering/fixture/formal training keep the confirmed four-term set. Any other term
         # set is a config fault, never a silent behavior change.
         term_names = set(cfg.terminations)
+        boundary_terms = {"terrain_boundary"} if height_grid is not None else set()
+        if boundary_terms and not bool(getattr(cfg.terminations.get("terrain_boundary"), "time_out", False)):
+            raise RuntimeError("Terrain requires terrain_boundary as an artificial truncation")
         if mode == "play":
-            if term_names != _FORMAL_FALL_TERM_NAMES:
+            if term_names != _FORMAL_FALL_TERM_NAMES | boundary_terms:
                 raise RuntimeError(
-                    "play mode requires exactly the three formal fall terms "
-                    f"{sorted(_FORMAL_FALL_TERM_NAMES)} (the episode_timeout "
+                    "play mode requires formal falls and its task boundary terms "
+                    f"{sorted(_FORMAL_FALL_TERM_NAMES | boundary_terms)} (the episode_timeout "
                     "truncation is removed by the dedicated play env-cfg "
                     f"factory); got {sorted(term_names)}"
                 )
             for name, term in cfg.terminations.items():
-                if bool(getattr(term, "time_out", False)):
+                if bool(getattr(term, "time_out", False)) and name != "terrain_boundary":
                     raise RuntimeError(
                         f"play mode forbids time_out terms ({name!r}); the 20 s "
                         "truncation must never fire in play"
                     )
-        elif term_names != _FORMAL_FALL_TERM_NAMES | {"episode_timeout"}:
+        elif term_names != _FORMAL_FALL_TERM_NAMES | {"episode_timeout"} | boundary_terms:
             raise RuntimeError(
-                "engineering/fixture/training modes require the confirmed four-term "
-                f"termination set {sorted(_FORMAL_FALL_TERM_NAMES | {'episode_timeout'})}; "
+                "engineering/fixture/training modes require formal fall/timeout "
+                f"and task boundary terms {sorted(_FORMAL_FALL_TERM_NAMES | {'episode_timeout'} | boundary_terms)}; "
                 f"got {sorted(term_names)}"
             )
         if int(env.common_step_counter) != 0 or bool(env.episode_length_buf.count_nonzero()):
@@ -1223,13 +1228,26 @@ class TrainingRuntime:
                 "fall_flipped": (term_state.flip_done & terminated).clone(),
                 "timeout": truncated.clone(),
             }}
+            boundary = None
+            if self.terrain_query is not None:
+                terms = self.env.termination_manager._term_dones
+                boundary = terms["terrain_boundary"].clone()
+                diagnostics["termination_reasons"]["terrain_boundary"] = boundary
+                diagnostics["termination_reasons"]["timeout"] = terms.get(
+                    "episode_timeout", torch.zeros_like(truncated)).clone()
             air_state = get_foot_air_state(self.env)
             if air_state.landing is not None and air_state.consumed_air_s is not None:
                 diagnostics["foot_landing"] = air_state.landing.clone()
                 diagnostics["foot_landing_air_time_s"] = air_state.consumed_air_s.clone()
-            height = root_height_above_plane(self.env, record["root_pos_w"])
+            terrain = terrain_clearances(self.env, record)
+            if terrain is None:
+                height = root_height_above_plane(self.env, record["root_pos_w"])
+                low_height = height < ENGINEERING_FALL_HEIGHT_M
+            else:
+                height, valid = terrain
+                low_height = valid[:, 0] & (height[:, 0] < ENGINEERING_FALL_HEIGHT_M)
             up_dot = -record["gravity_b"][:, 2]
-            engineering_fall = (height < ENGINEERING_FALL_HEIGHT_M) | (
+            engineering_fall = low_height | (
                 up_dot < ENGINEERING_FALL_UP_DOT
             )
 
@@ -1262,19 +1280,27 @@ class TrainingRuntime:
                         engineering_fall=engineering_fall,
                     )
             elif self.mode == "play":
-                # P7 play lifecycle: ONLY the confirmed formal fall gates
+                # Flat play pauses only on the confirmed formal fall gates.
+                # Terrain additionally pauses on its artificial field boundary.
                 # (the three termination terms — 10-step persisted low height
                 # / 10-step persisted tilt / immediate flip) pause the run;
                 # the engineering instantaneous gate does NOT apply, and the
                 # 20 s truncation must never fire (the play env cfg removed
                 # the timeout term). Collisions never pause/reset anything.
-                if play_truncation:
+                if play_truncation and (boundary is None or bool((truncated & ~boundary).any())):
                     raise RuntimeError(
                         "play received a truncation flag: the 20 s "
                         "episode_timeout term must be absent from the play "
                         "env config (a leak here is a config fault)"
                 )
-                if play_fall:
+                if boundary is not None and bool(boundary.any()) and not play_fall:
+                    engineering_stopped = True
+                    self._save_stop(
+                        record=record, final_inputs=final_inputs, final_labels=final_labels,
+                        engineering_fall=None, kind="play_terrain_boundary_stop",
+                        extra={"reason": "finite terrain boundary; paused until explicit reset"},
+                    )
+                elif play_fall:
                     fall_state = get_termination_state(self.env)
                     engineering_stopped = True  # = fall-pause in play mode
                     self._save_stop(

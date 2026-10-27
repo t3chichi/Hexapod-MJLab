@@ -23,6 +23,9 @@ def make_collection_env_cfg(*, terrain, num_envs: int, seed: int):
     cfg.observations["policy"].nan_policy = "error"
     cfg.rewards = build_training_reward_cfgs()
     cfg.terminations = build_training_termination_cfgs()
+    from mjlab.managers.termination_manager import TerminationTermCfg
+    from hexapod_mjlab.common.mdp.terminations import terrain_boundary
+    cfg.terminations["terrain_boundary"] = TerminationTermCfg(func=terrain_boundary, time_out=True)
     return cfg
 
 
