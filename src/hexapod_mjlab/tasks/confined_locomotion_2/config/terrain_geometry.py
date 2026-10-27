@@ -14,7 +14,7 @@ from mjlab.terrains.terrain_generator import (
     SubTerrainCfg, TerrainGeneratorCfg, TerrainGeometry, TerrainOutput,
 )
 
-from ..flat_env_cfg import FLAT_GROUND_FRICTION, make_flat_env_cfg
+from hexapod_mjlab.common.flat_env import FLAT_GROUND_FRICTION, make_flat_env_cfg
 
 TERRAIN_GROUP = 3
 SURFACE_NAME = "terrain_memory_surface"

@@ -10,8 +10,8 @@ from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.termination_manager import TerminationTermCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
 
+from hexapod_mjlab.common.flat_env import make_flat_env_cfg
 from hexapod_mjlab.common.robot import JOINT_NAMES, ROBOT_XML, get_robot_spec
-from ..flat_env_cfg import make_flat_env_cfg
 from .actuator import LegacyLSTMActionCfg
 from .legacy import (LegacyCommands, LegacyResetDRState, LegacyRewardState,
                      LegacyStageController, REWARD_WEIGHTS)
