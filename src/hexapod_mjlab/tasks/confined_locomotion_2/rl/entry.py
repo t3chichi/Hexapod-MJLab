@@ -1,6 +1,6 @@
 """Preflight explicit recipes before the official mjlab environment launch."""
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, replace
 from pathlib import Path
 import re
 import uuid
@@ -10,15 +10,13 @@ from mjlab.scripts.train import TrainConfig, launch_training
 from ..config.flat_baseline import confined_locomotion_formal_rl_cfg
 from ..flat_env_cfg import TASK_ID
 from .checkpoint import read_checkpoint
-from .runner import resolve_recipe
-
-
-@dataclass(frozen=True)
-class LaunchResult:
-    config: TrainConfig
-    run_dir: Path
-    checkpoint_path: Path
-    close_completed: bool
+from .launch import (
+    LaunchResult,
+    build_lidar_config,
+    find_single_run_and_final_checkpoint,
+    preflight_formal_train_config,
+    require_single_gpu,
+)
 
 
 def build_formal_train_config(*, seed, num_envs, max_iterations,
@@ -26,16 +24,14 @@ def build_formal_train_config(*, seed, num_envs, max_iterations,
                               engineering_validation=False, resume_checkpoint=None,
                               raycast_mode="full", sparse_selection_path=None,
                               far_sampling="all_endpoints", save_interval=50, execution_mode="low_memory"):
-    if len(gpu_ids) != 1 or isinstance(gpu_ids[0], bool) or not isinstance(gpu_ids[0], int) or gpu_ids[0] < 0:
-        raise ValueError("exactly one explicit nonnegative GPU id is required")
+    require_single_gpu(gpu_ids)
     agent = confined_locomotion_formal_rl_cfg(
         seed=seed, num_envs=num_envs, max_iterations=max_iterations)
     agent.save_interval = save_interval
     agent.execution_mode = execution_mode
     # Let the task-local scanner own the mode/path contract, then keep the
     # serializable config as a plain mapping across mjlab's launch boundary.
-    from ..scanner import ConfinedLidarCfg
-    lidar_cfg = ConfinedLidarCfg(
+    lidar_cfg = build_lidar_config(
         raycast_mode=raycast_mode,
         sparse_selection_path=sparse_selection_path,
         far_sampling=far_sampling,
@@ -68,27 +64,12 @@ def build_formal_train_config(*, seed, num_envs, max_iterations,
     return cfg
 
 
-def preflight_formal_train_config(cfg):
-    recipe = resolve_recipe(asdict(cfg.agent))
-    if not recipe["formal"] or cfg.env.scene.num_envs != cfg.agent.formal_num_envs:
-        raise ValueError("formal environment/agent recipe mismatch")
-    if cfg.env.seed != cfg.agent.seed:
-        raise ValueError("environment/agent seed mismatch")
-    if cfg.video or cfg.wandb_run_path is not None or cfg.wandb_checkpoint_name is not None:
-        raise ValueError("_2 entry uses local single-GPU training without video wrappers")
-    if len(cfg.gpu_ids) != 1:
-        raise ValueError("_2 supports one GPU")
-    return recipe
-
-
 def launch_formal_training(**kwargs):
     cfg = build_formal_train_config(**kwargs)
     launch_training(TASK_ID, args=cfg)
-    experiment = Path(cfg.log_root) / cfg.agent.experiment_name
-    matches = [path for path in experiment.iterdir() if path.is_dir() and path.name.endswith(cfg.agent.run_name)]
-    if len(matches) != 1:
-        raise RuntimeError("official launch did not create exactly one matching run directory")
-    candidates = list(matches[0].glob("final_checkpoint_full_*.pt"))
-    if len(candidates) != 1:
-        raise RuntimeError("official launch returned without one final full checkpoint")
-    return LaunchResult(cfg, matches[0], candidates[0], True)
+    run_dir, checkpoint = find_single_run_and_final_checkpoint(
+        cfg.log_root, cfg.agent.experiment_name, cfg.agent.run_name,
+        run_error="official launch did not create exactly one matching run directory",
+        checkpoint_error="official launch returned without one final full checkpoint",
+    )
+    return LaunchResult(cfg, run_dir, checkpoint, True)

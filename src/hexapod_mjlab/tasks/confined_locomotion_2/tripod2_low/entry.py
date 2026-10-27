@@ -6,8 +6,12 @@ import uuid
 
 from mjlab.scripts.train import TrainConfig, launch_training
 
-from ..rl.entry import LaunchResult
-from ..scanner import ConfinedLidarCfg
+from ..rl.launch import (
+    LaunchResult,
+    build_lidar_config,
+    find_single_run_and_final_checkpoint,
+    require_gpu_id,
+)
 from .checkpoint import read_checkpoint
 from .env import TASK_ID, make_env_cfg
 from .runner import TripodRlCfg, validate_recipe
@@ -18,11 +22,10 @@ def build_train_config(*, seed, num_envs, max_iterations, gpu=0,
                        execution_mode="low_memory", engineering_validation=False,
                        resume_checkpoint=None, raycast_mode="full",
                        sparse_selection_path=None, far_sampling="all_endpoints"):
-    if isinstance(gpu, bool) or not isinstance(gpu, int) or gpu < 0:
-        raise ValueError("gpu must be a nonnegative integer")
+    require_gpu_id(gpu)
     if not isinstance(engineering_validation, bool):
         raise TypeError("engineering_validation must be bool")
-    lidar = ConfinedLidarCfg(raycast_mode=raycast_mode, sparse_selection_path=sparse_selection_path,
+    lidar = build_lidar_config(raycast_mode=raycast_mode, sparse_selection_path=sparse_selection_path,
                            far_sampling=far_sampling)
     agent = TripodRlCfg(seed=seed, formal_num_envs=num_envs, max_iterations=max_iterations,
                        save_interval=save_interval, execution_mode=execution_mode,
@@ -49,11 +52,9 @@ def build_train_config(*, seed, num_envs, max_iterations, gpu=0,
 def launch(**kwargs):
     cfg = build_train_config(**kwargs)
     launch_training(TASK_ID, args=cfg)
-    runs = [p for p in (Path(cfg.log_root) / cfg.agent.experiment_name).iterdir()
-            if p.is_dir() and p.name.endswith(cfg.agent.run_name)]
-    if len(runs) != 1:
-        raise RuntimeError("expected one official tripod run directory")
-    checkpoints = list(runs[0].glob("final_checkpoint_full_*.pt"))
-    if len(checkpoints) != 1:
-        raise RuntimeError("training returned without one full final checkpoint")
-    return LaunchResult(cfg, runs[0], checkpoints[0], True)
+    run_dir, checkpoint = find_single_run_and_final_checkpoint(
+        cfg.log_root, cfg.agent.experiment_name, cfg.agent.run_name,
+        run_error="expected one official tripod run directory",
+        checkpoint_error="training returned without one full final checkpoint",
+    )
+    return LaunchResult(cfg, run_dir, checkpoint, True)
