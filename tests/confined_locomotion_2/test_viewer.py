@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import (
+from hexapod_mjlab.tasks.confined_locomotion_2.visualization.debug import (
     PLAY_SNAPSHOT_SCHEMA,
-    PlayViewer,
+    DebugViewer,
     export_snapshot_manifest,
     resolve_point_pick,
 )
@@ -243,7 +243,7 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
             "near x8 / far x6": "/selections/near_x8_far_x6.npz",
             "near x2 / far x3": "/selections/near_x2_far_x3.npz",
         }
-        viewer = PlayViewer(1, model, pipeline, {"checkpoint": "sample"},
+        viewer = DebugViewer(1, model, pipeline, {"checkpoint": "sample"},
                             acquisition_options=selections)
         assert viewer._acquisition_mode.value == "稀疏"
         assert viewer._acquisition_near.value == "5"
@@ -348,7 +348,7 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
         full_pipeline = _Pipeline()
         full_pipeline.scan_identity = {"mode": "full"}
         full_pipeline.cfg.sparse_selection_path = "/selections/near_x8_far_x6.npz"
-        full_viewer = PlayViewer(1, model, full_pipeline, {}, acquisition_options=selections)
+        full_viewer = DebugViewer(1, model, full_pipeline, {}, acquisition_options=selections)
         assert full_viewer._acquisition_near.value == "4"
         assert full_viewer._acquisition_far.value == "4"
         full_viewer._acquisition_apply.click()
@@ -359,7 +359,7 @@ def test_viewer_callbacks_are_intents_and_render_has_only_task_layers():
             "selection": {"near_multiplier": 2, "far_multiplier": 3},
         }}
         uncommon_pipeline.cfg.sparse_selection_path = "/selections/near_x2_far_x3.npz"
-        uncommon_viewer = PlayViewer(1, model, uncommon_pipeline, {}, acquisition_options=selections)
+        uncommon_viewer = DebugViewer(1, model, uncommon_pipeline, {}, acquisition_options=selections)
         assert uncommon_viewer._acquisition_near.value == "2"
         assert uncommon_viewer._acquisition_far.value == "3"
         uncommon_viewer._acquisition_apply.click()
@@ -385,7 +385,7 @@ def test_occupied_port_does_not_silently_bind_another_port():
     sys.modules["viser"] = SimpleNamespace(ViserServer=OccupiedServer)
     try:
         try:
-            PlayViewer(1, None, _Pipeline(), {}, port=8094)
+            DebugViewer(1, None, _Pipeline(), {}, port=8094)
         except OSError as error:
             assert "occupied" in str(error)
         else:

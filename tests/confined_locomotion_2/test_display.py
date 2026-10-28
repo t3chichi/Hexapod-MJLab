@@ -46,7 +46,9 @@ def test_cli_owner_loop_paused_rerender_single_step_and_reset():
             self.previews += 1
         def build_display_snapshot(self, row, *, paused):
             return {"row": row, "paused": paused, "controls": self.forward_count, "hidden": self.hidden}
-        def step_once(self):
+        def capture_last_step_display(self):
+            pass
+        def step_once(self, **kwargs):
             self.forward_count += 1
             self.hidden += 1
             return SimpleNamespace(transition=SimpleNamespace(engineering_stopped=False))
@@ -95,7 +97,9 @@ def test_cli_acquisition_switch_preserves_total_budget_and_drops_old_intents():
             pass
         def build_display_snapshot(self, row, *, paused):
             return {"controls": self.forward_count, "paused": paused}
-        def step_once(self):
+        def capture_last_step_display(self):
+            pass
+        def step_once(self, **kwargs):
             self.forward_count += 1
             return SimpleNamespace(transition=SimpleNamespace(engineering_stopped=False))
         def set_command(self, *_):
@@ -171,3 +175,92 @@ def test_cli_discovery_rejects_incorrect_multiplier_metadata(tmp_path):
         assert "counts disagree" in str(error)
     else:
         raise AssertionError("incorrect declared candidate count accepted")
+
+
+def test_running_debug_only_materializes_snapshots_on_explicit_events():
+    from hexapod_mjlab.common.visualization import PendingControls
+    from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play_cli import run_play
+    class Session:
+        forward_count = captures = previews = retained = 0
+        runtime = SimpleNamespace(_faulted=False, _stopped=False)
+        def refresh_idle_snapshot(self, **_):
+            self.previews += 1
+            self.retained = self.forward_count
+        def capture_last_step_display(self):
+            self.captures += 1
+            self.retained = self.forward_count
+        def build_display_snapshot(self, row, *, paused):
+            return {"controls": self.retained, "paused": paused}
+        def step_once(self, *, capture_display, retain_debug):
+            assert not capture_display and retain_debug
+            self.forward_count += 1
+            return SimpleNamespace(transition=SimpleNamespace(engineering_stopped=False))
+    class Viewer:
+        def __init__(self):
+            self.pending = self
+            self.events = iter((None, None, "rerender", "refresh", "pause_toggle", "step", "exit"))
+            self.frames = []
+        def take(self):
+            pending = PendingControls()
+            event = next(self.events)
+            if event == "refresh":
+                return {**pending.take(), "refresh": True}
+            if event is not None:
+                getattr(pending, "submit_" + event)()
+            return pending.take()
+        def render(self, snapshot):
+            self.frames.append(snapshot)
+    session, viewer = Session(), Viewer()
+    reason, _ = run_play(session, viewer, steps=0, start_running=True)
+    assert reason == "viewer_exit" and session.forward_count == 5
+    assert session.previews == 1 and session.captures == 3
+    assert [frame["controls"] for frame in viewer.frames] == [0, 0, 3, 4, 5]
+
+
+def test_native_buffers_are_independent_and_rebind_checks_actual_model():
+    from contextlib import nullcontext
+    from copy import copy
+    from unittest.mock import Mock, patch
+    import mujoco
+    from mjlab.viewer import ViewerConfig
+    from hexapod_mjlab.tasks.confined_locomotion_2.visualization.native import NativePlayViewer
+    model = mujoco.MjModel.from_xml_string('<mujoco><worldbody><body><freejoint/>'
+        '<geom type="sphere" size=".1" mass="1"/></body></worldbody></mujoco>')
+    def runtime(model):
+        sim = SimpleNamespace(mj_model=model, model=None, expanded_fields=set(), data=SimpleNamespace(
+            qpos=torch.tensor(model.qpos0).reshape(1, -1), qvel=torch.zeros(1, model.nv)))
+        return SimpleNamespace(num_envs=1, env=SimpleNamespace(sim=sim, cfg=SimpleNamespace(viewer=ViewerConfig())),
+                               control_time_s=lambda: .02)
+    source = runtime(model)
+    handle = SimpleNamespace(lock=nullcontext, is_running=lambda: True, cam=SimpleNamespace(),
+                             set_texts=Mock(), sync=Mock(), close=Mock())
+    with patch('mujoco.viewer.launch_passive', return_value=handle):
+        viewer = NativePlayViewer(source)
+    assert viewer.model is not model
+    viewer.data.qpos[0] = 100
+    assert float(source.env.sim.data.qpos[0, 0]) == 0
+    viewer.sync(paused=False)
+    np.testing.assert_array_equal(viewer.data.qpos, source.env.sim.data.qpos[0])
+    replacement = runtime(copy(model))
+    replacement.env.sim.data.qpos[0, 0] = .25
+    viewer.detach_session()
+    viewer.rebind_session(replacement)
+    viewer.sync(paused=True)
+    assert viewer.handle is handle and viewer.data.qpos[0] == .25
+    changed = copy(model)
+    changed.body_mass[1] *= 2  # Same dimensions and names, different model.
+    try:
+        viewer.rebind_session(runtime(changed))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('incompatible display model accepted')
+    assert viewer.runtime is replacement
+    replacement._faulted = True
+    replacement.env.sim.data.qpos[:] = float('nan')
+    viewer.set_status(paused=True)  # Status must not read a faulted pose.
+    assert 'FAULTED' in handle.set_texts.call_args.args[0][-1]
+    assert viewer.data.qpos[0] == .25
+    viewer.close()
+    viewer.close()
+    assert handle.close.call_count == 1

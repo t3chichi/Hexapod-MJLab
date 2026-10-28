@@ -139,7 +139,7 @@ def _drive_display_intents(viewer, session, snapshot, hold_seconds, checks, requ
                 _assert(int(pending["env_row"]) == 0, "single-environment viewer selected a nonzero row")
             if pending["pick"] is not None:
                 kind, index = pending["pick"]
-                from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import resolve_point_pick
+                from hexapod_mjlab.tasks.confined_locomotion_2.visualization.debug import resolve_point_pick
                 viewer.set_pick_result(resolve_point_pick(snapshot, kind, int(index)))
                 seen["pick"] += 1
             viewer.render(snapshot)
@@ -231,8 +231,8 @@ def main():
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
         from mjlab.utils.torch import configure_torch_backends
         from hexapod_mjlab.tasks.confined_locomotion_2.play import PlaySession, make_play_env_cfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import (
-            PlayViewer,
+        from hexapod_mjlab.tasks.confined_locomotion_2.visualization.debug import (
+            DebugViewer,
             export_snapshot_manifest,
             resolve_point_pick,
         )
@@ -265,13 +265,13 @@ def main():
         _assert(torch.equal(session.hidden, hidden_before_preview), "initial preview committed temporal hidden state")
         _assert(session.forward_count == 0, "initial preview counted as a control transition")
         _assert(runtime.control_steps_taken == 0, "initial preview advanced the control clock")
-        checks.update(_snapshot_checks(snapshot, sys.modules[PlayViewer.__module__]))
+        checks.update(_snapshot_checks(snapshot, sys.modules[DebugViewer.__module__]))
         checks["initial_snapshot_preview_hidden_unchanged"] = True
 
         # Compare cached snapshot rebuilds, scene rendering, view/layer changes,
         # and point resolution against a full runtime/physics/command RNG copy.
         initial_identity = snapshot["identity"]
-        viewer = PlayViewer(
+        viewer = DebugViewer(
             num_envs=1,
             mj_model=session.env.sim.mj_model,
             pipeline=runtime.pipeline,

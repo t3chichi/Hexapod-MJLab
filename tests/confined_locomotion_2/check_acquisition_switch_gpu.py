@@ -105,7 +105,7 @@ def _step_segment(run_play, owner, count, viewer):
     session = owner.session
     reason, _snapshot = run_play(
         session, viewer, steps=count, start_running=True,
-        switch_acquisition=owner.switch_acquisition,
+        switch_acquisition=owner.switch_acquisition, native=owner.native,
     )
     _check(reason == "step_budget", f"{count}-control segment ended as {reason}")
     _check(session.runtime.control_steps_taken == count,
@@ -211,6 +211,9 @@ def main():
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--port", type=int, default=8196)
     parser.add_argument("--settle-seconds", type=float, default=0.15)
+    parser.add_argument("--native", action="store_true", help="also check persistent native window across rebuilds")
+    parser.add_argument("--far-sampling", choices=("all_endpoints", "hit_only_10m"), default="all_endpoints")
+    parser.add_argument("--allow-scan-override", action="store_true")
     args = parser.parse_args()
     output = Path(args.output).expanduser().resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -235,7 +238,7 @@ def main():
         play_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(play_module)
         PlayOwner, run_play = play_module.PlayOwner, play_module.run_play
-        from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import PlayViewer
+        from hexapod_mjlab.tasks.confined_locomotion_2.visualization.debug import DebugViewer
 
         # PlayOwner(args) is the same production owner used by the play entry
         # point. The test selects a dedicated localhost port and fresh output.
@@ -244,10 +247,16 @@ def main():
             gpu=args.gpu, num_envs=1, command=(0.0, 0.0, 0.0), preset="clean",
             no_viewer=False, start_running=True, port=args.port, steps=0,
             raycast_mode="full", sparse_selection_path=None,
-            allow_scan_override=False,
+            allow_scan_override=args.allow_scan_override, far_sampling=args.far_sampling,
         )
         owner = PlayOwner(owner_args)
-        viewer = PlayViewer(
+        if args.native:
+            from hexapod_mjlab.tasks.confined_locomotion_2.visualization.native import NativePlayViewer
+            owner.native = NativePlayViewer(owner.session.runtime)
+            native_handle = owner.native.handle
+            native_model = owner.native.model
+            native_data = owner.native.data
+        viewer = DebugViewer(
             num_envs=owner.session.num_envs,
             mj_model=owner.env.sim.mj_model,
             pipeline=owner.session.runtime.pipeline,
@@ -301,6 +310,10 @@ def main():
             mem_before = _memory(device)
             replacement = owner.switch_acquisition(request)
             _check(replacement is owner.session, "owner did not return its replacement session")
+            if args.native:
+                _check(owner.native.handle is native_handle and owner.native.model is native_model
+                       and owner.native.data is native_data and owner.native.is_running(),
+                       "acquisition rebuild replaced or closed native display resources")
             del replacement
             # Release all references owned by this test before checking GC.
             del old, old_env, old_runtime
@@ -353,6 +366,7 @@ def main():
                "repeated sparse-x4 sessions differ by more than 8 MiB live allocated memory")
         checks["switch_order"] = ["full"] + [("full" if mode == "full" else selection.stem) for mode, selection, _, _ in sequence]
         checks["old_session_weakrefs_dead"] = all(reference() is None for reference in old_session_refs)
+        checks["persistent_native_window"] = args.native
         _check(checks["old_session_weakrefs_dead"], "a replaced PlaySession remains alive")
         checks["passed"] = True
     except BaseException as error:

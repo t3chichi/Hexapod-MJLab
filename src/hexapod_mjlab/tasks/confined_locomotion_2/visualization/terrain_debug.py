@@ -1,8 +1,8 @@
-"""Terrain-specific diagnostic layers over the shared read-only PlayViewer."""
+"""Terrain-specific diagnostic layers over the shared read-only DebugViewer."""
 
 import numpy as np
 
-from .play import PlayViewer, quat_wxyz_to_matrix
+from .debug import DebugViewer, quat_wxyz_to_matrix
 from .grid import GridRangePreview
 from ..components.terrain_query import CompiledHeightfield, HeightGridCfg
 
@@ -35,7 +35,7 @@ def heightfield_mesh(model):
     return vertices, faces.astype(np.int32)
 
 
-class TerrainMemoryViewer(PlayViewer):
+class TerrainMemoryDebugViewer(DebugViewer):
     def _setup_gui(self):
         super()._setup_gui()
         gui = self.server.gui

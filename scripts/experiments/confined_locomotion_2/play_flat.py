@@ -1,4 +1,4 @@
-"""Flat Baseline play; starts paused, or runs finite headless inference."""
+"""Flat Baseline native Play; starts paused, or runs finite headless inference."""
 from pathlib import Path
 import sys
 

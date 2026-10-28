@@ -17,7 +17,7 @@ from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import (
     HeightGridCfg,
 )
 from hexapod_mjlab.tasks.confined_locomotion_2.visualization.grid import configured_grid
-from hexapod_mjlab.tasks.confined_locomotion_2.visualization.terrain_memory import (
+from hexapod_mjlab.tasks.confined_locomotion_2.visualization.terrain_debug import (
     height_points_world,
     heightfield_mesh,
 )

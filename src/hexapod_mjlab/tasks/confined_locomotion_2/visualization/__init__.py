@@ -1,9 +1,9 @@
 """Play visualization for confined_locomotion_2 (display only)."""
 
-from .play import (
+from .debug import (
     PLAY_SNAPSHOT_SCHEMA,
     PendingControls,
-    PlayViewer,
+    DebugViewer,
     export_snapshot_manifest,
     resolve_point_pick,
 )
@@ -11,7 +11,7 @@ from .play import (
 __all__ = [
     "PLAY_SNAPSHOT_SCHEMA",
     "PendingControls",
-    "PlayViewer",
+    "DebugViewer",
     "export_snapshot_manifest",
     "resolve_point_pick",
 ]

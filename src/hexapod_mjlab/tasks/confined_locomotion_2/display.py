@@ -1,8 +1,9 @@
 """Read-only display retention for the recurrent play owner loop.
 
-Inputs and source metadata are captured BEFORE stepping, because the single
-scan metadata slot may be replaced at the next physical boundary. The pose
-is captured AFTER stepping and explicitly labelled with its own identity.
+Source references are retained BEFORE stepping, because a scan-record slot
+may be replaced at the next physical boundary. Debug events materialize these
+inputs on CPU and pair them with the post-step pose. Inline capture remains
+available for finite diagnostics; native playback does not call either path.
 """
 
 from __future__ import annotations
@@ -52,7 +53,15 @@ def point_sources(prepared, capture_entries, row):
     return result
 
 
-def capture_inputs(session, prepared):
+def retain_input_context(session):
+    """Keep bounded source references without GPU-to-CPU debug extraction."""
+    runtime = session.runtime
+    return {"control_step": runtime.control_steps_taken,
+            "sources": {row: tuple(entries) for row, entries in runtime._play_source_scans.items()},
+            "records": tuple(runtime.pipeline.scan_records)}
+
+
+def capture_inputs(session, prepared, *, context=None):
     """Retain CPU-only input products at the pre-action identity."""
     runtime = session.runtime
     captured = []
@@ -67,13 +76,13 @@ def capture_inputs(session, prepared):
                 "valid": array(getattr(prepared, f"{prefix}_valid")[row]),
                 "scan_id": scan_id, "time_s": scan_time,
             }
-        entries = runtime._play_source_scans[row]
+        entries = (runtime._play_source_scans if context is None else context["sources"])[row]
         provenance = point_sources(prepared, entries, row)
         cache_key = (episode, scan_id)
         cached = session._display_pool_cache.get(row)
         if cached is None or cached[0] != cache_key:
             pool = None
-            for record in reversed(runtime.pipeline.scan_records):
+            for record in reversed(runtime.pipeline.scan_records if context is None else context["records"]):
                 frame = record["frame"]
                 if int(record["env_row"]) == row and int(frame.scan_id) == scan_id:
                     pool = {
@@ -86,7 +95,7 @@ def capture_inputs(session, prepared):
         else:
             pool = cached[1]
         captured.append({
-            "identity": {"input_control_step": int(runtime.control_steps_taken),
+            "identity": {"input_control_step": int(runtime.control_steps_taken if context is None else context["control_step"]),
                          "input_episode_id": episode, "input_step_in_episode": int(obs.step_ids[row]),
                          "input_time_s": float(obs.time_s[row])},
             "input": inputs, "provenance": provenance, "pool": pool,

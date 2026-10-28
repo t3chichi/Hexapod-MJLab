@@ -31,6 +31,17 @@ python -B scripts/experiments/confined_locomotion_2/sparse_rays/select_channels.
 
 Flat/Terrain都要求显式 seed、num-envs 和 iterations；Terrain Memory 还要求 `--height-loss-weight`。Tripod的默认预算和运行语义按其独立说明执行，不套用Flat/Terrain性能测量。正式运行的任务身份、resume 参数和只读 Play 入口以[快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)为准。性能实验的临时脚本、工作树副本或个人日志目录不是正式入口，也不作为克隆仓库的依赖。
 
+## Play 与网页 Debug
+
+正式 Play 使用原生 MuJoCo passive 窗口：
+
+- Flat：`play_flat.py`
+- Terrain Memory：`play_terrain_memory.py`
+
+窗口启动时暂停；Space运行/暂停，Right单步，Enter重置，Q退出。W/S调前进，A/D调侧移，J/L调转向，X清零指令。两个入口保留 `--command` 初始指令及 `--no-viewer --steps N` 有限无界面推理；它们没有 `--port` 参数。
+
+需要网页时使用独立Debug入口：`debug_flat.py` 或 `debug_terrain_memory.py`。默认同时启动原生窗口和事件驱动的Viser网页，`--port`设置网页端口；`--no-native`只开网页，便于远程查看；`--no-viewer`关闭所有界面。网页保留原图层、点源查看、扫描切换、指令和网格功能，并提供刷新按钮。网页在运行时冻结最近快照，不持续传输mesh；暂停、单步、刷新、重置和指令预览会触发快照。图层开关、点选和网格预览只重绘CPU快照，不推进仿真或GRU。扫描重建期间使用独立持久CPU展示模型，身份检查通过后复用展示窗口。原生路径每步读取Runtime动作后的姿态与速度，不执行完整Debug捕获。功能描述不构成流畅度或无卡顿验收。
+
 ## 容量测量建议
 
 `benchmark_collection.py` 是有限稀疏采集测量入口，不创建优化器或checkpoint。默认使用near×6/far×10 hit10、全部扰动与镜像，先预热再测量；`--output`必须是新目录。例如：

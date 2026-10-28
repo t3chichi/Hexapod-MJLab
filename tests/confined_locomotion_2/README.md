@@ -10,7 +10,7 @@
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含170项CPU检查，其中一个入口执行7个地形边界子用例；包括Logger初始化时序与Runner异常资源清理。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
+该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含173项CPU检查，其中一个入口执行7个地形边界子用例；包括Logger初始化时序与Runner异常资源清理。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
 
 `test_scan_batching.py` 和 `test_history_batching.py` 覆盖采集批量化的行顺序、故障与随机流边界、窗口写入原子性及快照所有权。真实同场景参考对照可运行：
 
@@ -93,7 +93,19 @@ python -B tests/confined_locomotion_2/check_terrain_play_gpu.py \
   --output "logs/verification/confined_locomotion_2/terrain_play_$(date +%Y%m%d_%H%M%S)"
 ```
 
-Play 检查会绑定本地 Viser/HTTP 端口。运行前确认请求端口空闲；不要用检查脚本探测或覆盖已有服务。
+Terrain Play 检查会绑定本地 Viser/HTTP 端口，并逐项比较延迟事件快照与原动作前捕获（含扫描槽替换、标签与姿态身份）。运行前确认请求端口空闲；不要用检查脚本探测或覆盖已有服务。
+
+原生窗口与扫描重建可用已有有限检查，`--native`需要图形桌面。下面使用同sampling/catalog内显式允许的weights-only扫描override，从hit10 sparse模型检查full/sparse切换：
+
+```bash
+FLAT_CKPT="填写本机 Flat hit10 checkpoint 路径"
+python -B tests/confined_locomotion_2/check_acquisition_switch_gpu.py \
+  --checkpoint "$FLAT_CKPT" --seed 20261025 --native \
+  --far-sampling hit_only_10m --allow-scan-override --port 8196 \
+  --output "logs/verification/confined_locomotion_2/native_switch_$(date +%Y%m%d_%H%M%S)"
+```
+
+该检查核对六次重建中同一CPU展示model/data和窗口仍存活、旧GPU对象被回收；不代表实时流畅度或完整Checkpoint恢复验收。日常 `play_*` 使用原生窗口，`debug_*`使用事件驱动网页，见[快速开始](../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)。
 
 扫描器的 GPU/reference 对照与 fixed sparse/full 对照都不训练：
 

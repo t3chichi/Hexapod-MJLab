@@ -1,15 +1,22 @@
-"""Pre-action, CPU-only diagnostic retention for Terrain Memory play."""
+"""Pre-action terrain diagnostics, materialized on CPU for debug events."""
 
 import numpy as np
 from . import display
 
 
-def capture_inputs(session, prepared):
-    captured = display.capture_inputs(session, prepared)
-    labels = session.runtime.labels()
+def retain_input_context(session):
+    context = display.retain_input_context(session)
+    context["labels"] = session.runtime.labels()
+    context["root_quat"] = session.env.scene["robot"].data.root_link_quat_w.detach().clone()
+    return context
+
+
+def capture_inputs(session, prepared, *, context=None):
+    captured = display.capture_inputs(session, prepared, context=context)
+    labels = session.runtime.labels() if context is None else context["labels"]
     height, envelope = labels["height"], labels["envelope"]
     height.validate(prepared.observation)
-    quat = display.array(session.env.scene["robot"].data.root_link_quat_w)
+    quat = display.array(session.env.scene["robot"].data.root_link_quat_w if context is None else context["root_quat"])
     for row, entry in enumerate(captured):
         entry["terrain"] = {
             "root_pos_w": display.array(height.root_pos_w[row]),

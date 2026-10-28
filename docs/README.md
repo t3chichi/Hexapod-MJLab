@@ -9,6 +9,8 @@
 | `El-4090-Confined-Locomotion-Terrain-Memory_2` | `scripts/experiments/confined_locomotion_2/train_terrain_memory.py` | `scripts/experiments/confined_locomotion_2/play_terrain_memory.py` | 同上 |
 | `El-4090-Confined-Locomotion-Flat-Tripod2-Low_2` | `scripts/experiments/confined_locomotion_2/train_tripod2_low.py` | `scripts/experiments/confined_locomotion_2/play_tripod2_low.py` | [Tripod2 Low](../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/README.md) |
 
+Flat_2 / Terrain 的 `play_*`默认使用原生窗口；网页检查改用同目录的 `debug_flat.py` / `debug_terrain_memory.py`。远程只开网页可加 `--no-native`，具体参数见v2快速开始。v1与Tripod的查看入口保持各自原有行为。
+
 ## 当前阅读路径
 
 | 需要做什么 | 入口 |

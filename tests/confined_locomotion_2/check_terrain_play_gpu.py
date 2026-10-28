@@ -1,6 +1,7 @@
 """Finite real-terrain play checks: alignment, read-only rendering and reset."""
 
 import argparse
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -31,8 +32,8 @@ def main():
         from hexapod_mjlab.tasks.confined_locomotion_2.play_terrain_memory import TerrainMemoryPlaySession
         from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg
         from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play_cli import PlayOwner
-        from hexapod_mjlab.tasks.confined_locomotion_2.visualization.terrain_memory import TerrainMemoryViewer, height_points_world
-        from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import export_snapshot_manifest
+        from hexapod_mjlab.tasks.confined_locomotion_2.visualization.terrain_debug import TerrainMemoryDebugViewer, height_points_world
+        from hexapod_mjlab.tasks.confined_locomotion_2.visualization.debug import export_snapshot_manifest
         configure_torch_backends(allow_tf32=False)
         torch.backends.cudnn.rnn.fp32_precision = "ieee"
         root = Path(__file__).resolve().parents[2]
@@ -42,7 +43,7 @@ def main():
             checkpoint=args.checkpoint, output_dir=args.output / "session", seed=20261025,
             wrapper=RslRlVecEnvWrapper(env, clip_actions=None), own_environment=True,
             lidar_cfg=ConfinedLidarCfg(raycast_mode="sparse", sparse_selection_path=str(selection), far_sampling="hit_only_10m"))
-        viewer = TerrainMemoryViewer(2, env.sim.mj_model, session.runtime.pipeline,
+        viewer = TerrainMemoryDebugViewer(2, env.sim.mj_model, session.runtime.pipeline,
                                     {"task": session.task_id}, port=args.port)
         weights_before = PlayOwner.weight_digest(session.network)
         session.refresh_idle_snapshot()
@@ -50,7 +51,20 @@ def main():
         errors = []
         first = None
         for step in range(6):
-            session.step_once()
+            # Compare deferred event capture to the original pre-action CPU
+            # capture, including a step that replaces the scan-record slot.
+            prepared = session.runtime.prepare()
+            captured = session.display.capture_inputs(session, prepared)
+            result = session.step_once(capture_display=False, retain_debug=True)
+            session.display.retain_display(session, result.prepared, result.output, captured,
+                preview=False, reason="last action inputs; post-step pose")
+            expected = copy.deepcopy(session._display_rows)
+            hidden = session.hidden.clone()
+            session._display_pool_cache.clear()  # Exercise retained old scan references.
+            session.capture_last_step_display()
+            from check_gpu import differences
+            assert not differences(expected, session._display_rows), differences(expected, session._display_rows)
+            assert torch.equal(hidden, session.hidden) and session.forward_count == step + 1
             for row in range(2):
                 snapshot = session.build_display_snapshot(row)
                 data = snapshot["terrain"]
@@ -64,6 +78,7 @@ def main():
                 if first is None:
                     first = snapshot
                     first_target = data["target"].copy()
+        report["deferred_capture_matches_pre_action_capture"] = True
         assert max(errors) < 1e-5
         np.testing.assert_array_equal(first["terrain"]["target"], first_target)
         snapshot = session.build_display_snapshot(0)

@@ -1,4 +1,4 @@
-"""Read-only local Viser rendering for confined_locomotion_2 play snapshots.
+"""Event-driven Viser debugging for confined_locomotion_2 snapshots.
 
 All scan xyz values are acquisition-time BASE coordinates. WORLD mode applies
 the current pose for display only; it is an uncompensated projection and does
@@ -30,7 +30,7 @@ PLAY_SNAPSHOT_SCHEMA = "confined_locomotion_2.play_snapshot/v1"
 __all__ = [
     "PLAY_SNAPSHOT_SCHEMA",
     "PendingControls",
-    "PlayViewer",
+    "DebugViewer",
     "export_snapshot_manifest",
     "resolve_point_pick",
 ]
@@ -43,6 +43,11 @@ class _AcquisitionPendingControls(PendingControls):
         super().__init__()
         self._acquisition_lock = threading.Lock()
         self._acquisition = None
+        self._refresh = False
+
+    def submit_refresh(self):
+        with self._acquisition_lock:
+            self._refresh = True
 
     def submit_acquisition(self, mode, selection_path):
         with self._acquisition_lock:
@@ -53,6 +58,8 @@ class _AcquisitionPendingControls(PendingControls):
         with self._acquisition_lock:
             pending["acquisition"] = self._acquisition
             self._acquisition = None
+            pending["refresh"] = self._refresh
+            self._refresh = False
         return pending
 
     def clear_session_intents(self):
@@ -68,6 +75,7 @@ class _AcquisitionPendingControls(PendingControls):
             self._env_row = None
         with self._acquisition_lock:
             self._acquisition = None
+            self._refresh = False
 
 
 def _array(value, shape, name, dtype=None):
@@ -132,7 +140,7 @@ def resolve_point_pick(snapshot: dict, kind: str, index: int) -> dict:
     }
 
 
-class PlayViewer:
+class DebugViewer:
     """Local Viser viewer with display-only transforms and intent callbacks."""
 
     def __init__(
@@ -170,7 +178,7 @@ class PlayViewer:
         self._last_pick_identity = None
         self._camera_focused = False
         self._closed = False
-        self.server = viser.ViserServer(host=host, port=self.port, label="机器人运动预览")
+        self.server = viser.ViserServer(host=host, port=self.port, label="机器人策略调试台")
         try:
             actual_port = int(self.server.get_port())
             if actual_port != self.port:
@@ -189,6 +197,8 @@ class PlayViewer:
             choices = [f"环境 {i}" for i in range(self.num_envs)]
             self._env = gui.add_dropdown("环境", choices, initial_value=choices[0])
             self._playback = gui.add_button_group("播放", ["运行/暂停", "单步", "重置", "退出"])
+            self._refresh = gui.add_button("刷新快照")
+            gui.add_markdown("运行时保留最近快照；暂停、单步或刷新时更新。实时运动请看原生窗口。")
             self._command_actions = gui.add_button_group("指令", ["应用", "清零"])
             self._command = [
                 gui.add_slider("前进 (m/s)", -1.5, 1.5, step=0.05, initial_value=0.0),
@@ -264,6 +274,7 @@ class PlayViewer:
 
 
         self._playback.on_click(self._submit_playback)
+        self._refresh.on_click(lambda _: self.pending.submit_refresh())
         self._command_actions.on_click(self._submit_command_action)
         self._pick_button.on_click(
             lambda _event: self.pending.submit_pick(
@@ -423,6 +434,7 @@ class PlayViewer:
             self.pending.clear_session_intents()
             self.mj_model = mj_model
             self.pipeline = pipeline
+            self.set_selected_env_row(0)
             if identity_header is not None:
                 self.identity_header = dict(identity_header)
             if self._acquisition_mode is not None:
@@ -453,6 +465,11 @@ class PlayViewer:
     @property
     def selected_env_row(self):
         return int(str(self._env.value).split()[-1])
+
+    def set_selected_env_row(self, row):
+        value = f"环境 {row}"
+        if self._env.value != value:
+            self._env.value = value
 
     @property
     def view_mode(self):
@@ -690,10 +707,11 @@ class PlayViewer:
         task_id = self.identity_header.get("task", "")
         task_name = "地形记忆" if "Terrain-Memory" in task_id else "平地基线"
         self._status.content = (
-            f"**{state}** · {task_name} · 环境 {snapshot['env']}\n\n"
+            f"**快照：{state}** · {task_name} · 环境 {snapshot['env']}\n\n"
             f"回合 {ident['input_episode_id']} · 步 {ident['input_step_in_episode']} · 离地 {height_text}\n\n"
             f"指令 {np.asarray(status['command']).round(2).tolist()}\n\n"
-            f"控制步：输入 {ident['input_control_step']} / 姿态 {ident['pose_control_step']}"
+            f"控制步：输入 {ident['input_control_step']} / 姿态 {ident['pose_control_step']} · "
+            f"姿态时间 {ident.get('pose_time_s', 0.):.3f} s（非实时画面）"
         )
         self._details.content = (
             f"**任务** {task_id}\n\n"

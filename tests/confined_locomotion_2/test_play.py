@@ -142,6 +142,25 @@ def test_play_mean_steps_reuse_scan_features_and_reset_only_episode_state(tmp_pa
     assert runtime.closed
 
 
+def test_light_play_skips_debug_extraction_with_identical_policy_steps(tmp_path):
+    from unittest.mock import Mock
+    runtime, network = FakeRuntime(), FakeNetwork()
+    checkpoint = tmp_path / "current.pt"
+    _checkpoint(checkpoint, network)
+    session = PlaySession(runtime=runtime, network=network, checkpoint=checkpoint,
+                          output_dir=tmp_path / "play", seed=9)
+    session.env = SimpleNamespace()  # A real-env path must still skip capture.
+    session.display = SimpleNamespace(capture_inputs=Mock(side_effect=AssertionError("debug capture")),
+                                      retain_input_context=Mock(side_effect=AssertionError("debug context")))
+    for _ in range(50):
+        session.step_once(capture_display=False)
+    assert session.forward_count == 50 and network.encode_count == 10
+    assert not session.display.capture_inputs.called and not session.display.retain_input_context.called
+    assert session._display_rows is None and session._last_display_context is None
+    assert all(torch.equal(action, torch.full((1, 18), .25)) for action in runtime.actions)
+    session.close()
+
+
 def test_play_cfg_removes_timeout_but_keeps_formal_falls():
     cfg = make_play_env_cfg(num_envs=1, seed=3)
     assert set(cfg.terminations) == {

@@ -1,4 +1,4 @@
-"""Independent recurrent-task play: paused browser by default, finite headless option."""
+"""One recurrent play owner with native rendering and optional event-driven debug."""
 
 import argparse
 import json
@@ -6,19 +6,22 @@ from pathlib import Path
 import time
 
 
-def parse_args(argv=None):
+def parse_args(argv=None, *, debug=False):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--steps", "--max-steps", type=int, default=None,
-                        help="total control-step budget; browser default 0 (unlimited), headless default 250")
+                        help="total control-step budget; interactive default 0 (unlimited), headless default 250")
     parser.add_argument("--gpu", type=int, default=0)
     parser.add_argument("--num-envs", type=int, default=1)
     parser.add_argument("--command", nargs=3, type=float, default=(0, 0, 0), metavar=("VX", "VY", "WZ"))
-    parser.add_argument("--no-viewer", action="store_true", help="run finite inference without a browser server")
-    parser.add_argument("--start-running", action="store_true", help="browser starts running instead of paused")
-    parser.add_argument("--port", type=int, default=8094, help="local browser port (old task defaults to 8093)")
+    parser.add_argument("--no-viewer", action="store_true", help="run finite inference without any viewer")
+    parser.add_argument("--start-running", action="store_true", help="start running instead of paused")
+    parser.set_defaults(no_native=False)
+    if debug:
+        parser.add_argument("--port", type=int, default=8094, help="local debug browser port")
+        parser.add_argument("--no-native", action="store_true", help="browser-only debugging, e.g. over SSH")
     parser.add_argument("--preset", choices=("clean", "gap", "gap_fixed0", "range", "proprio", "all"), default="clean")
     parser.add_argument("--raycast-mode", choices=("full", "sparse"), default="full")
     parser.add_argument("--far-sampling", choices=("all_endpoints", "hit_only_10m"),
@@ -33,10 +36,10 @@ def parse_args(argv=None):
     if args.steps is None:
         args.steps = 250 if args.no_viewer else 0
     if args.steps < 0 or (args.no_viewer and args.steps == 0):
-        parser.error("--steps must be positive in headless mode, or nonnegative with a browser")
+        parser.error("--steps must be positive in headless mode, or nonnegative with a viewer")
     if args.num_envs < 1 or args.gpu < 0 or not 0 <= args.seed < 2**32:
         parser.error("num-envs must be positive, gpu nonnegative, seed in [0,2**32)")
-    if not 1 <= args.port <= 65535:
+    if debug and not 1 <= args.port <= 65535:
         parser.error("--port must be in 1..65535")
     import math
     limits = (1.5, 1.0, 1.0)
@@ -107,7 +110,7 @@ class PlayOwner:
         self.output.mkdir(parents=True, exist_ok=False)
         self.checkpoint = Path(args.checkpoint).resolve()
         self.checkpoint_sha256 = hashlib.sha256(self.checkpoint.read_bytes()).hexdigest()
-        self.viewer = self.session = self.env = None
+        self.viewer = self.native = self.session = self.env = None
         self.segments = []
         self.segment_index = 0
         self.weights_sha256 = None
@@ -169,8 +172,10 @@ class PlayOwner:
         session = self.session
         if session is None:
             return
+        if self.viewer is not None and session._last_display_context is not None and not session.runtime._faulted:
+            session.capture_last_step_display()
         if session._display_rows is not None:
-            from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import export_snapshot_manifest
+            from hexapod_mjlab.tasks.confined_locomotion_2.visualization.debug import export_snapshot_manifest
             row = 0 if self.viewer is None else self.viewer.selected_env_row
             snapshot = session.build_display_snapshot(row, paused=True)
             export_snapshot_manifest(snapshot, self.viewer, session.output_dir / "play_snapshot_manifest.json")
@@ -214,6 +219,9 @@ class PlayOwner:
         if self.viewer is not None:
             self.viewer.set_acquisition_status("正在重建扫描并重置回合…")
             self.viewer.detach_session()
+        if self.native is not None:
+            self.native.set_status(paused=True)
+            self.native.detach_session()
         old = self.session
         self.session = self.env = None
         old.close()
@@ -222,6 +230,12 @@ class PlayOwner:
         torch.cuda.empty_cache()
         self.segment_index += 1
         self._open(mode, path, allow_override=True)
+        if self.native is not None:
+            self.native.rebind_session(self.session.runtime)
+            self.native.set_command_inputs((0, 0, 0))
+            queued = self.native.pending.take()
+            if queued["exit"]:
+                self.native.pending.submit_exit()
         if self.viewer is not None:
             self.viewer.rebind_session(
                 self.env.sim.mj_model, self.session.runtime.pipeline,
@@ -245,6 +259,8 @@ class PlayOwner:
                 "preview_count": sum(e["preview_count"] for e in self.segments),
                 "observation_perturbations": self.args.preset, "optimizer": False,
                 "viewer": self.viewer is not None, "exit_reason": reason,
+                "native_viewer": self.native is not None,
+                "debug_updates": "events_only",
                 "learning_effect_ready": False, "segments": self.segments,
                 "weights_sha256": self.weights_sha256,
             }
@@ -254,9 +270,13 @@ class PlayOwner:
             (self.output / "play_summary.json").write_text(json.dumps(summary, indent=2))
         finally:
             try:
-                if self.viewer is not None:
-                    self.viewer.detach_session()
-                    self.viewer.close()
+                try:
+                    if self.native is not None:
+                        self.native.close()
+                finally:
+                    if self.viewer is not None:
+                        self.viewer.detach_session()
+                        self.viewer.close()
             finally:
                 if self.session is not None:
                     self.session.close()
@@ -267,11 +287,12 @@ class PlayOwner:
                 torch.cuda.empty_cache()
 
 
-def run_play(session, viewer, *, steps, start_running=False, switch_acquisition=None):
-    """Own physics/inference/reset; display changes use retained CPU snapshots."""
-    from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import resolve_point_pick
+def run_play(session, viewer, *, steps, start_running=False, switch_acquisition=None, native=None):
+    """Single physics owner; native pose per control, browser snapshots on events."""
+    from .debug import resolve_point_pick
 
-    paused = viewer is not None and not start_running
+    interactive = viewer is not None or native is not None
+    paused = interactive and not start_running
     row = 0
     total_controls = session.forward_count
     reason = "step_budget"
@@ -279,89 +300,128 @@ def run_play(session, viewer, *, steps, start_running=False, switch_acquisition=
         session.refresh_idle_snapshot(reason="initial preview")
     snapshot = None
     dirty = viewer is not None
+    native_dirty = native is not None
     deadline = time.monotonic()
     while True:
-        single_step = False
-        if viewer is not None:
-            pending = viewer.pending.take()
-            if pending["exit"]:
-                reason = "viewer_exit"
-                break
-            if pending.get("acquisition") is not None and switch_acquisition is not None:
-                # Drop this loop's reference before the owner releases old GPU
-                # tensors. The owner preflights data and rebuilds one session.
-                transition = None
-                session = None
-                session = switch_acquisition(pending["acquisition"])
-                session.refresh_idle_snapshot(reason="acquisition selection preview; temporal state uncommitted")
-                paused, dirty, row = True, True, 0
-                snapshot = None
-                deadline = time.monotonic()
-                # Commands/steps queued for the old episode never reach the new one.
-                continue
-            dirty |= bool(pending["rerender"])
-            if pending["env_row"] is not None:
-                row = int(pending["env_row"])
-                viewer.set_pick_result(None)
-                dirty = True
-            faulted = bool(session.runtime._faulted)
-            stopped = bool(session.runtime._stopped)
-            if pending["reset"] and not faulted:
-                session.manual_reset()
-                session.set_command((0, 0, 0))
-                viewer.set_command_inputs((0, 0, 0))
+        if native is not None and not native.is_running():
+            reason = "native_exit"
+            break
+        pending = viewer.pending.take() if viewer is not None else {}
+        if native is not None:
+            window = native.pending.take()
+            for key, value in window.items():
+                if key == "pause_toggle":
+                    pending[key] = bool(pending.get(key)) ^ bool(value)
+                elif value is not None and value is not False:
+                    pending[key] = value
+        if pending.get("exit"):
+            reason = "viewer_exit"
+            break
+        if pending.get("acquisition") is not None and switch_acquisition is not None:
+            transition = None
+            session = None  # Release the old GPU owner before rebuilding it.
+            session = switch_acquisition(pending["acquisition"])
+            session.refresh_idle_snapshot(reason="acquisition selection preview; temporal state uncommitted")
+            paused, dirty, native_dirty, row = True, True, True, 0
+            if native is not None:
+                native.selected_env_row = row
+            snapshot = None
+            deadline = time.monotonic()
+            # Commands/steps from the old session never reach the replacement.
+            continue
+        dirty |= bool(pending.get("rerender"))
+        refresh = bool(pending.get("refresh"))
+        if pending.get("env_row") is not None:
+            new_row = int(pending["env_row"]) % session.num_envs
+            if new_row != row:
+                row = new_row
+                if native is not None:
+                    native.selected_env_row = row
+                if viewer is not None:
+                    viewer.set_selected_env_row(row)
+                    viewer.set_pick_result(None)
+                dirty, refresh, native_dirty = True, True, True
+        faulted = bool(session.runtime._faulted)
+        stopped = bool(session.runtime._stopped)
+        if pending.get("reset") and not faulted:
+            session.manual_reset()
+            session.set_command((0, 0, 0))
+            for display in (viewer, native):
+                if display is not None:
+                    display.set_command_inputs((0, 0, 0))
+            if viewer is not None:
                 session.refresh_idle_snapshot(reason="manual reset preview")
                 viewer.set_pick_result(None)
-                paused, stopped, dirty = True, False, True
-            if (pending["command"] is not None or pending["zero_command"]) and not (faulted or stopped):
-                values = (0, 0, 0) if pending["zero_command"] else pending["command"]
-                session.set_command(values)
-                viewer.set_command_inputs(values)
+            paused, stopped, dirty, native_dirty = True, False, True, True
+        if (pending.get("command") is not None or pending.get("zero_command")) and not (faulted or stopped):
+            values = (0, 0, 0) if pending.get("zero_command") else pending["command"]
+            session.set_command(values)
+            for display in (viewer, native):
+                if display is not None:
+                    display.set_command_inputs(values)
+            if viewer is not None:
                 session.refresh_idle_snapshot(reason="command preview; temporal state uncommitted")
+            dirty, native_dirty = True, True
+        if pending.get("pause_toggle") and not (faulted or stopped):
+            paused = not paused
+            dirty, native_dirty = True, True
+            refresh |= paused
+            deadline = time.monotonic()
+        single_step = bool(pending.get("step")) and paused and not (faulted or stopped)
+        if viewer is not None:
+            if refresh and not faulted:
+                session.capture_last_step_display()
                 dirty = True
-            if pending["pause_toggle"] and not (faulted or stopped):
-                paused = not paused
-                dirty = True
-                deadline = time.monotonic()
-            single_step = bool(pending["step"]) and paused and not (faulted or stopped)
             if dirty or snapshot is None:
                 snapshot = session.build_display_snapshot(row, paused=paused)
                 viewer.render(snapshot)
                 dirty = False
-            if pending["pick"] is not None:
+            if pending.get("pick") is not None:
                 viewer.set_pick_result(resolve_point_pick(snapshot, *pending["pick"]))
+        if native_dirty and native is not None:
+            native.sync(paused=paused)
+            native_dirty = False
         if steps and total_controls >= steps:
             break
         if not paused or single_step:
             try:
-                transition = session.step_once().transition
+                transition = session.step_once(capture_display=False, retain_debug=viewer is not None).transition
                 total_controls += 1
             except Exception as error:
-                if viewer is None or not session.runtime._faulted:
+                if not interactive or not session.runtime._faulted:
                     raise
-                paused, dirty = True, True
+                paused, dirty = True, viewer is not None
                 reason = "fault"
+                if native is not None:
+                    native.set_status(paused=True)
                 print(f"Play fault: {error}; frozen display retained, Exit or Ctrl+C to close.", flush=True)
                 continue
-            dirty = viewer is not None
             if transition.engineering_stopped:
                 paused, reason = True, "formal_fall"
-                if viewer is None:
+                if not interactive:
                     break
-                print("Formal fall: paused. Reset episode to start with zero temporal state.", flush=True)
-            if viewer is not None:
+                print("Play stopped at fall/terrain boundary. Reset to start a new episode.", flush=True)
+            if viewer is not None and (single_step or transition.engineering_stopped):
+                session.capture_last_step_display()
                 snapshot = session.build_display_snapshot(row, paused=paused)
                 viewer.render(snapshot)
-                dirty = False
+            if native is not None:
+                native.sync(paused=paused)
+            if interactive:
                 deadline = max(deadline + 0.02, time.monotonic())
                 time.sleep(max(0.0, deadline - time.monotonic()))
-        elif viewer is not None:
+        elif interactive:
             time.sleep(0.01)
     return reason, snapshot
 
 
-def main(*, owner_type=PlayOwner, viewer_type=None):
-    args = parse_args()
+def main(*, owner_type=PlayOwner, viewer_type=None, debug=False):
+    args = parse_args(debug=debug)
+    import os
+    import sys
+    if (not args.no_viewer and not args.no_native and sys.platform.startswith("linux")
+            and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))):
+        raise RuntimeError("Native Play requires a desktop display; use --no-viewer or a debug_* entry with --no-native")
     import torch
     from mjlab.utils.torch import configure_torch_backends
     configure_torch_backends(allow_tf32=False)
@@ -373,17 +433,22 @@ def main(*, owner_type=PlayOwner, viewer_type=None):
     try:
         owner = owner_type(args)
         if not args.no_viewer:
-            from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import PlayViewer
-            owner.viewer = (viewer_type or PlayViewer)(
-                num_envs=owner.session.num_envs, mj_model=owner.env.sim.mj_model,
-                pipeline=owner.session.runtime.pipeline,
-                identity_header={"task": owner.task_id, "preset": args.preset, "segment": 0},
-                acquisition_options=owner.acquisition_options, port=args.port)
-            owner.viewer.set_command_inputs(args.command)
-            print(f"Open http://127.0.0.1:{args.port} — {'running' if args.start_running else 'paused'}. Acquisition switches reset episode and GRU with the same weights.", flush=True)
+            if not args.no_native:
+                from .native import NativePlayViewer
+                owner.native = NativePlayViewer(owner.session.runtime, command=args.command)
+                print("Native Play: Space pause/run, Right step, Enter reset, Q exit; W/S, A/D, J/L command, X zero.", flush=True)
+            if debug:
+                from .debug import DebugViewer
+                owner.viewer = (viewer_type or DebugViewer)(
+                    num_envs=owner.session.num_envs, mj_model=owner.env.sim.mj_model,
+                    pipeline=owner.session.runtime.pipeline,
+                    identity_header={"task": owner.task_id, "preset": args.preset, "segment": 0},
+                    acquisition_options=owner.acquisition_options, port=args.port)
+                owner.viewer.set_command_inputs(args.command)
+                print(f"Debug http://127.0.0.1:{args.port} — event-driven snapshots; acquisition changes reset the episode.", flush=True)
         reason, _snapshot = run_play(
             owner.session, owner.viewer, steps=args.steps, start_running=args.start_running,
-            switch_acquisition=owner.switch_acquisition)
+            switch_acquisition=owner.switch_acquisition, native=owner.native)
     except KeyboardInterrupt:
         reason = "keyboard_interrupt"
     except BaseException:
@@ -393,4 +458,3 @@ def main(*, owner_type=PlayOwner, viewer_type=None):
         if owner is not None:
             owner.close(reason)
             print(f"Controls: {sum(e['control_steps'] for e in owner.segments)}; frame encodings: {sum(e['frame_encodings'] for e in owner.segments)}; exit: {reason}", flush=True)
-

@@ -14,10 +14,10 @@
 
 ## 任务组织与配置
 
-| 任务 | 注册身份 | 配置 | 训练 / Play脚本 |
+| 任务 | 注册身份 | 配置 | 训练 / 查看入口 |
 |---|---|---|---|
-| Flat Baseline | `El-4090-Confined-Locomotion-Flat_2` | [`config/flat_baseline_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline_config.py) | `train.py` / `play_flat.py` |
-| Terrain Memory | `El-4090-Confined-Locomotion-Terrain-Memory_2` | [`config/terrain_memory_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory_config.py) | `train_terrain_memory.py` / `play_terrain_memory.py` |
+| Flat Baseline | `El-4090-Confined-Locomotion-Flat_2` | [`config/flat_baseline_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline_config.py) | `train.py` / `play_flat.py`（原生MuJoCo） / `debug_flat.py`（网页调试） |
+| Terrain Memory | `El-4090-Confined-Locomotion-Terrain-Memory_2` | [`config/terrain_memory_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory_config.py) | `train_terrain_memory.py` / `play_terrain_memory.py`（原生MuJoCo） / `debug_terrain_memory.py`（网页调试） |
 | Tripod2 Low | `El-4090-Confined-Locomotion-Flat-Tripod2-Low_2` | [`tripod2_low/env.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/env.py) / [`tripod2_low/runner.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/runner.py) | `train_tripod2_low.py` / `play_tripod2_low.py` |
 
 脚本统一位于 `scripts/experiments/confined_locomotion_2/`。三个任务均由包内 `__init__.py`集中注册，训练需显式提供seed、环境数和轮数；Terrain额外要求正的高度损失权重。注册默认配置不直接授权训练。
@@ -91,7 +91,11 @@ Tripod复用同一Collector、网络和重放路径，但保留Legacy PPO；其�
 
 ## 可视化与模型边界
 
-Flat和Terrain各有独立Play脚本，共享必要显示实现。Terrain显示真实地形、高度预测/真值、当前及候选监督网格、预测/监督六棱柱包络；六棱柱在机器人坐标系内跟随机器人，上下六边形使用相同五维平面参数，上底高度由第六维控制。近端圆锥包络默认关闭。界面使用中文分组控件，候选范围只预览、不写训练配置。
+Flat和Terrain各有原生Play与网页Debug脚本。`play_flat.py` / `play_terrain_memory.py`默认打开暂停状态的MuJoCo passive窗口，Space运行/暂停、Right单步、Enter重置、Q退出；W/S、A/D、J/L调节速度指令，X清零。原有 `--command` 和 `--no-viewer --steps` 有限推理入口保留，Play不提供网页端口参数。
+
+`debug_flat.py` / `debug_terrain_memory.py`用于网页调试，默认同时打开原生窗口与事件驱动的Viser网页；`--port`指定网页端口，`--no-native`适用于远程只开网页，`--no-viewer`关闭全部界面。网页保留现有图层、点源、扫描切换、指令和网格预览能力，并增加刷新操作。运行时网页展示最近快照，不持续传输mesh；暂停、单步、刷新、重置和指令预览触发新快照。图层开关、点选和网格预览仅在CPU快照上重绘，不推进物理或GRU。扫描重建时使用独立持久CPU展示模型，身份校验通过后复用展示窗口。Native每个控制步读取Runtime动作后的姿态与速度，不经过完整网页Debug捕获。以上描述功能边界，不代表流畅度已验收或已消除卡顿。
+
+Terrain网页显示真实地形，可开关高度预测/真值、当前及候选监督网格、预测/监督六棱柱包络；六棱柱在机器人坐标系内跟随机器人，上下六边形使用相同五维平面参数，上底高度由第六维控制。近端圆锥包络默认关闭。界面使用中文分组控件，候选范围只预览、不写训练配置。
 
 Play只读权重，实际监督范围读取checkpoint。其扫描override仅用于同sampling、同固定catalog内的权重评估；不能作为完整续训或跨任务兼容机制。
 

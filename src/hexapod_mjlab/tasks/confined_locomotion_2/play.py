@@ -204,6 +204,7 @@ class PlaySession:
         self.preview_count = 0
         self._display_rows = None
         self._display_pool_cache = {}
+        self._last_display_context = None
 
     @staticmethod
     def _is_allowed_scan_override(checkpoint_identity, runtime_identity) -> bool:
@@ -233,7 +234,7 @@ class PlaySession:
         return checkpoint_identity.get("mode") in {"full", "sparse"} and runtime_identity.get("mode") in {"full", "sparse"}
 
     @torch.no_grad()
-    def step_once(self) -> PlayStep:
+    def step_once(self, *, capture_display=True, retain_debug=False) -> PlayStep:
         if self._closed:
             raise TrainingRuntimeFrozenError("play session is closed")
         runtime = self.runtime
@@ -267,7 +268,10 @@ class PlaySession:
             self._feature_identity = identity
             self.frame_encoding_count += 1
 
-        captured = self.display.capture_inputs(self, prepared) if self.env is not None else None
+        # Native/headless playback reads post-step pose straight from runtime.
+        # Capture full pre-action diagnostics only for an explicit debug event.
+        captured = self.display.capture_inputs(self, prepared) if capture_display and self.env is not None else None
+        context = self.display.retain_input_context(self) if retain_debug and self.env is not None else None
         try:
             output = self.network.forward_from_features(
                 prepared.observation, self._frame_feature, self.hidden
@@ -291,7 +295,19 @@ class PlaySession:
                 save_fault(error, phase="play/inference")
             raise
         self._last_step = PlayStep(prepared, output, transition)
+        self._last_display_context = context
         return self._last_step
+
+    @torch.no_grad()
+    def capture_last_step_display(self):
+        """Materialize the last action's diagnostics only on a debug event."""
+        if self._last_step is None or self._last_display_context is None:
+            self.refresh_idle_snapshot(reason="current input preview")
+            return
+        step = self._last_step
+        captured = self.display.capture_inputs(self, step.prepared, context=self._last_display_context)
+        self.display.retain_display(self, step.prepared, step.output, captured,
+                                    preview=False, reason="last action inputs; post-step pose")
 
     def peek(self) -> PlayStep | None:
         """Return the retained snapshot without stepping or advancing hidden state."""
@@ -347,6 +363,7 @@ class PlaySession:
         tensor = torch.tensor(command, dtype=torch.float32, device=self.device)
         record = self.runtime.set_manual_command(rows, tensor.expand(self.num_envs, 3).contiguous())
         self._display_rows = None
+        self._last_display_context = None
         return record
 
     def manual_reset(self) -> dict:
@@ -360,6 +377,7 @@ class PlaySession:
         self._feature_identity = None
         self._frame_feature = None
         self._last_step = None
+        self._last_display_context = None
         self._display_rows = None
         self._display_pool_cache.clear()
         return record

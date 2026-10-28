@@ -6,7 +6,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from hexapod_mjlab.tasks.confined_locomotion_2.visualization.envelope import envelope_prism_base
-from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import PlayViewer
+from hexapod_mjlab.tasks.confined_locomotion_2.visualization.debug import DebugViewer
 
 
 def test_prism_has_18_edges_with_identical_hexagons_and_reference_heights():
@@ -29,7 +29,7 @@ def test_prism_has_18_edges_with_identical_hexagons_and_reference_heights():
 
 
 def test_prism_follows_full_displayed_root_pose_and_base_world_views_agree():
-    viewer = object.__new__(PlayViewer)
+    viewer = object.__new__(DebugViewer)
     viewer._view = SimpleNamespace(value="世界")
     viewer._handles = {}
     rendered = {}
