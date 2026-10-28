@@ -1,12 +1,13 @@
 # 文档导航
 
-当前保留三个并列正式任务。两个任务包共享 `hexapod_mjlab.common` 和必要的 RL 实现，分别注册、训练和可视化。
+当前注册四个任务，包含 Tripod2 Low 历史迁移对照。两个任务包共享 `hexapod_mjlab.common` 和必要的 RL 实现，各任务保留自己的配方与运行语义。
 
 | 任务 | 训练入口 | Play 入口 | 快速开始 |
 |---|---|---|---|
 | `El-4090-Confined-Locomotion-Flat` | `scripts/experiments/confined_locomotion/train.py` | `scripts/experiments/confined_locomotion/play.py` | [v1 Flat](../src/hexapod_mjlab/tasks/confined_locomotion/快速开始.md) |
 | `El-4090-Confined-Locomotion-Flat_2` | `scripts/experiments/confined_locomotion_2/train.py` | `scripts/experiments/confined_locomotion_2/play_flat.py` | [v2 Flat / Terrain](../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md) |
 | `El-4090-Confined-Locomotion-Terrain-Memory_2` | `scripts/experiments/confined_locomotion_2/train_terrain_memory.py` | `scripts/experiments/confined_locomotion_2/play_terrain_memory.py` | 同上 |
+| `El-4090-Confined-Locomotion-Flat-Tripod2-Low_2` | `scripts/experiments/confined_locomotion_2/train_tripod2_low.py` | `scripts/experiments/confined_locomotion_2/play_tripod2_low.py` | [Tripod2 Low](../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/README.md) |
 
 ## 当前阅读路径
 

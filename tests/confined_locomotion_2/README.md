@@ -10,7 +10,7 @@
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含163项CPU检查，其中一个入口执行7个地形边界子用例。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
+该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含167项CPU检查，其中一个入口执行7个地形边界子用例。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
 
 `test_scan_batching.py` 和 `test_history_batching.py` 覆盖采集批量化的行顺序、故障与随机流边界、窗口写入原子性及快照所有权。真实同场景参考对照可运行：
 
@@ -40,6 +40,16 @@ python -B tests/confined_locomotion_2/check_gpu.py \
 
 该检查每轮采集 24 个控制步并执行 20 次 Adam 更新；保存间隔 1 是测试设置，正式入口默认 50。`all_endpoints` 与 `hit_only_10m` 是不同采样身份，selection 也属于恢复身份，不能互换 checkpoint。
 
+`check_gpu.py` 还核对真实 Recipe 与完整文件中的 `code_provenance` 一致。新完整恢复要求 `hexapod_mjlab.model_physics/v1`；旧文件缺少签名时，不能用同结构或源码/二进制哈希代替物理校验。用上一步新生成的两环境、low_memory hit10模型执行物理身份反例：
+
+```bash
+python -B tests/confined_locomotion_2/check_physics_identity_gpu.py \
+  --checkpoint "上一步输出目录/training/final_checkpoint_full_000001.pt" \
+  --output "logs/verification/confined_locomotion_2/physics_identity_$(date +%Y%m%d_%H%M%S)"
+```
+
+该检查不训练：质量10→20 kg必须拒绝，且训练状态/RNG不变；同模型和复制到新路径的环境工厂必须恢复相同边界。它还删除临时文件中的物理签名模拟历史输入，确认完整加载拒绝、weights-only仍可用。生产资产和原checkpoint均不改写。
+
 ### 地形几何、标签和辅助损失
 
 几何门只核对真实 Heightfield、射线和地面标签，不训练：
@@ -68,7 +78,7 @@ python -B tests/confined_locomotion_2/check_terrain_auxiliary_gpu.py \
 
 ### checkpoint、Play、扫描与界面
 
-下面Terrain checkpoint检查要求当前源码生成的1或2环境、low_memory、near×6/far×10 hit10 sparse模型，且原保存间隔为默认50。其他配方不要直接套用这个固定检查脚本。可用[快速开始](../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)的训练命令从零生成；本仓库不要求克隆 ignored 日志或模型。
+下面Terrain checkpoint检查要求含新物理签名的1或2环境、low_memory、near×6/far×10 hit10 sparse模型。检查脚本使用默认保存间隔50，但保存间隔不参与兼容门控。其他采样/环境配方不要直接套用。可用[快速开始](../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)的训练命令从零生成；本仓库不要求克隆 ignored 日志或模型。
 
 ```bash
 TERRAIN_CKPT="填写本机生成的 Terrain Memory checkpoint 路径"

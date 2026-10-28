@@ -2,7 +2,7 @@
 
 独立注册任务：`El-4090-Confined-Locomotion-Flat-Tripod2-Low_2`。
 
-本任务迁移旧 `el4090_tripod2_low` 的实际训练行为，使用当前 Flat Baseline 的原始 `ConfinedLocomotionNetwork`、点云扫描与采样实现。原 Flat Baseline / Terrain Memory 的源码、配置和 checkpoint 校验未改动；注册通过上级 `tasks/__init__.py` 完成。
+本任务迁移旧 `el4090_tripod2_low` 的实际训练行为，使用当前 Flat Baseline 的原始 `ConfinedLocomotionNetwork`、点云扫描与采样实现，保留独立 Legacy 配方。注册由父包 `confined_locomotion_2/__init__.py` 集中完成。
 
 ## 配方与复现边界
 
@@ -67,6 +67,8 @@ python -B scripts/experiments/confined_locomotion_2/play_tripod2_low.py \
 
 ## 历史checkpoint兼容
 
-2026-10-28 P1 起，checkpoint 不再校验源码路径/SHA。历史完整checkpoint在模型结构、执行器资产哈希、动作/奖励/终止/仿真语义、扫描身份、PPO/训练配方、seed和环境数兼容时可恢复；设备、依赖、执行模式和保存间隔只作记录。仅切换激活重计算方式允许继续训练。恢复失败仍会拒绝并进入 faulted，不会报告成功。
+2026-10-28 P1 移除了源码路径/SHA硬门。本轮物理修复进一步要求 `hexapod_mjlab.model_physics/v1` 签名：名义模型必须兼容，运行时 `body_mass/body_inertia/geom_friction/pair_friction` 从保存的 DR 状态恢复，不能将随机化差异误判成静态模型变化。缺少签名的历史文件在应用状态前拒绝完整恢复；任务/schema/网络/sampling符合条件的文件仍可用于weights-only Play。执行器资产、动作/奖励/终止、PPO配方、seed与环境数仍检查。
+
+Recipe与完整Checkpoint保存启动时的 `code_provenance`，用于追溯commit及未提交改动，不作为恢复门控。兼容预检失败不修改训练状态；应用失败才冻结为faulted。设备/依赖元数据、执行模式和保存间隔不单独门控，但跨GPU完整恢复未在本轮验证。规则见[监控与保存](../../../../../docs/tasks/confined_locomotion_2/training/监控与保存.md)。
 
 修改前保存的本地源码快照 `.checkpoint_sources/9a1f296d3b84c63b775f39f47c91b7a3612163c3/` 仅作为历史资产保留，当前 loader 不再需要它；不要删除用户数据。更早 schema、不同模型或不同扫描/配方仍可能不兼容，以实际加载验证为准。

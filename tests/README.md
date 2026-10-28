@@ -16,11 +16,13 @@ python tests/run.py --profile confined_gpu --list
 
 ## 基础 CPU profile
 
-`python tests/run.py --profile cpu` 当前包含 8 项：
+`python tests/run.py --profile cpu` 当前包含 10 项：
 
 | 功能 | 实现 |
 |---|---|
 | 运行器 | `tests/test_runner.py` |
+| 物理模型签名与拒绝反例 | `tests/test_checkpoint_physics.py` |
+| Git代码溯源及不可用场景 | `tests/test_provenance.py` |
 | 初版任务 partial reset | `tests/confined_locomotion/test_runtime.py` |
 | 雷达挂载参考 | `tests/lidar_sensor/mount_check.py` |
 | 雷达光学对齐 | `tests/lidar/alignment/test_alignment.py` |
@@ -38,7 +40,7 @@ python tests/run.py --profile confined_cpu
 python tests/run.py --profile confined_gpu --list
 ```
 
-- `confined_cpu`：14 个测试模块，共 186 个测试函数；覆盖 runtime、transition、scanner、ground、visualization、policy、采集/更新、checkpoint、扰动、Play、对称和训练入口。
+- `confined_cpu`：14 个测试模块，共 187 个测试函数；覆盖 runtime、transition、scanner、ground、visualization、policy、采集/更新、checkpoint、扰动、Play、对称和训练入口。
 - `confined_gpu`：26 种真实 GPU 模式，包含 runtime、collection、update、entry、checkpoint、perturbations、symmetry 和 lifecycle。
 - 真实 GPU 检查使用 2 个环境、固定 seed，并通过 `--output` 写入新目录；不同模式的超时和前置条件不同，先运行 `--list` 查看。
 
@@ -50,11 +52,12 @@ python tests/run.py --profile confined_gpu --list
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **163** 项 CPU 检查（其中一个入口执行7个地形边界子用例），覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化和指标。
+该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **167** 项 CPU 检查（其中一个入口执行7个地形边界子用例），覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化和指标。
 
 真实 GPU、checkpoint、Play 与打包检查位于同一目录：
 
 - `check_gpu.py`：Flat_2 的有限训练、保存、恢复和同轨迹优化器重放。
+- `check_physics_identity_gpu.py`：使用新生成的Flat hit10检查点，验证质量翻倍/旧物理身份缺失在任何状态应用前拒绝，以及同模型/源码工厂搬移仍能恢复。
 - `check_terrain_geometry_gpu.py`、`check_terrain_sequence_gpu.py`、`check_terrain_auxiliary_gpu.py`：真实 Heightfield、标签、时序重放和辅助更新。
 - `check_terrain_checkpoint_gpu.py`、`check_terrain_play_gpu.py`：需要匹配当前源码与配方的 Terrain checkpoint。
 - `check_sampling_gpu.py`、`check_fixed_sparse_gpu.py`、`check_far_hit_gpu.py`、`check_far_shorttrain_gpu.py`、`benchmark_fixed_training_gpu.py`：采样与性能专项，部分需要匹配 checkpoint 或 selection。
@@ -62,6 +65,8 @@ python -B tests/confined_locomotion_2/run_checks.py
 - `check_package.py`：隔离 wheel 资源与固定 selection 检查。
 
 详细命令、固定配方和新输出目录要求见 [v2 测试说明](confined_locomotion_2/README.md)。GPU 检查并非全部能在无 checkpoint、无 wheel 的环境中直接运行，不要求全部塞进一个默认 profile。
+
+Tripod 独立 CPU 入口为 `python -B tests/tripod2_low/run_checks.py`（34项）；`python -B tests/tripod2_low/check_gpu.py --run` 只做2环境1轮更新，检查DR模型状态、执行器与下一transition恢复，不代表学习收敛。完整恢复的历史文件政策见[保存规则](../docs/tasks/confined_locomotion_2/training/监控与保存.md)。
 
 ## 固定输入与历史数据
 

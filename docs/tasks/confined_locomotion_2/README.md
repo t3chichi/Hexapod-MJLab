@@ -81,7 +81,7 @@ Flat和Terrain各有独立Play脚本，共享必要显示实现。Terrain显示�
 
 Play只读权重，实际监督范围读取checkpoint。其扫描override仅用于同sampling、同固定catalog内的权重评估；不能作为完整续训或跨任务兼容机制。
 
-完整checkpoint比较架构、编译模型结构、训练配方、seed、环境数、扫描身份和状态张量；源码路径/SHA、依赖版本、GPU型号/设备、执行模式与保存间隔只作记录，不再作为恢复硬条件。兼容的旧checkpoint可在当前源码和设备上恢复；不兼容状态仍会在应用前拒绝。细则见[监控与保存](training/监控与保存.md)。
+完整checkpoint比较架构、编译模型结构与物理签名、训练配方、seed、环境数、扫描身份和状态张量。缺少本轮新增物理签名的旧文件拒绝完整恢复，符合条件时仍可用于weights-only Play。Recipe与完整文件持久化Git代码来源，不用源码位置、commit或设备元数据门控恢复；跨GPU完整迁移未在本轮验证。细则见[监控与保存](training/监控与保存.md)。
 
 ## 检查与历史记录
 
