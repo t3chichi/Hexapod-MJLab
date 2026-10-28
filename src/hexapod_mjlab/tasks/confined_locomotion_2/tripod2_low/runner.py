@@ -9,7 +9,6 @@ import time
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.tensorboard import SummaryWriter
 
 from mjlab.rl import RslRlBaseRunnerCfg
 from mjlab.utils.torch import configure_torch_backends
@@ -17,12 +16,10 @@ from mjlab.utils.torch import configure_torch_backends
 from hexapod_mjlab.rl.confined_locomotion.distribution import derive_action_generator_seed
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
 from hexapod_mjlab.common.provenance import capture_code_provenance
+from hexapod_mjlab.common.training_logger import TrainingLogger
 from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
 from ..collector import TrainingCollector
-from ..rl.reporting import (
-    format_iteration_summary,
-    optimizer_scalar_summary,
-)
+from ..rl.reporting import optimizer_scalar_summary
 from ..rl.runner import ConfinedLocomotionRunner, environment_semantics
 from ..components.lidar.scanner import ConfinedLidarCfg
 from .actuator import ACTUATOR_PATH
@@ -79,7 +76,12 @@ class LegacyMetrics:
         self.num_envs, self.device = num_envs, device
         self.episode_length = torch.zeros(num_envs, dtype=torch.long, device=device)
         self.episode_return = torch.zeros(num_envs, device=device)
+        self.logger = None
         self.begin_iteration()
+
+    def bind_logger(self, logger):
+        self.logger = logger
+        logger.bind_episode_tensors(self.episode_return, self.episode_length)
 
     def begin_iteration(self):
         self.sums, self.samples, self.completed = {}, 0, []
@@ -97,12 +99,16 @@ class LegacyMetrics:
                        for name, raw in transition.reward_raw_terms.items()})
         for name, value in values.items():
             self.sums[name] = self.sums.get(name, 0.) + value.detach().sum()
-        self.episode_return += transition.reward
-        self.episode_length += 1
+        episode_return = self.episode_return + transition.reward
+        episode_length = self.episode_length + 1
         done = transition.terminated | transition.truncated
         if bool(done.any()):
-            self.completed.extend(zip(self.episode_return[done].cpu().tolist(), self.episode_length[done].cpu().tolist()))
-            self.episode_return[done], self.episode_length[done] = 0., 0
+            self.completed.extend(zip(episode_return[done].cpu().tolist(), episode_length[done].cpu().tolist()))
+        if self.logger is not None:
+            self.logger.process_env_step(transition.reward, done, {})
+        else:
+            self.episode_return.copy_(episode_return * (~done))
+            self.episode_length.copy_(episode_length * (~done))
 
     def finish_iteration(self):
         result = {name: float(value) / self.samples for name, value in self.sums.items()}
@@ -113,12 +119,16 @@ class LegacyMetrics:
         return result
 
     def state_dict(self):
-        return {"episode_return": self.episode_return.clone(), "episode_length": self.episode_length.clone()}
+        return {"episode_return": self.episode_return.clone(), "episode_length": self.episode_length.clone(),
+                **({"logger": self.logger.episode_state_dict()} if self.logger is not None else {})}
 
     def load_state_dict(self, state):
-        if set(state) != {"episode_return", "episode_length"}:
+        if set(state) - {"logger"} != {"episode_return", "episode_length"}:
             raise ValueError("metrics fields differ")
-        for name, value in state.items():
+        if self.logger is not None:
+            self.logger.load_episode_state_dict(state.get("logger"))
+        for name in ("episode_return", "episode_length"):
+            value = state[name]
             target = getattr(self, name)
             if target.shape != value.shape or target.dtype != value.dtype:
                 raise ValueError("metrics layout differs")
@@ -182,7 +192,11 @@ class TripodRunner(ConfinedLocomotionRunner):
             self.collector = TrainingCollector(self.runtime, self.network, self.provider,
                 symmetry_enabled=True, joint_permutation=self.joint_permutation,
                 mount_quat_xyzw=self.mount_quat_xyzw, transition_observer=self._observe_transition)
-            self.writer = SummaryWriter(str(self.log_dir / "tensorboard"))
+            self.logger = TrainingLogger(
+                log_dir=self.log_dir, cfg=self.cfg, env_cfg=env.cfg,
+                num_envs=self.num_envs, device=self.device, source_path=__file__)
+            self.learning_metrics.bind_logger(self.logger)
+            self.writer = self.logger.writer
         except BaseException:
             self.runtime.close()
             raise
@@ -196,7 +210,8 @@ class TripodRunner(ConfinedLocomotionRunner):
         self.code_provenance = capture_code_provenance(__file__)
         self._write_json("run_recipe.json", {"task": TASK_ID, "seed": self.seed,
             "num_envs": self.num_envs, **self.recipe_identity,
-            "code_provenance": self.code_provenance, "gpu_validation_passed": False})
+            "code_provenance": self.code_provenance, "logging": TrainingLogger.IDENTITY,
+            "gpu_validation_passed": False})
 
     def learn(self, num_learning_iterations, init_at_random_ep_len=True):
         if (self.phase not in ("fresh", "ready") or self.closed or
@@ -206,6 +221,8 @@ class TripodRunner(ConfinedLocomotionRunner):
         if not init_at_random_ep_len:
             raise ValueError("reference training requires randomized initial episode lengths")
         target = self.current_learning_iteration + num_learning_iterations
+        self.logger.begin_learn(completed_iterations=self.current_learning_iteration,
+                                environment_transitions=self.total_env_samples)
         try:
             for _ in range(num_learning_iterations):
                 self.learning_metrics.begin_iteration()
@@ -234,17 +251,18 @@ class TripodRunner(ConfinedLocomotionRunner):
                     "Curriculum/max_command_x": self.runtime.env._tripod_commands.ranges["lin_vel_x"][1],
                     "Performance/collect_s": collected - started, "Performance/update_s": updated - collected,
                     "Performance/env_steps_per_s": 24 * self.num_envs / (updated - started),
+                    "Progress/environment_transitions": self.total_env_samples,
                     "Memory/torch_peak_allocated_MiB": torch.cuda.max_memory_allocated(self.device) / 2**20})
                 if self.current_learning_iteration % self.save_interval == 0:
                     self.last_periodic_checkpoint = str(self.save(
                         self.log_dir / f"checkpoint_full_{self.current_learning_iteration:06d}.pt"))
-                for name, value in scalars.items():
-                    self.writer.add_scalar(name, value, self.current_learning_iteration)
-                self.writer.flush()
+                self.logger.log_iteration(
+                    completed_iteration=self.current_learning_iteration, target_iteration=target,
+                    scalars=scalars, learning_rate=self.trainer.optimizer.param_groups[0]["lr"],
+                    action_std=self.provider.std)
                 with (self.log_dir / "learning_metrics.jsonl").open("a") as stream:
                     stream.write(json.dumps({"iteration": self.current_learning_iteration, **scalars}, allow_nan=False) + "\n")
                 self.records.append({"iteration": self.current_learning_iteration, **metrics})
-                print(format_iteration_summary(self.current_learning_iteration, target, self.num_envs, scalars), flush=True)
             self.final_checkpoint = str(self.save(self.log_dir / f"final_checkpoint_full_{self.current_learning_iteration:06d}.pt"))
             self._write_summary()
         except BaseException as error:

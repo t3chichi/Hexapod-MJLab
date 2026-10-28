@@ -215,3 +215,47 @@ def test_real_termination_and_landing_diagnostics():
 
 def test_load_state_rejects_wrong_shape_or_nonfinite_values():
     LearningMetricsTest().test_load_state_rejects_wrong_shape_or_nonfinite_values()
+
+
+def test_official_logger_shares_episode_state_and_restores_old_and_new_checkpoints(tmp_path):
+    from hexapod_mjlab.common.training_logger import TrainingLogger
+    from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.runner import LegacyMetrics
+
+    for cls in (LearningMetrics, LegacyMetrics):
+        logger = TrainingLogger(log_dir=tmp_path / cls.__name__, cfg={"num_steps_per_env": 24},
+                                env_cfg={}, num_envs=2, device="cpu", source_path=__file__)
+        metrics = cls(2, "cpu")
+        metrics.bind_logger(logger)
+        try:
+            envelope = torch.tensor([[.59, .69, .59, .89, -.89, 0.]] * 2)
+            output, label = SimpleNamespace(envelope=envelope), SimpleNamespace(values=envelope)
+            metrics.begin_iteration()
+            for index in range(25):
+                metrics.observe(make_transition([.12, .12], [index == 24, False], [False, False]), output, label)
+            scalars = metrics.finish_iteration()
+            assert abs(scalars["Episode/mean_return"] - 3.) < 1e-6
+            assert list(logger.lenbuffer) == [25]
+            assert logger.cur_reward_sum.data_ptr() == metrics.episode_return.data_ptr()
+            assert logger.cur_episode_length.data_ptr() == metrics.episode_length.data_ptr()
+            saved = metrics.state_dict()
+            logger.rewbuffer.clear()
+            metrics.episode_return.zero_()
+            metrics.load_state_dict(saved)
+            assert len(logger.rewbuffer) == 1
+            metrics.begin_iteration()
+            metrics.observe(make_transition([.12, .12], [False, True], [False, False]), output, label)
+            scalars = metrics.finish_iteration()
+            # Preserve each task's original accumulator precision, including
+            # the legacy float32 sum rather than a float64 analytic product.
+            expected = torch.zeros_like(metrics.episode_return)
+            for _ in range(26):
+                expected.add_(torch.tensor([.12, .12]))
+            assert scalars["Episode/mean_return"] == float(expected[1])
+            assert list(logger.lenbuffer) == [25, 26]
+            old = dict(saved)
+            old.pop("logger")
+            metrics.load_state_dict(old)
+            assert not logger.rewbuffer and not logger.lenbuffer
+            torch.testing.assert_close(metrics.episode_return, saved["episode_return"])
+        finally:
+            logger.close()

@@ -52,7 +52,7 @@ python tests/run.py --profile confined_gpu --list
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **167** 项 CPU 检查（其中一个入口执行7个地形边界子用例），覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化和指标。
+该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **169** 项 CPU 检查（其中一个入口执行7个地形边界子用例），覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化和指标。
 
 真实 GPU、checkpoint、Play 与打包检查位于同一目录：
 

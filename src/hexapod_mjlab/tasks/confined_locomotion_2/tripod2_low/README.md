@@ -18,6 +18,10 @@
 - DR在创建时固定：64桶机器人摩擦[.3,1.25]、base附加质量[-10,10]kg；reset不重抽。root六维速度U(-.5,.5)，关节参考/初始角均0；保留乘零的joint reset随机数调用。每150个全局控制步覆盖世界系xy速度U(-1,1)，不使用MJLab默认的“增加速度”push。
 - 原reset/push后的观测会保留之前计算的body velocity/gravity，下一步才更新；本任务显式缓存该时序。原reset后的previous-action尾值与last-contact滤波尾值也保留。
 
+## 日志与恢复
+
+训练使用官方 `rsl_rl.utils.logger.Logger` 的writer、`process_env_step`、`log` 和默认终端排版。官方 `Train/mean_reward` 与 `Train/mean_episode_length` 是最近最多100个完成episode的滚动均值；Tripod既有 `Episode/mean_return` 与 `Episode/mean_length_steps` 仍按本轮完成的episode统计。未结束episode累计张量与Logger共享，checkpoint另外保存可选的Logger滚动窗口；旧checkpoint缺少该窗口时仍可完整恢复，未结束累计照常恢复，滚动均值从空窗口开始。TensorBoard索引从0起，Recipe及checkpoint的完成轮数仍累计计数。共同规则见[训练监控与保存](../../../../../docs/tasks/confined_locomotion_2/training/监控与保存.md)。
+
 ## MuJoCo适配及已知限制
 
 原雷达MJCF文件不修改。任务构建时仅调整内存spec：零关节参考、单一任务keyframe、显式地面接触pair，以及允许LSTM原始输出通过的力矩接口。

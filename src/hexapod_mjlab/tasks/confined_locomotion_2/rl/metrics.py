@@ -40,10 +40,15 @@ class LearningMetrics:
         self.terrain_query = terrain_query
         self.episode_return = torch.zeros(num_envs, device=self.device, dtype=torch.float64)
         self.episode_length = torch.zeros(num_envs, device=self.device, dtype=torch.float64)
+        self.logger = None
         self._active = False
         self._iteration: dict[str, torch.Tensor] = {}
         self._steps_this_iteration = 0
         self._action_dim = 0
+
+    def bind_logger(self, logger):
+        self.logger = logger
+        logger.bind_episode_tensors(self.episode_return, self.episode_length)
 
     def begin_iteration(self) -> None:
         self._iteration = {}
@@ -188,17 +193,21 @@ class LearningMetrics:
         truncated = self._batch(transition.truncated, (b,), "truncated", dtype=torch.bool)
         done = terminated | truncated
         reward64 = reward.to(torch.float64)
-        self.episode_return.add_(reward64)
-        self.episode_length.add_(1.0)
+        episode_return = self.episode_return + reward64
+        episode_length = self.episode_length + 1.0
         self._add("Episode/terminated_count", terminated.to(torch.float32))
         self._add("Episode/truncated_count", truncated.to(torch.float32))
         done_f = done.to(torch.float64)
         self._add("Episode/completed_count", done_f)
-        self._add("Episode/completed_return", self.episode_return * done_f)
-        self._add("Episode/completed_length_steps", self.episode_length * done_f)
-        self._add("Episode/completed_length_seconds", self.episode_length * (CONTROL_DT_S * done_f))
-        self.episode_return.mul_((~done).to(torch.float64))
-        self.episode_length.mul_((~done).to(torch.float64))
+        self._add("Episode/completed_return", episode_return * done_f)
+        self._add("Episode/completed_length_steps", episode_length * done_f)
+        self._add("Episode/completed_length_seconds", episode_length * (CONTROL_DT_S * done_f))
+        if self.logger is not None:
+            self.logger.process_env_step(reward64, done, {})
+        else:
+            # Standalone diagnostics retain the same public metrics contract.
+            self.episode_return.copy_(episode_return * (~done))
+            self.episode_length.copy_(episode_length * (~done))
 
         # Preserve actual reason flags when a runtime adds them; absent reasons
         # are omitted rather than fabricated from a generic done flag.
@@ -333,7 +342,8 @@ class LearningMetrics:
         return {"schema": self.SCHEMA, "num_envs": self.num_envs,
                 "plane_world_z": self.plane_world_z,
                 "episode_return": self.episode_return.detach().cpu().clone(),
-                "episode_length": self.episode_length.detach().cpu().clone()}
+                "episode_length": self.episode_length.detach().cpu().clone(),
+                **({"logger": self.logger.episode_state_dict()} if self.logger is not None else {})}
 
     def load_state_dict(self, state: Mapping) -> None:
         if not isinstance(state, Mapping) or state.get("schema") != self.SCHEMA or state.get("num_envs") != self.num_envs:
@@ -348,6 +358,8 @@ class LearningMetrics:
             loaded.append(value.to(self.device))
         if (loaded[1] < 0).any():
             raise ValueError("episode lengths cannot be negative")
+        if self.logger is not None:
+            self.logger.load_episode_state_dict(state.get("logger"))
         self.episode_return.copy_(loaded[0])
         self.episode_length.copy_(loaded[1])
         self._iteration = {}

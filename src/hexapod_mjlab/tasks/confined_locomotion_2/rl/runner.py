@@ -26,13 +26,14 @@ from hexapod_mjlab.rl.confined_locomotion_2.auxiliary import HeightReconstructio
 from hexapod_mjlab.rl.confined_locomotion_2.ppo import TemporalPPOConfig, TemporalPPOTrainer
 from hexapod_mjlab.common.perturbations import ObservationPerturbationCfg
 from hexapod_mjlab.common.provenance import capture_code_provenance
+from hexapod_mjlab.common.training_logger import TrainingLogger
 
 from ..collector import TrainingCollector
 from ..flat_env_cfg import TASK_ID
 from ..runtime import TrainingRuntime
 from ..components.lidar.scanner import ConfinedLidarCfg
 from .checkpoint import architecture_identity, load_full_checkpoint, save_full_checkpoint
-from .reporting import checkpoint_due, format_iteration_summary, optimizer_scalar_summary
+from .reporting import checkpoint_due, optimizer_scalar_summary
 
 
 def environment_semantics(env):
@@ -234,8 +235,11 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
                 joint_permutation=self.joint_permutation,
                 mount_quat_xyzw=self.mount_quat_xyzw,
                 transition_observer=self._observe_transition)
-            from torch.utils.tensorboard import SummaryWriter
-            self.writer = SummaryWriter(log_dir=str(self.log_dir / "tensorboard"))
+            self.logger = TrainingLogger(
+                log_dir=self.log_dir, cfg=self.cfg, env_cfg=env.cfg,
+                num_envs=self.num_envs, device=self.device, source_path=__file__)
+            self.learning_metrics.bind_logger(self.logger)
+            self.writer = self.logger.writer
         except BaseException:
             self.runtime.close()
             raise
@@ -255,14 +259,11 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         self._write_json("run_recipe.json", {"task": self.task_id, "seed": self.seed,
                          "num_envs": self.num_envs, **self.recipe_identity,
                          "code_provenance": self.code_provenance,
+                         "logging": TrainingLogger.IDENTITY,
                          "learning_effect_ready": False})
 
     def _write_json(self, name, data):
         (self.log_dir / name).write_text(json.dumps(data, ensure_ascii=False, indent=2, allow_nan=False))
-
-    def add_git_repo_to_log(self, path):
-        # Official launch calls this; do not initialize remote logging.
-        return None
 
     def _observe_transition(self, transition, output, envelope_label):
         # Diagnostic collectors may be called outside learn() by replay tests;
@@ -276,6 +277,8 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         if isinstance(num_learning_iterations, bool) or not isinstance(num_learning_iterations, int) or not 1 <= num_learning_iterations <= self.max_iterations:
             raise ValueError("learning iteration count exceeds explicit budget")
         target_iteration = self.current_learning_iteration + num_learning_iterations
+        self.logger.begin_learn(completed_iterations=self.current_learning_iteration,
+                                environment_transitions=self.total_env_samples)
         # init_at_random_ep_len is a generic launch argument. Fixed T1 reset
         # and episode lengths are deliberately retained by this task.
         try:
@@ -313,9 +316,11 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
                     self.last_periodic_checkpoint = str(self.save(
                         self.log_dir / f"checkpoint_full_{self.current_learning_iteration:06d}.pt"))
                     scalars["Performance/checkpoint_s"] = time.perf_counter() - checkpoint_started
-                for name, value in scalars.items():
-                    self.writer.add_scalar(name, value, self.current_learning_iteration)
-                self.writer.flush()
+                self.logger.log_iteration(
+                    completed_iteration=self.current_learning_iteration,
+                    target_iteration=target_iteration, scalars=scalars,
+                    learning_rate=self.trainer.optimizer.param_groups[0]["lr"],
+                    action_std=self.provider.log_std.exp())
                 with (self.log_dir / "learning_metrics.jsonl").open("a") as stream:
                     stream.write(json.dumps({"iteration": self.current_learning_iteration, **scalars},
                                             ensure_ascii=False, allow_nan=False) + "\n")
@@ -323,8 +328,6 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
                 self.records.append(record)
                 with (self.log_dir / "iteration_records.jsonl").open("a") as stream:
                     stream.write(json.dumps(record, ensure_ascii=False, allow_nan=False) + "\n")
-                print(format_iteration_summary(
-                    self.current_learning_iteration, target_iteration, self.num_envs, scalars), flush=True)
             final = self.log_dir / f"final_checkpoint_full_{self.current_learning_iteration:06d}.pt"
             periodic = self.log_dir / f"checkpoint_full_{self.current_learning_iteration:06d}.pt"
             if self.last_periodic_checkpoint == str(periodic) and periodic.is_file():
@@ -382,9 +385,9 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
             if error is None:
                 error = failure
         try:
-            writer = getattr(self, "writer", None)
-            if writer is not None:
-                writer.close()
+            logger = getattr(self, "logger", None)
+            if logger is not None:
+                logger.close()
         except Exception as failure:
             if error is None:
                 error = failure

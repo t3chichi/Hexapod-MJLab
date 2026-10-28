@@ -37,6 +37,8 @@ Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjl
 
 每轮采集24个控制步，5 epochs×4 minibatches，共20次Adam更新。完整rollout优势统一归一化；原始/镜像保留独立GRU历史，episode边界清零，跨rollout保留时间状态。Bootstrap使用隐藏状态副本，不推进在线历史。具体固定PPO数值由 [`TemporalPPOConfig`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py)维护。Flat/Terrain 的动作分布沿用独立高斯的 `log_std` 参数化，初始 `std=1.0`（`log_std=0`）；原 v1 Flat 默认仍为 `std=0.5`，Tripod 保留直接优化 `std=1.0` 的 Legacy 配方。此变更仅针对新训练起点；通过当前完整恢复检查的 Checkpoint 加载其已保存的动作分布参数，不会重新初始化为 1.0。缺少物理签名的历史文件只适用后文说明的 weights-only 边界。
 
+Flat v2、Terrain和Tripod使用官方 RSL-RL Logger 负责writer、episode统计与默认终端输出。官方 `Train/mean_reward` 和 `Train/mean_episode_length` 是最近最多100个完成episode的滚动均值；既有 `Episode/mean_return` 与 `Episode/mean_length_steps` 仍统计本轮完成的episode。TensorBoard官方迭代索引从0起，JSONL与checkpoint继续使用累计完成轮数；详见[监控与保存](training/监控与保存.md)。
+
 Flat Baseline无高度头、标签或高度损失，既有网络、观测、动作、奖励和控制语义保留。六维包络暂使用既有固定形态参考；未扩展动态形态Oracle或形态控制。
 
 ## 地形与高度辅助监督
