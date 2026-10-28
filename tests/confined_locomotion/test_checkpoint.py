@@ -205,6 +205,7 @@ def _base_identity() -> dict:
     "distribution_identity_frozen": "normal-18",
     "observation_perturbations": {"mode": "clean"},
     "model": {
+      "physics": {"schema": "hexapod_mjlab.model_physics/v1", "fields": {"body_mass": "mass"}},
       "dims": {"nq": 25, "nv": 24, "nu": 18},
       "joint_names": ["joint_a"],
       "actuator_names": ["actuator_a"],
@@ -293,6 +294,17 @@ def test_identity_rejects_missing_required_model_structure():
     assert "compiled-model structure" in str(error)
   else:
     raise AssertionError("missing compiled-model structure accepted")
+
+
+def test_identity_rejects_legacy_without_physical_identity():
+  saved = _base_identity()
+  saved["model"].pop("physics")
+  try:
+    _compare_identity(_base_identity(), saved)
+  except CheckpointError as error:
+    assert "physical model identity" in str(error) and "weights-only" in str(error)
+  else:
+    raise AssertionError("unverifiable legacy physics accepted for full resume")
 
 
 # ═══════════════════════ stable save boundary rejections ═══════════════════

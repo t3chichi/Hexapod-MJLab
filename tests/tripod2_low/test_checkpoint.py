@@ -72,6 +72,7 @@ class CheckpointTests(unittest.TestCase):
                 },
             },
             "compiled_model": {
+                "physics": {"schema": "hexapod_mjlab.model_physics/v1", "fields": {"body_mass": "nominal mass"}},
                 "dims": {}, "joint_names": [], "actuator_names": [],
                 "actuator_gear": [], "q_ref": [], "options": {},
             },
@@ -140,6 +141,8 @@ class CheckpointTests(unittest.TestCase):
             (lambda state: state["identity"].update(warmup_control_steps=2), "warmup_control_steps"),
             (lambda state: state["identity"]["recipe"].update(ppo={"lr": 0.1}), "training recipe"),
             (lambda state: state["identity"]["recipe"].update(actuator_sha256="asset-b"), "actuator_sha256"),
+            (lambda state: state["identity"]["compiled_model"].pop("physics"), "physical model identity"),
+            (lambda state: state["identity"]["compiled_model"]["physics"]["fields"].update(body_mass="changed nominal"), "physical model differs"),
             (lambda state: state["action"].pop("sea_cell_state"), "action keys differ"),
             (lambda state: state["runtime"].pop("stage_controller"), "runtime keys differ"),
             (lambda state: state["random"].pop("numpy"), "random keys differ"),

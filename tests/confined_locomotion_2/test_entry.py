@@ -18,6 +18,7 @@ def _checkpoint_identity():
         "num_envs": 2,
         "scan_identity": {"catalog": "fixture", "mode": "full"},
         "compiled_model": {
+            "physics": {"schema": "hexapod_mjlab.model_physics/v1", "fields": {"body_mass": "mass"}},
             "dims": {"nq": 25, "nu": 18},
             "joint_names": ["RF_HAA"],
             "actuator_names": ["RF_HAA"],
@@ -109,6 +110,33 @@ def test_identity_compares_optional_semantics_without_legacy_breakage():
         assert "compiled-model" in str(error)
     else:
         raise AssertionError("model structure change accepted")
+
+
+def test_full_resume_rejects_unknown_or_changed_physics_before_any_apply():
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    from hexapod_mjlab.tasks.confined_locomotion_2.rl import checkpoint as cp
+
+    current = _checkpoint_identity()
+    runner = SimpleNamespace(phase="fresh", _active_buffer=None, task_id=TASK_ID,
+                             runtime=SimpleNamespace(lidar_cfg=SimpleNamespace(far_sampling="all_endpoints")),
+                             network=Mock())
+    for legacy in (False, True):
+        saved = copy.deepcopy(current)
+        if legacy:
+            saved["compiled_model"].pop("physics")
+        else:
+            saved["compiled_model"]["physics"]["fields"]["body_mass"] = "other mass"
+        with patch.object(cp, "read_checkpoint", return_value={"identity": saved}), \
+             patch.object(cp, "identity", return_value=current):
+            try:
+                cp.load_full_checkpoint(runner, "unused.pt")
+            except ValueError as error:
+                assert "physical model" in str(error)
+            else:
+                raise AssertionError("incompatible physics accepted")
+        assert runner.phase == "fresh"
+        assert not runner.network.mock_calls
 
 
 def test_registry_keeps_original_and_new_task_separate_and_defaults_guarded():

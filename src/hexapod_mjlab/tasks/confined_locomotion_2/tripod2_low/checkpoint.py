@@ -32,7 +32,7 @@ def architecture_identity(far_sampling="all_endpoints"):
 
 
 def identity(runner):
-    result = base.identity(runner)
+    result = base.identity(runner, restored_model_fields=MODEL_FIELDS)
     result["warmup_control_steps"] = WARMUP_CONTROL_STEPS
     return result
 

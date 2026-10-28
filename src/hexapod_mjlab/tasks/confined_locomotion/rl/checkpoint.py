@@ -90,6 +90,7 @@ from ..flat_env_cfg import TASK_ID, DECIMATION, SIM_TIMESTEP_S
 from hexapod_mjlab.common.checkpoint import (
   CheckpointFault,
   EXTRA_PERSISTENT_PHYSICS_FIELDS,
+  compare_model_physics,
   compiled_model_identity as _compiled_model_identity,
   manager_tensors as _manager_tensors,
   physics_arrays as _physics_arrays,
@@ -905,6 +906,10 @@ def _compare_identity(current: dict, saved: dict) -> None:
       f"{json.dumps(saved_model, default=str, sort_keys=True)[:400]} != current "
       f"{json.dumps(current_model, default=str, sort_keys=True)[:400]}"
     )
+  try:
+    compare_model_physics(current["model"].get("physics"), saved["model"].get("physics"))
+  except ValueError as error:
+    raise CheckpointError(str(error)) from error
   for key in _OPTIONAL_IDENTITY_KEYS:
     if key not in saved:
       continue  # legacy files did not record this semantic block

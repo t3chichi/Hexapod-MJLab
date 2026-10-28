@@ -14,6 +14,7 @@ import torch
 
 from hexapod_mjlab.tasks.confined_locomotion_2.sampling import sampling_identity
 from hexapod_mjlab.common.checkpoint import (
+    compare_model_physics,
     compiled_model_identity as _compiled_model_identity,
     manager_tensors as _manager_tensors,
     physics_arrays as _physics_arrays,
@@ -65,13 +66,14 @@ def architecture_identity(far_sampling="all_endpoints", *, terrain_memory=False)
     return result
 
 
-def identity(runner):
+def identity(runner, *, restored_model_fields=()):
     return {"architecture": runner.recipe_identity["architecture"], "seed": runner.seed,
             "num_envs": runner.num_envs, "device": str(runner.device),
             "cuda_name": torch.cuda.get_device_name(runner.device) if runner.device.type == "cuda" else None,
             "torch": torch.__version__, "recipe": runner.recipe_identity,
             "scan_identity": runner.runtime.scan_identity,
-            "compiled_model": _compiled_model_identity(runner.runtime.env)}
+            "compiled_model": _compiled_model_identity(
+                runner.runtime.env, restored_model_fields=restored_model_fields)}
 
 
 #: Fields that determine whether the saved training state is compatible.
@@ -136,6 +138,9 @@ def compare_identity(current, saved, *, extra_keys=()):
         raise ValueError("checkpoint identity is missing the compiled-model structure")
     if current_model != saved_model:
         raise ValueError("full resume identity differs on the compiled-model structure")
+    compare_model_physics(
+        current["compiled_model"].get("physics"), saved["compiled_model"].get("physics")
+    )
     _compare_recipe(current.get("recipe"), saved.get("recipe"))
 
 

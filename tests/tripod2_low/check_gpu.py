@@ -54,7 +54,17 @@ def main():
         first.env.unwrapped.close()
     second = create(root / "restored")
     try:
+        from hexapod_mjlab.common.checkpoint import model_physics_identity
+        from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.checkpoint import _model_tensors, read_checkpoint
+        nominal = model_physics_identity(second.runtime.env.sim.mj_model)
+        saved_model = read_checkpoint(checkpoint)["model"]
+        with torch.no_grad():
+            for value in _model_tensors(second.runtime.env).values():
+                value.mul_(.5)  # Different live DR state, same nominal model.
         second.load(checkpoint)
+        assert nominal == model_physics_identity(second.runtime.env.sim.mj_model)
+        for name, value in _model_tensors(second.runtime.env).items():
+            assert torch.equal(value.cpu(), saved_model[name]), name
         after = second.runtime.prepare()
         if not torch.equal(before.near_points, after.near_points) or not torch.equal(
                 before.observation.proprio_vector(), after.observation.proprio_vector()):
@@ -63,6 +73,7 @@ def main():
         torch.testing.assert_close(actual.context_record["qpos"], expected_qpos, atol=1e-6, rtol=1e-5)
         torch.testing.assert_close(actual.reward, expected_reward, atol=1e-6, rtol=1e-5)
         print(json.dumps({"status": "passed", "finite_updates": 1,
+                          "randomized_model_restored": True,
                           "strict_next_transition": True, "artifacts": str(root),
                           "learning_effect_verified": False}))
     finally:
