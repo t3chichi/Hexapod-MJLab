@@ -27,8 +27,9 @@ python -B scripts/experiments/confined_locomotion_2/sparse_rays/select_channels.
 
 - Flat Baseline：`scripts/experiments/confined_locomotion_2/train.py`
 - Terrain Memory：`scripts/experiments/confined_locomotion_2/train_terrain_memory.py`
+- Tripod2 Low迁移对照：`scripts/experiments/confined_locomotion_2/train_tripod2_low.py`；独立Legacy配方及Play见[任务说明](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/README.md)
 
-两者都要求显式 seed、num-envs 和 iterations；Terrain Memory 还要求 `--height-loss-weight`。正式运行的任务身份、resume 参数和只读 Play 入口以[快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)为准。性能实验的临时脚本、工作树副本或个人日志目录不是正式入口，也不作为克隆仓库的依赖。
+Flat/Terrain都要求显式 seed、num-envs 和 iterations；Terrain Memory 还要求 `--height-loss-weight`。Tripod的默认预算和运行语义按其独立说明执行，不套用Flat/Terrain性能测量。正式运行的任务身份、resume 参数和只读 Play 入口以[快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)为准。性能实验的临时脚本、工作树副本或个人日志目录不是正式入口，也不作为克隆仓库的依赖。
 
 ## 容量测量建议
 
@@ -47,3 +48,5 @@ python -B scripts/experiments/confined_locomotion_2/benchmark_collection.py \
 当前 RTX 4050 结果与测量边界整理在[2026-10-26 地形记忆与性能记录](records/20261026_terrain_memory_and_performance.md)。这些有限工程运行不构成 5090 容量、长期稳定性或学习效果结论。
 
 已验证的两批采集优化在目录重构后的迁移范围、回归结果与512环境有限采集记录见[迁移验收](records/20261027_optimization_migration.md)。
+
+上述records保留当时的源码身份、恢复政策和性能数据，不表示当前loader仍接受那些历史文件。当前优化保留情况见[任务说明](../../../docs/tasks/confined_locomotion_2/README.md#执行与显存设置)，完整恢复与物理签名政策见[监控与保存](../../../docs/tasks/confined_locomotion_2/training/监控与保存.md)。

@@ -59,7 +59,7 @@ python -B tests/confined_locomotion_2/run_checks.py
 - `check_gpu.py`：Flat_2 的有限训练、保存、恢复和同轨迹优化器重放。
 - `check_physics_identity_gpu.py`：使用新生成的Flat hit10检查点，验证质量翻倍/旧物理身份缺失在任何状态应用前拒绝，以及同模型/源码工厂搬移仍能恢复。
 - `check_terrain_geometry_gpu.py`、`check_terrain_sequence_gpu.py`、`check_terrain_auxiliary_gpu.py`：真实 Heightfield、标签、时序重放和辅助更新。
-- `check_terrain_checkpoint_gpu.py`、`check_terrain_play_gpu.py`：需要匹配当前源码与配方的 Terrain checkpoint。
+- `check_terrain_checkpoint_gpu.py`：需要含新物理签名、模型及配方兼容的Terrain checkpoint；`check_terrain_play_gpu.py`按其固定配方验证weights-only，不代表完整恢复。
 - `check_sampling_gpu.py`、`check_fixed_sparse_gpu.py`、`check_far_hit_gpu.py`、`check_far_shorttrain_gpu.py`、`benchmark_fixed_training_gpu.py`：采样与性能专项，部分需要匹配 checkpoint 或 selection。
 - `check_viewer_gpu.py`：双 viewer 共存验证，使用独立端口。
 - `check_package.py`：隔离 wheel 资源与固定 selection 检查。

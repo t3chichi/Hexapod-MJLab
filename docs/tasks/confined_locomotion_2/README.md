@@ -35,7 +35,7 @@ Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjl
 | Actor / Critic | 对称输入 `[时间状态187, 本体63, 指令3, detach(包络6)]` 共259维；分别为512→256→128的MLP，输出18 / 1 |
 | 高度头 | 仅Terrain Memory：时间状态187维→`Linear(187,187)`→11×17；只用于辅助损失 |
 
-每轮采集24个控制步，5 epochs×4 minibatches，共20次Adam更新。完整rollout优势统一归一化；原始/镜像保留独立GRU历史，episode边界清零，跨rollout保留时间状态。Bootstrap使用隐藏状态副本，不推进在线历史。具体固定PPO数值由 [`TemporalPPOConfig`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py)维护。Flat/Terrain 的动作分布沿用独立高斯的 `log_std` 参数化，初始 `std=1.0`（`log_std=0`）；原 v1 Flat 默认仍为 `std=0.5`，Tripod 保留直接优化 `std=1.0` 的 Legacy 配方。此变更仅针对新训练起点，历史 Checkpoint 恢复加载其已保存的动作分布参数，不会重新初始化为 1.0。
+每轮采集24个控制步，5 epochs×4 minibatches，共20次Adam更新。完整rollout优势统一归一化；原始/镜像保留独立GRU历史，episode边界清零，跨rollout保留时间状态。Bootstrap使用隐藏状态副本，不推进在线历史。具体固定PPO数值由 [`TemporalPPOConfig`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py)维护。Flat/Terrain 的动作分布沿用独立高斯的 `log_std` 参数化，初始 `std=1.0`（`log_std=0`）；原 v1 Flat 默认仍为 `std=0.5`，Tripod 保留直接优化 `std=1.0` 的 Legacy 配方。此变更仅针对新训练起点；通过当前完整恢复检查的 Checkpoint 加载其已保存的动作分布参数，不会重新初始化为 1.0。缺少物理签名的历史文件只适用后文说明的 weights-only 边界。
 
 Flat Baseline无高度头、标签或高度损失，既有网络、观测、动作、奖励和控制语义保留。六维包络暂使用既有固定形态参考；未扩展动态形态Oracle或形态控制。
 
@@ -74,6 +74,18 @@ FPS按米制BASE XYZ进行，首点为最大范数点，并列取pool原顺序�
 两个训练入口接受 `--execution-mode low_memory|speed`，默认 `low_memory`。它对点GRU激活做反向重计算，`speed`保留激活；FP32、样本、损失及20次更新顺序相同。当前采集编码块最多128行，点GRU重放块最多1024份独立扫描；1024是面向32 GB RTX5090的首轮候选，实际块大小受本轮扫描数限制，不是PPO minibatch大小。
 
 固定点云打包、观测缩放、目标/镜像标签在rollout内复用；GRU特征及预测仍随每次Adam更新重算。有限性检查在各优化器阶段合批，日志延后读取；逐次KL学习率调度保留。没有引入混合精度或自动OOM降级。性能测量与未采用方案见[实验记录](../../../scripts/experiments/confined_locomotion_2/records/20261026_terrain_memory_and_performance.md)，不将本机容量外推到5090。
+
+以重构前 `f818178` 为对照，Flat/Terrain 的以下优化仍在正式路径中：
+
+| 优化 | 当前实现与边界 |
+|---|---|
+| 采集特征复用 | [`collector.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/collector.py) 按扫描/episode身份仅编码变化行，原始与镜像缓存独立，输出有独立存储，更新后清空 |
+| 批量扫描与历史写入 | [`scanner.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/scanner.py)、`sparse_raycast.py`、`runtime.py`及RL `history.py`保留到期行批量处理、逐行随机流和窗口原子写入；full/sparse仍显式选择 |
+| 重放与显存 | [`training_rollout.py`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/training_rollout.py) 保留唯一扫描去重、packed输入、分段时间GRU及参数无关的准备复用；`low_memory`保留点GRU激活重计算 |
+| 同步与指标 | [`ppo.py`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py) 保留分阶段有限性归约、更新后批量搬运诊断标量；不会跨Adam更新缓存训练特征 |
+| 保存与日志 | Flat/Terrain保留累计周期保存、周期/最终文件硬链接复用和已有指标摘要；提取到公共reporting模块未改变这些计算 |
+
+Tripod复用同一Collector、网络和重放路径，但保留Legacy PPO；其最终文件仍独立保存，不声称采用Flat/Terrain的硬链接复用。v1继续保留独立的无梯度点云特征缓存。优化分支未采用的RL CUDA Graph、密集分组和fused Adam试验没有因重构进入正式训练实现；MJLab既有的仿真图机制保持原样。以上确认实现保留，不代表重新测得相同吞吐：物理签名增加模型读取与哈希工作，代码溯源在Runner启动时采集，整轮墙钟性能需在固定条件下另测。
 
 ## 可视化与模型边界
 
