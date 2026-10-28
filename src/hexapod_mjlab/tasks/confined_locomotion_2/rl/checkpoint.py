@@ -12,7 +12,7 @@ import uuid
 import numpy as np
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion_2.sampling import sampling_identity
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.sampling import sampling_identity
 from hexapod_mjlab.common.checkpoint import (
     compare_model_physics,
     compiled_model_identity as _compiled_model_identity,

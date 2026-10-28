@@ -346,7 +346,7 @@ def test_play_scan_override_must_be_bool(tmp_path):
 
 
 def test_scan_override_rejects_far_sampling_change():
-    from hexapod_mjlab.tasks.confined_locomotion_2.sampling import sampling_identity
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.sampling import sampling_identity
 
     catalog = {"schema": "confined_locomotion_2.fixed_channels/v1", "ray_count": 86400}
     checkpoint_identity = {

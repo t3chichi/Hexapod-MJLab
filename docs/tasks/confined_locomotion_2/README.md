@@ -16,13 +16,13 @@
 
 | 任务 | 注册身份 | 配置 | 训练 / Play脚本 |
 |---|---|---|---|
-| Flat Baseline | `El-4090-Confined-Locomotion-Flat_2` | [`config/flat_baseline.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline.py) | `train.py` / `play_flat.py` |
-| Terrain Memory | `El-4090-Confined-Locomotion-Terrain-Memory_2` | [`config/terrain_memory.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory.py) | `train_terrain_memory.py` / `play_terrain_memory.py` |
+| Flat Baseline | `El-4090-Confined-Locomotion-Flat_2` | [`config/flat_baseline_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline_config.py) | `train.py` / `play_flat.py` |
+| Terrain Memory | `El-4090-Confined-Locomotion-Terrain-Memory_2` | [`config/terrain_memory_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory_config.py) | `train_terrain_memory.py` / `play_terrain_memory.py` |
 | Tripod2 Low | `El-4090-Confined-Locomotion-Flat-Tripod2-Low_2` | [`tripod2_low/env.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/env.py) / [`tripod2_low/runner.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/runner.py) | `train_tripod2_low.py` / `play_tripod2_low.py` |
 
 脚本统一位于 `scripts/experiments/confined_locomotion_2/`。三个任务均由包内 `__init__.py`集中注册，训练需显式提供seed、环境数和轮数；Terrain额外要求正的高度损失权重。注册默认配置不直接授权训练。
 
-Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjlab/common/flat_env.py)；任务 `flat_env_cfg.py`只保留Task ID和既有任务接口。Terrain/Tripod复用该工厂并各自覆盖地形、执行器或MDP；MDP、Runtime、雷达及可视化保留在任务包内。网络与PPO位于 `rl/confined_locomotion_2/`。不复制整套环境或训练实现，不提供旧 `play.py`、`rl_cfg.py`的转发层。原 `confined_locomotion`任务仍独立存在，共享地形查询入口未启用时继续使用原平面。
+Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjlab/common/flat_env.py)；任务 `flat_env_cfg.py`只保留Task ID和既有任务接口。Terrain/Tripod复用该工厂并各自覆盖地形、执行器或MDP。`config/`仅放各注册任务的配方配置；`components/`放任务家族共享或按需组合的环境与感知组件，其中地形实现与查询分别位于 [`components/terrain_geometry.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/terrain_geometry.py) 和 [`components/terrain_query.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/terrain_query.py)，LiDAR扫描、通道、稀疏射线和采样实现位于 [`components/lidar/`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/lidar/)。MDP、Runtime及可视化仍位于任务包内；网络与PPO位于 `rl/confined_locomotion_2/`。本次仅整理模块目录，不改变训练数值或既有验证结果。不复制整套环境或训练实现，不提供旧 `play.py`、`rl_cfg.py`的转发层。原 `confined_locomotion`任务仍独立存在，共享地形查询入口未启用时继续使用原平面。
 
 ## 网络与训练
 
@@ -41,7 +41,7 @@ Flat Baseline无高度头、标签或高度损失，既有网络、观测、动�
 
 ## 地形与高度辅助监督
 
-当前Terrain Memory使用10×8 m、49×65采样的静态单值Heightfield，包含平坦出生平台和非平地表。地面由 [`make_default_terrain`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory.py)生成，不需要外部地形文件。接触、雷达及标签查询读取同一实际编译地形，没有额外隐藏平面或独立近似标签地形。
+当前Terrain Memory使用10×8 m、49×65采样的静态单值Heightfield，包含平坦出生平台和非平地表。地面由 [`make_default_terrain`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory_config.py)生成，不需要外部地形文件。接触、雷达及标签查询读取同一实际编译地形，没有额外隐藏平面或独立近似标签地形。
 
 网格以当前动作前Root为中心，X方向17点、Y方向11点，物理范围为X±0.75 m、Y±0.65 m；相邻点间距分别为0.09375 m和0.13 m。网格随水平位置及Yaw移动，不随Roll/Pitch倾斜。沿世界竖直方向查询地表，所有187点共用Root的世界Z参考：
 
@@ -80,7 +80,7 @@ FPS按米制BASE XYZ进行，首点为最大范数点，并列取pool原顺序�
 | 优化 | 当前实现与边界 |
 |---|---|
 | 采集特征复用 | [`collector.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/collector.py) 按扫描/episode身份仅编码变化行，原始与镜像缓存独立，输出有独立存储，更新后清空 |
-| 批量扫描与历史写入 | [`scanner.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/scanner.py)、`sparse_raycast.py`、`runtime.py`及RL `history.py`保留到期行批量处理、逐行随机流和窗口原子写入；full/sparse仍显式选择 |
+| 批量扫描与历史写入 | [`components/lidar/scanner.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/lidar/scanner.py)、[`components/lidar/sparse_raycast.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/lidar/sparse_raycast.py)、`runtime.py`及RL `history.py`保留到期行批量处理、逐行随机流和窗口原子写入；full/sparse仍显式选择 |
 | 重放与显存 | [`training_rollout.py`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/training_rollout.py) 保留唯一扫描去重、packed输入、分段时间GRU及参数无关的准备复用；`low_memory`保留点GRU激活重计算 |
 | 同步与指标 | [`ppo.py`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py) 保留分阶段有限性归约、更新后批量搬运诊断标量；不会跨Adam更新缓存训练特征 |
 | 保存与日志 | Flat/Terrain保留累计周期保存、周期/最终文件硬链接复用和已有指标摘要；提取到公共reporting模块未改变这些计算 |

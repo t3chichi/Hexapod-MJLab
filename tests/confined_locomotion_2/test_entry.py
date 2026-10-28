@@ -3,7 +3,7 @@ from dataclasses import asdict
 
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import (
+from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline_config import (
     confined_locomotion_rl_cfg, confined_locomotion_formal_rl_cfg,
 )
 from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import TASK_ID
@@ -154,7 +154,7 @@ def test_registry_keeps_original_and_new_task_separate_and_defaults_guarded():
 
 def test_terrain_memory_registration_is_real_independent_and_guarded():
     from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
-    from hexapod_mjlab.tasks.confined_locomotion_2.config import terrain_memory
+    from hexapod_mjlab.tasks.confined_locomotion_2.config import terrain_memory_config as terrain_memory
 
     assert terrain_memory.TASK_ID != TASK_ID
     assert terrain_memory.TASK_ID in list_tasks()

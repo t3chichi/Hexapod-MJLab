@@ -27,9 +27,9 @@ def main():
         from mjlab.envs import ManagerBasedRlEnv
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
         from mjlab.utils.torch import configure_torch_backends
-        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import make_play_env_cfg
+        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import make_play_env_cfg
         from hexapod_mjlab.tasks.confined_locomotion_2.play_terrain_memory import TerrainMemoryPlaySession
-        from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg
         from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play_cli import PlayOwner
         from hexapod_mjlab.tasks.confined_locomotion_2.visualization.terrain_memory import TerrainMemoryViewer, height_points_world
         from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play import export_snapshot_manifest

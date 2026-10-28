@@ -126,8 +126,8 @@ from hexapod_mjlab.common.transition import (
     TransitionContext,
     require_finite,
 )
-from .scanner import ConfinedLidarCfg, ConfinedScanPipeline
-from .sampling import sampling_identity
+from .components.lidar.scanner import ConfinedLidarCfg, ConfinedScanPipeline
+from .components.lidar.sampling import sampling_identity
 
 __all__ = [
     "ENGINEERING_FALL_HEIGHT_M",
@@ -388,7 +388,7 @@ class TrainingRuntime:
         self.terrain_query = None
         self._height_label = None
         if height_grid is not None:
-            from .terrain_geometry import HeightGridCfg, TerrainGeometryQuery
+            from .components.terrain_query import HeightGridCfg, TerrainGeometryQuery
             if not isinstance(height_grid, HeightGridCfg):
                 raise TypeError("height_grid must be HeightGridCfg or None")
             self.terrain_query = TerrainGeometryQuery(env)

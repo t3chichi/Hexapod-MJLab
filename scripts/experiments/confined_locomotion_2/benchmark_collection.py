@@ -22,6 +22,20 @@ sys.path.insert(0, str(ROOT / "src"))
 def reference_method(module, cls, method, revision):
     """Load only an accepted method body for a bounded in-process comparison."""
     path = Path(module.__file__).resolve().relative_to(ROOT)
+    # Historical comparisons predate the component directory. Resolve the
+    # source in that revision without restoring an obsolete import package.
+    family = Path("src/hexapod_mjlab/tasks/confined_locomotion_2")
+    previous_paths = {
+        family / "components/lidar/scanner.py": family / "scanner.py",
+        family / "components/lidar/sparse_raycast.py": family / "sparse_raycast.py",
+    }
+    if path in previous_paths:
+        exists = subprocess.run(
+            ["git", "cat-file", "-e", f"{revision}:{path}"], cwd=ROOT,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        if exists.returncode:
+            path = previous_paths[path]
     source = subprocess.check_output(["git", "show", f"{revision}:{path}"], cwd=ROOT, text=True)
     node = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == cls.__name__)
     method_node = next(n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == method)
@@ -64,11 +78,12 @@ def main():
     import torch
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
-    from hexapod_mjlab.tasks.confined_locomotion_2 import collector, scanner, sparse_raycast
+    from hexapod_mjlab.tasks.confined_locomotion_2 import collector
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar import scanner, sparse_raycast
     from hexapod_mjlab.tasks.confined_locomotion_2 import runtime
     from hexapod_mjlab.rl.confined_locomotion_2 import history
     from hexapod_mjlab.common import perturbations
-    from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import make_training_env_cfg, terrain_memory_formal_rl_cfg
+    from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import make_training_env_cfg, terrain_memory_formal_rl_cfg
     from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import ConfinedLocomotionRunner
 
     if args.variant == "baseline":
@@ -99,7 +114,7 @@ def main():
             cfg = terrain_memory_formal_rl_cfg(seed=args.seed, num_envs=args.num_envs,
                                               max_iterations=1, height_loss_weight=1.0)
         else:
-            from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import confined_locomotion_formal_rl_cfg
+            from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline_config import confined_locomotion_formal_rl_cfg
             from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg
             cfg = confined_locomotion_formal_rl_cfg(seed=args.seed, num_envs=args.num_envs, max_iterations=1)
         cfg.lidar_config = {"raycast_mode": "sparse", "far_sampling": "hit_only_10m",

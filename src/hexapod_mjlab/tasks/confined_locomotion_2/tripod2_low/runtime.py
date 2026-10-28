@@ -12,7 +12,7 @@ from hexapod_mjlab.common.robot import FOOT_BODIES
 from hexapod_mjlab.rl.confined_locomotion_2.history import ScanWindow
 from ..runtime import TrainingRuntime, TrainingTransition
 from ..observation import ControlInputCache, clone_prepared
-from ..scanner import ConfinedLidarCfg, ConfinedScanPipeline
+from ..components.lidar.scanner import ConfinedLidarCfg, ConfinedScanPipeline
 from .env import TASK_ID, owners
 from .legacy import DT, FOOT_ORDER, REWARD_WEIGHTS, compute_legacy_rewards
 

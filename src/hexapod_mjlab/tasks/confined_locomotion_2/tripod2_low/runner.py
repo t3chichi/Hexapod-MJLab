@@ -24,7 +24,7 @@ from ..rl.reporting import (
     optimizer_scalar_summary,
 )
 from ..rl.runner import ConfinedLocomotionRunner, environment_semantics
-from ..scanner import ConfinedLidarCfg
+from ..components.lidar.scanner import ConfinedLidarCfg
 from .actuator import ACTUATOR_PATH
 from .legacy import reward_scales
 from .checkpoint import architecture_identity, load_full_checkpoint, save_full_checkpoint

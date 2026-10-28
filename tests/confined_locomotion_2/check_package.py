@@ -44,7 +44,7 @@ from pathlib import Path
 sys.path.insert(0, sys.argv[1])
 import numpy as np
 import hexapod_mjlab
-from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog, load_sparse_selection
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog, load_sparse_selection
 package = Path(hexapod_mjlab.__file__).resolve().parent
 assert package.is_relative_to(Path(sys.argv[1]).resolve())
 catalog = build_channel_catalog()

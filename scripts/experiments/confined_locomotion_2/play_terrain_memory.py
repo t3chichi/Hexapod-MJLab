@@ -3,7 +3,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
-from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import TASK_ID, make_play_env_cfg
+from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import TASK_ID, make_play_env_cfg
 from hexapod_mjlab.tasks.confined_locomotion_2.play_terrain_memory import TerrainMemoryPlaySession
 from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play_cli import PlayOwner, main
 from hexapod_mjlab.tasks.confined_locomotion_2.visualization.terrain_memory import TerrainMemoryViewer

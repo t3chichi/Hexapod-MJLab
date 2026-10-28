@@ -12,7 +12,7 @@ import numpy as np
 
 from hexapod_mjlab.common import robot as common_robot, witness as common_witness
 from hexapod_mjlab.common.reset import settled_reset_joint_pos
-from hexapod_mjlab.tasks.confined_locomotion_2.channels import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import (
     ChannelCatalog,
     build_channel_catalog,
     load_sparse_selection,

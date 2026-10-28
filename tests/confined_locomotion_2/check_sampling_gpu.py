@@ -228,7 +228,7 @@ def _assert_frame_selection(frame, reference, pipeline, label, *, cpu_reference=
     pool_points = frame.pool_points_base
     # The pool consumes P6-noisy points; raw_points_base is unperturbed audit
     # geometry. Both use the same acquisition-time sensor-to-BASE transform.
-    from hexapod_mjlab.tasks.confined_locomotion_2.scanner import _quat_apply_xyzw
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import _quat_apply_xyzw
     consumed_base = _quat_apply_xyzw(
         pipeline._mount_q.expand(frame.points_sensor.shape[0], 4), frame.points_sensor
     ) + pipeline._mount_t.expand(frame.points_sensor.shape[0], 3)
@@ -552,7 +552,7 @@ def main():
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
         from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg
         from hexapod_mjlab.tasks.confined_locomotion_2.runtime import TrainingRuntime
-        from hexapod_mjlab.tasks.confined_locomotion_2 import scanner, sampling
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar import scanner, sampling
         from hexapod_mjlab.common.perturbations import preset_by_name
 
         required = (

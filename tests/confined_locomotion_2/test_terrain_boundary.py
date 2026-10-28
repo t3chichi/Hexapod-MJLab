@@ -130,7 +130,7 @@ class TerrainBoundaryTest(unittest.TestCase):
         self.assertTrue(torch.allclose(raw, torch.tensor([4 * 0.12**2])))
 
     def test_terrain_only_config_registers_boundary_timeout(self):
-        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import (
+        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import (
             make_training_env_cfg,
         )
         from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import (

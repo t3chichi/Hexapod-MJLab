@@ -16,9 +16,10 @@ import torch
 from scipy.spatial.transform import Rotation
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.utils.torch import configure_torch_backends
-from hexapod_mjlab.tasks.confined_locomotion_2 import collector as collector_module, scanner as scanner_module
-from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import make_training_env_cfg
-from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import TerrainGeometryQuery, HeightGridCfg
+from hexapod_mjlab.tasks.confined_locomotion_2 import collector as collector_module
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar import scanner as scanner_module
+from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import make_training_env_cfg
+from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import TerrainGeometryQuery, HeightGridCfg
 from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET, ObservationPerturbations
 from hexapod_mjlab.common.reset import reset_env_preserving_unselected_physics
 from hexapod_mjlab.rl.confined_locomotion_2.network import TerrainMemoryNetwork

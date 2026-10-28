@@ -1,10 +1,10 @@
 """Terrain Memory inference over the shared play lifecycle; no optimization."""
 
 from hexapod_mjlab.rl.confined_locomotion_2.network import TerrainMemoryNetwork
-from .config.terrain_memory import TASK_ID
+from .config.terrain_memory_config import TASK_ID
 from .play import PlaySession, PlayConfigError
 from .rl.checkpoint import read_checkpoint
-from .terrain_geometry import HeightGridCfg
+from .components.terrain_query import HeightGridCfg
 from . import display_terrain_memory
 
 

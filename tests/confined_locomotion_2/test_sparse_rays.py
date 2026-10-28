@@ -117,7 +117,7 @@ def test_sparse_stand_mount_and_b8_cone():
 
 
 def test_sparse_frozen_assets_are_catalog_bound_nested_and_explicit():
-    from hexapod_mjlab.tasks.confined_locomotion_2.channels import (
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import (
         build_channel_catalog,
         load_sparse_selection,
     )

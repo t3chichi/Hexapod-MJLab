@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..scanner import ConfinedLidarCfg
+from ..components.lidar.scanner import ConfinedLidarCfg
 from .runner import resolve_recipe
 
 if TYPE_CHECKING:

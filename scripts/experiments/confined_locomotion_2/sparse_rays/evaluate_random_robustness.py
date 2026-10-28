@@ -39,7 +39,7 @@ from select_channels import (
 from evaluate_moving_footprint import cone_axis_body, read_frozen_design, resolve_recipe_names
 from evaluate_obstacles import SCENES, scan_obstacles, surface_probes
 from compare_sampling import fps_ids
-from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog
 
 
 # Main multiplier selection uses traversable/task-relevant geometry only.

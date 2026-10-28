@@ -30,7 +30,7 @@ from hexapod_mjlab.common.provenance import capture_code_provenance
 from ..collector import TrainingCollector
 from ..flat_env_cfg import TASK_ID
 from ..runtime import TrainingRuntime
-from ..scanner import ConfinedLidarCfg
+from ..components.lidar.scanner import ConfinedLidarCfg
 from .checkpoint import architecture_identity, load_full_checkpoint, save_full_checkpoint
 from .reporting import checkpoint_due, format_iteration_summary, optimizer_scalar_summary
 
@@ -118,7 +118,7 @@ def resolve_recipe(cfg):
     terrain = cfg.get("terrain_memory")
     terrain_recipe = {}
     if terrain is not None:
-        from ..terrain_geometry import HeightGridCfg
+        from ..components.terrain_query import HeightGridCfg
         if not isinstance(terrain, dict) or set(terrain) != {"x_range_m", "y_range_m", "height_loss_weight"}:
             raise ValueError("terrain_memory requires explicit grid bounds and height_loss_weight")
         height_grid = HeightGridCfg(tuple(terrain["x_range_m"]), tuple(terrain["y_range_m"]))
@@ -148,7 +148,7 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         terrain = "height_grid" in resolved
         self.task_id = TASK_ID
         if terrain:
-            from ..config.terrain_memory import TASK_ID as TERRAIN_TASK_ID
+            from ..config.terrain_memory_config import TASK_ID as TERRAIN_TASK_ID
             self.task_id = TERRAIN_TASK_ID
         self.num_envs, self.seed = int(env.num_envs), resolved["seed"]
         self.max_iterations = resolved["budget"]

@@ -18,7 +18,7 @@ import numpy as np
 
 from hexapod_mjlab.common.witness import FROZEN_WITNESS_PATH, SETTLED_QPOS
 
-_PACKAGE = Path(__file__).resolve().parents[2]
+_PACKAGE = Path(__file__).resolve().parents[4]
 _MJCF = _PACKAGE / "assets/robots/el_4090/mjcf/el_4090_lidar.xml"
 _GENERATOR = _PACKAGE / "utils/lidar/sensor_pattern/sensor_lidar/genera_lidar_scan_pattern.py"
 _WITNESS = FROZEN_WITNESS_PATH

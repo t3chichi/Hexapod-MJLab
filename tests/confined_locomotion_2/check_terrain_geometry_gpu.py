@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 
-from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import make_default_terrain as fixture_terrain
+from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import make_default_terrain as fixture_terrain
 
 
 def check(condition, message):
@@ -85,11 +85,11 @@ def main():
         check(torch.cuda.is_available(), "real CUDA required")
         from mjlab.envs import ManagerBasedRlEnv
         from mjlab.tasks.registry import list_tasks
-        from hexapod_mjlab.tasks.confined_locomotion_2.channels import load_sparse_selection
-        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_geometry import make_geometry_env_cfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import TASK_ID
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import load_sparse_selection
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_geometry import make_geometry_env_cfg
+        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import TASK_ID
         from hexapod_mjlab.common.reset import reset_env_preserving_unselected_physics
-        from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightGridCfg, TerrainGeometryQuery
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import HeightGridCfg, TerrainGeometryQuery
         from hexapod_mjlab.common.diagnostics import ContactTableReader
 
         device = f"cuda:{args.gpu}"

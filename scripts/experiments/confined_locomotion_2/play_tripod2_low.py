@@ -24,7 +24,7 @@ def main():
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
     from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
-    from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg
     from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.checkpoint import read_checkpoint
     from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.env import make_env_cfg
     from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.runtime import LegacyRuntime

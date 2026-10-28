@@ -12,7 +12,7 @@ from hexapod_mjlab.tasks.confined_locomotion_2.rl.checkpoint import (
     TERRAIN_TASK_ID,
     architecture_identity,
 )
-from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import (
     CompiledHeightfield,
     HeightGridCfg,
 )

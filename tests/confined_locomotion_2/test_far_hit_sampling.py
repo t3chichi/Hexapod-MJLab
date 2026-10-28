@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion_2.sampling import far_candidate_mask, sampling_identity
-from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg, ConfinedScanPipeline
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.sampling import far_candidate_mask, sampling_identity
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg, ConfinedScanPipeline
 
 
 def test_hit10_gate_uses_original_hit_distance_and_gap_validity():
@@ -63,7 +63,7 @@ def test_production_batched_fps_keeps_shortage_slots_and_near_unchanged():
 
 
 def test_hit10_formal_selection_is_the_frozen_6x10_experiment():
-    from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog, load_sparse_selection
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog, load_sparse_selection
     root = Path(__file__).resolve().parents[2]
     current = root / "src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_hit10/near_x6_far_x10.npz"
     catalog = build_channel_catalog()

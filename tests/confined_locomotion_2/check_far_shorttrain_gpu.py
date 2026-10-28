@@ -30,8 +30,8 @@ SELECTION = (
 SOURCE_FILES = (
     "tests/confined_locomotion_2/check_far_shorttrain_gpu.py",
     "src/hexapod_mjlab/tasks/confined_locomotion_2/rl/runner.py",
-    "src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline.py",
-    "src/hexapod_mjlab/tasks/confined_locomotion_2/scanner.py",
+    "src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline_config.py",
+    "src/hexapod_mjlab/tasks/confined_locomotion_2/components/lidar/scanner.py",
     "src/hexapod_mjlab/tasks/confined_locomotion_2/runtime.py",
     "src/hexapod_mjlab/tasks/confined_locomotion_2/collector.py",
     "src/hexapod_mjlab/tasks/confined_locomotion_2/flat_env_cfg.py",
@@ -243,7 +243,7 @@ def main() -> int:
         from mjlab.envs import ManagerBasedRlEnv
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
         from hexapod_mjlab.tasks.confined_locomotion_2 import make_training_env_cfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline import (
+        from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline_config import (
             confined_locomotion_formal_rl_cfg,
         )
         from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import (

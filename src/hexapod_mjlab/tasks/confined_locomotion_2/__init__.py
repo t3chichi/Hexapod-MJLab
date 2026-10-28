@@ -7,8 +7,8 @@ implementations where their recipes explicitly say so.
 
 from mjlab.tasks.registry import register_mjlab_task
 
-from .config import terrain_memory
-from .config.flat_baseline import (
+from .config import terrain_memory_config as terrain_memory
+from .config.flat_baseline_config import (
     ConfinedLocomotionRlCfg, confined_locomotion_engineering_rl_cfg,
     confined_locomotion_formal_rl_cfg, confined_locomotion_rl_cfg,
 )

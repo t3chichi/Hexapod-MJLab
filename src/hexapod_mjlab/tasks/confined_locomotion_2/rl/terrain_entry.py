@@ -6,7 +6,7 @@ import uuid
 
 from mjlab.scripts.train import TrainConfig, launch_training
 
-from ..config.terrain_memory import TASK_ID, make_training_env_cfg, terrain_memory_formal_rl_cfg
+from ..config.terrain_memory_config import TASK_ID, make_training_env_cfg, terrain_memory_formal_rl_cfg
 from .checkpoint import read_checkpoint
 from .launch import (
     LaunchResult,

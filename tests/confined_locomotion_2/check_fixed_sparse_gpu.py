@@ -91,10 +91,10 @@ def _run_obstacle_raycasts(torch, wp, device, catalog, selection_ids: np.ndarray
         from benchmark import make_query
         from check_obstacles_gpu import mesh_for_scene
         from evaluate_obstacles import SCENES, scan_obstacles
-        from hexapod_mjlab.tasks.confined_locomotion_2.sampling import (
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.sampling import (
             farthest_point_sampling_masked,
         )
-        from hexapod_mjlab.tasks.confined_locomotion_2.channels import _t1_pose_and_mount
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import _t1_pose_and_mount
 
         rays = np.asarray(catalog.directions_sensor, dtype=np.float32)
         _pose, _base_pos, _base_rot, mount_flat = _t1_pose_and_mount()
@@ -329,11 +329,11 @@ def main() -> None:
         device = torch.device(f"cuda:{args.gpu}")
         from mjlab.envs import ManagerBasedRlEnv
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
-        from hexapod_mjlab.tasks.confined_locomotion_2.channels import (
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import (
             build_channel_catalog, load_sparse_selection,
         )
         from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.scanner import (
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import (
             ConfinedLidarCfg, ConfinedScanPipeline,
         )
         from hexapod_mjlab.tasks.confined_locomotion_2.runtime import TrainingRuntime

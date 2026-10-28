@@ -172,7 +172,7 @@ def _assert_fresh_session(owner, mode, selection_path, checkpoint, weights, expe
     identity = _identity(session)
     _check(identity.get("mode") == mode, f"runtime scan identity mode is {identity.get('mode')!r}")
     if mode == "sparse":
-        from hexapod_mjlab.tasks.confined_locomotion_2.channels import (
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import (
             build_channel_catalog, load_sparse_selection,
         )
         selected_np, _selection_meta = load_sparse_selection(selection_path, build_channel_catalog())

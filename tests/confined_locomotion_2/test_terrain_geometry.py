@@ -9,12 +9,12 @@ import torch
 
 from mjlab.tasks.registry import list_tasks
 
-from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_geometry import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_geometry import (
     HeightfieldTerrainCfg,
     TERRAIN_GROUP,
     make_geometry_env_cfg,
 )
-from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import (
     CompiledHeightfield,
     HeightGridCfg,
     grid_world_xy,

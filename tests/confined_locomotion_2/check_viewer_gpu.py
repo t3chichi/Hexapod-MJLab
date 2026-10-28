@@ -250,7 +250,7 @@ def main():
         session = PlaySession(
             wrapper=RslRlVecEnvWrapper(env, clip_actions=None),
             checkpoint=args.checkpoint,
-            lidar_cfg=__import__("hexapod_mjlab.tasks.confined_locomotion_2.scanner", fromlist=["ConfinedLidarCfg"]).ConfinedLidarCfg(raycast_mode=args.raycast_mode, sparse_selection_path=args.sparse_selection),
+            lidar_cfg=__import__("hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner", fromlist=["ConfinedLidarCfg"]).ConfinedLidarCfg(raycast_mode=args.raycast_mode, sparse_selection_path=args.sparse_selection),
             output_dir=out / "play",
             seed=args.seed,
             own_environment=False,

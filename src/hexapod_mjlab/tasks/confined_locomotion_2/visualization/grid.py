@@ -3,8 +3,8 @@
 import numpy as np
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import TerrainMemoryRlCfg
-from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightGridCfg, grid_world_xy
+from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import TerrainMemoryRlCfg
+from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import HeightGridCfg, grid_world_xy
 
 
 def configured_grid():

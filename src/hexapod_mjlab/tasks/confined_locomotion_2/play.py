@@ -19,7 +19,7 @@ from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNet
 
 from .flat_env_cfg import make_training_env_cfg
 from .runtime import TrainingRuntime, TrainingRuntimeFrozenError
-from .scanner import ConfinedLidarCfg
+from .components.lidar.scanner import ConfinedLidarCfg
 from .rl.checkpoint import load_weights
 from . import display
 
@@ -220,7 +220,7 @@ class PlaySession:
         # Older fixed-channel identities omit a sampling field and retain the
         # legacy all-endpoints semantics. Any explicit sampling variant must
         # match exactly before a full/sparse or selection override is allowed.
-        from .sampling import sampling_identity
+        from .components.lidar.sampling import sampling_identity
         legacy_sampling = sampling_identity("all_endpoints")
         if (checkpoint_identity.get("sampling", legacy_sampling)
                 != runtime_identity.get("sampling", legacy_sampling)):

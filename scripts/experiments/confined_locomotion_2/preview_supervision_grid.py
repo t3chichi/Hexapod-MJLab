@@ -9,7 +9,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "src"))
 
-from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightGridCfg, grid_world_xy
+from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import HeightGridCfg, grid_world_xy
 from hexapod_mjlab.tasks.confined_locomotion_2.visualization.grid import (
     GridRangePreview,
     configured_grid,

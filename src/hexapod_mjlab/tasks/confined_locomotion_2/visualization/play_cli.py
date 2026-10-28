@@ -58,7 +58,7 @@ def parse_args(argv=None):
 
 def discover_acquisition_options(directories, explicit_selection=None):
     """Expose only validated offline files, keyed by independent near/far budgets."""
-    from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog, load_sparse_selection
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog, load_sparse_selection
     catalog = build_channel_catalog()
     options, identities = {}, {}
 
@@ -134,7 +134,7 @@ class PlayOwner:
         from mjlab.envs import ManagerBasedRlEnv
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
         from hexapod_mjlab.tasks.confined_locomotion_2.play import PlaySession, make_play_env_cfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg
         from hexapod_mjlab.common.perturbations import preset_by_name
         env_factory = self.env_factory or make_play_env_cfg
         session_class = self.session_class or PlaySession
@@ -191,8 +191,8 @@ class PlayOwner:
         import gc
         import hashlib
         import torch
-        from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog, load_sparse_selection
-        from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog, load_sparse_selection
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg
         mode, path = request["mode"], request.get("selection_path")
         if self.viewer is not None:
             self.viewer.set_acquisition_status("正在检查扫描设置…")

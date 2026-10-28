@@ -7,7 +7,7 @@ from hexapod_mjlab.rl.confined_locomotion_2.contracts import (
     FAR_WINDOW_SLOTS,
     NEAR_POINTS,
 )
-from hexapod_mjlab.tasks.confined_locomotion_2.scanner import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import (
     ConfinedLidarCfg,
     farthest_point_sampling_indices,
 )

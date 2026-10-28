@@ -20,10 +20,10 @@ import warp as wp
 
 from hexapod_mjlab.rl.confined_locomotion_2.contracts import HeightLabels
 
-from .channels import build_channel_catalog
-from .config.terrain_geometry import TERRAIN_GROUP
-from .sampling import far_candidate_mask, farthest_point_sampling_masked
-from .scanner import _quat_apply_xyzw, _quat_mul_xyzw
+from .lidar.channels import build_channel_catalog
+from .terrain_geometry import TERRAIN_GROUP
+from .lidar.sampling import far_candidate_mask, farthest_point_sampling_masked
+from .lidar.scanner import _quat_apply_xyzw, _quat_mul_xyzw
 from hexapod_mjlab.common.lidar import resolve_lidar_mount
 
 

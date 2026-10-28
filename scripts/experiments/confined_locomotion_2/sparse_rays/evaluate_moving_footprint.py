@@ -36,7 +36,7 @@ from select_channels import (
     THETA_DEG, TILT_DEG, MJCF, airy_directions, nominal_mount, sha256,
 )
 from compare_sampling import intersect_scene, fps_ids
-from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog, load_sparse_selection
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog, load_sparse_selection
 
 
 # Uniform *grid* in nominal BASE horizontal world-ground coordinates.

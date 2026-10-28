@@ -465,9 +465,9 @@ def main(argv=None) -> None:
         a3_dir = ROOT / "scripts/experiments/confined_locomotion_2/sparse_rays"
         sys.path.insert(0, str(a3_dir))
         from evaluate_far_trajectory import make_scenarios, interpolate_poses, scan_pose
-        from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog, load_sparse_selection
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog, load_sparse_selection
         from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg
-        from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg, ConfinedScanPipeline
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg, ConfinedScanPipeline
         from hexapod_mjlab.tasks.confined_locomotion_2.runtime import TrainingRuntime
         from hexapod_mjlab.common.perturbations import (
             GapPerturbationCfg, ObservationPerturbationCfg, ObservationPerturbations,

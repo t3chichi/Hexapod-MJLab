@@ -1,7 +1,7 @@
 """Batched terrain scan checks preserve row order and perturbation boundaries."""
 from types import SimpleNamespace
 import torch
-from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg, ConfinedScanPipeline, ScanFaultError
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg, ConfinedScanPipeline, ScanFaultError
 
 
 def pipeline(distances, directions=None):
@@ -117,7 +117,7 @@ def test_flat_batches_only_due_rows_and_retained_frames_own_workspace_copies():
 
 
 def test_flat_coverage_failure_never_queries_bad_or_later_rows():
-    from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ScanCoverageError
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ScanCoverageError
     pipe,calls = flat_pipeline()
     noise = CountingNoise()
     try:

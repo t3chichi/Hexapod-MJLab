@@ -13,7 +13,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT / "src"))
 MJCF = ROOT / "src/hexapod_mjlab/assets/robots/el_4090/mjcf/el_4090_lidar.xml"
-from hexapod_mjlab.tasks.confined_locomotion_2.channels import (  # noqa: E402
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import (  # noqa: E402
     build_channel_catalog,
     airy_directions,
     _t1_pose_and_mount,

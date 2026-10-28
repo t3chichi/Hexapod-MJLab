@@ -16,7 +16,7 @@ from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import (
     replay_sequence,
 )
 from hexapod_mjlab.tasks.confined_locomotion_2.collector import TrainingCollector
-from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightLabels
+from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import HeightLabels
 
 
 @contextmanager

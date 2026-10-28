@@ -354,7 +354,7 @@ def main(argv=None):
         raise FileExistsError(f"evidence directory already exists: {output}")
     dirs = airy_directions()
     mount = nominal_mount()
-    from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog
     catalog = build_channel_catalog()
     _, candidates = read_frozen_design(args.design.expanduser().resolve(), dirs)
     keys = ("near_x6_far_x8", "near_x6_far_x10")

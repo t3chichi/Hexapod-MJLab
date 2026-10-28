@@ -7,14 +7,14 @@ chosen before a learning recipe can run. Flat defaults are never modified.
 from dataclasses import dataclass, field
 import numpy as np
 
-from .flat_baseline import ConfinedLocomotionRlCfg
+from .flat_baseline_config import ConfinedLocomotionRlCfg
 
 TASK_ID = "El-4090-Confined-Locomotion-Terrain-Memory_2"
 
 
 def make_collection_env_cfg(*, terrain, num_envs: int, seed: int):
     """Real Heightfield MDP for collection only; deliberately unregistered."""
-    from .terrain_geometry import make_geometry_env_cfg
+    from ..components.terrain_geometry import make_geometry_env_cfg
     from hexapod_mjlab.common.mdp.rewards import build_training_reward_cfgs
     from hexapod_mjlab.common.mdp.terminations import build_training_termination_cfgs
 
@@ -29,7 +29,7 @@ def make_collection_env_cfg(*, terrain, num_envs: int, seed: int):
 
 
 def make_default_terrain():
-    from .terrain_geometry import HeightfieldTerrainCfg
+    from ..components.terrain_geometry import HeightfieldTerrainCfg
 
     # Non-square samples expose accidental axis transposition. The flat spawn
     # platform is part of the SAME genuinely non-flat physical Heightfield.
@@ -68,7 +68,7 @@ def terrain_memory_rl_cfg():
 
 
 def terrain_memory_formal_rl_cfg(*, seed, num_envs, max_iterations, height_loss_weight):
-    from .flat_baseline import confined_locomotion_formal_rl_cfg
+    from .flat_baseline_config import confined_locomotion_formal_rl_cfg
     from dataclasses import fields as dataclass_fields
     from hexapod_mjlab.rl.confined_locomotion_2.auxiliary import HeightReconstructionAuxiliary
     HeightReconstructionAuxiliary(height_loss_weight)

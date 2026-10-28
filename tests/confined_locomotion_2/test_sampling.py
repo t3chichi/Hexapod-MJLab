@@ -2,7 +2,7 @@
 
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion_2.sampling import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.sampling import (
     farthest_point_sampling_indices,
     farthest_point_sampling_indices_reference,
     farthest_point_sampling_masked,
@@ -164,7 +164,7 @@ def test_checkpoint_identity_rejects_old_sampling_semantics(tmp_path):
         architecture_identity,
         read_checkpoint,
     )
-    from hexapod_mjlab.tasks.confined_locomotion_2.sampling import sampling_identity
+    from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.sampling import sampling_identity
 
     current = architecture_identity()
     expected = {

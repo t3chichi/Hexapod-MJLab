@@ -19,7 +19,7 @@ from select_channels import (
     FULL_RAYS, MAX_RANGE_M, NEAR_OUT, FAR_OUT, airy_directions,
     nominal_mount, sha256, nominal_scan, spatial_order, THETA_DEG, TILT_DEG, NEAR_MAX_X_M,
 )
-from hexapod_mjlab.tasks.confined_locomotion_2.channels import build_channel_catalog
+from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.channels import build_channel_catalog
 
 
 # With BASE +x forward and +z up, scipy +Y pitch tips the nose DOWN.

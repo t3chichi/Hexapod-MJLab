@@ -4,7 +4,7 @@ import numpy as np
 
 from .play import PlayViewer, quat_wxyz_to_matrix
 from .grid import GridRangePreview
-from ..terrain_geometry import CompiledHeightfield, HeightGridCfg
+from ..components.terrain_query import CompiledHeightfield, HeightGridCfg
 
 
 def height_points_world(data, name):

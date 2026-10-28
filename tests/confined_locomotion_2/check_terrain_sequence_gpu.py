@@ -87,12 +87,12 @@ def main():
         from mjlab.envs import ManagerBasedRlEnv
         from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
         from mjlab.tasks.registry import list_tasks
-        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory import make_collection_env_cfg, TASK_ID
+        from hexapod_mjlab.tasks.confined_locomotion_2.config.terrain_memory_config import make_collection_env_cfg, TASK_ID
         from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import make_training_env_cfg, JOINT_NAMES
         from hexapod_mjlab.tasks.confined_locomotion_2.runtime import TrainingRuntime
-        from hexapod_mjlab.tasks.confined_locomotion_2.scanner import ConfinedLidarCfg
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.lidar.scanner import ConfinedLidarCfg
         from hexapod_mjlab.tasks.confined_locomotion_2.collector import TrainingCollector
-        from hexapod_mjlab.tasks.confined_locomotion_2.terrain_geometry import HeightGridCfg
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import HeightGridCfg
         from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET
         from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider, derive_action_generator_seed
         from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
