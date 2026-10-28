@@ -35,6 +35,7 @@ def test_optimizer_chart_means_exclude_other_loss_suffixes():
 def test_official_logger_writes_once_and_uses_resumed_global_iteration(tmp_path):
     from contextlib import redirect_stdout
     import io
+    from unittest.mock import patch
     import torch
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
     from hexapod_mjlab.common.training_logger import TrainingLogger
@@ -42,7 +43,19 @@ def test_official_logger_writes_once_and_uses_resumed_global_iteration(tmp_path)
     logger = TrainingLogger(log_dir=tmp_path, cfg={"num_steps_per_env": 24},
                             env_cfg={}, num_envs=2, device="cpu", source_path=__file__)
     try:
-        logger.begin_learn(completed_iterations=75, environment_transitions=75 * 48)
+        assert logger.writer is None
+        # Official run_train registers its source after constructing the runner.
+        from mjlab.scripts import train
+        from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import ConfinedLocomotionRunner
+        runner = object.__new__(ConfinedLocomotionRunner)
+        runner.logger = logger
+        runner.add_git_repo_to_log(train.__file__)
+        with patch.object(logger, "_store_code_state", wraps=logger._store_code_state) as store:
+            logger.begin_learn(completed_iterations=75, environment_transitions=75 * 48)
+            assert store.call_count == 1 and train.__file__ in logger.git_status_repos
+            writer = logger.writer
+            logger.begin_learn(completed_iterations=75, environment_transitions=75 * 48)
+            assert store.call_count == 1 and logger.writer is writer
         scalars = {"Performance/collect_s": .2, "Performance/update_s": .3,
                    "Loss/policy": .4, "Reward/actual": .12, "Height/mse_m2": .02,
                    "Proprio/vx_rmse_mps": .1, "Episode/completed_count": 0.}

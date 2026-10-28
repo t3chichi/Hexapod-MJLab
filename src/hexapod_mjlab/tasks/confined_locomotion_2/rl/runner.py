@@ -135,6 +135,13 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
     """Uses the official mjlab launch surface, without the stock stateless PPO."""
 
     def __init__(self, env, train_cfg, log_dir=None, device="cuda:0", **kwargs):
+        try:
+            self._initialize(env, train_cfg, log_dir, device, **kwargs)
+        except BaseException as error:
+            self._close_after_error(error, env=env)
+            raise
+
+    def _initialize(self, env, train_cfg, log_dir, device, **kwargs):
         resolved = resolve_recipe(train_cfg)  # refuse registration defaults first
         if kwargs:
             raise ValueError(f"unsupported runner options: {sorted(kwargs)}")
@@ -212,37 +219,32 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         # its selection file. Identical selection content remains resumable
         # after the asset is moved to another checkout or directory.
         self.recipe_identity["scan_identity"] = self.runtime.scan_identity
-        try:
-            from .metrics import LearningMetrics
-            from hexapod_mjlab.common.mdp.rewards import plane_world_z
-            self.learning_metrics = LearningMetrics(
-                self.num_envs, self.device,
-                **({"terrain_query": self.runtime.terrain_query} if terrain else
-                   {"plane_world_z": plane_world_z(self.runtime.env)}))
-            action = env.unwrapped.action_manager.get_term("residual_pd")
-            self.joint_permutation = JointPermutation.from_joint_names(tuple(action._target_names))
-            self.mount_quat_xyzw = self.runtime.pipeline._mount_q[0].detach().clone()
-            self.trainer = TemporalPPOTrainer(
-                network=self.network, distribution_provider=self.provider,
-                device=self.device, config=resolved["ppo"], execution_mode=resolved["execution_mode"],
-                symmetry_enabled=self.symmetry_config.enabled,
-                joint_permutation=self.joint_permutation,
-                mount_quat_xyzw=self.mount_quat_xyzw, seed=self.seed,
-                **({"auxiliary": HeightReconstructionAuxiliary(resolved["height_loss_weight"])} if terrain else {}))
-            self.collector = TrainingCollector(
-                self.runtime, self.network, self.provider,
-                symmetry_enabled=self.symmetry_config.enabled,
-                joint_permutation=self.joint_permutation,
-                mount_quat_xyzw=self.mount_quat_xyzw,
-                transition_observer=self._observe_transition)
-            self.logger = TrainingLogger(
-                log_dir=self.log_dir, cfg=self.cfg, env_cfg=env.cfg,
-                num_envs=self.num_envs, device=self.device, source_path=__file__)
-            self.learning_metrics.bind_logger(self.logger)
-            self.writer = self.logger.writer
-        except BaseException:
-            self.runtime.close()
-            raise
+        from .metrics import LearningMetrics
+        from hexapod_mjlab.common.mdp.rewards import plane_world_z
+        self.learning_metrics = LearningMetrics(
+            self.num_envs, self.device,
+            **({"terrain_query": self.runtime.terrain_query} if terrain else
+               {"plane_world_z": plane_world_z(self.runtime.env)}))
+        action = env.unwrapped.action_manager.get_term("residual_pd")
+        self.joint_permutation = JointPermutation.from_joint_names(tuple(action._target_names))
+        self.mount_quat_xyzw = self.runtime.pipeline._mount_q[0].detach().clone()
+        self.trainer = TemporalPPOTrainer(
+            network=self.network, distribution_provider=self.provider,
+            device=self.device, config=resolved["ppo"], execution_mode=resolved["execution_mode"],
+            symmetry_enabled=self.symmetry_config.enabled,
+            joint_permutation=self.joint_permutation,
+            mount_quat_xyzw=self.mount_quat_xyzw, seed=self.seed,
+            **({"auxiliary": HeightReconstructionAuxiliary(resolved["height_loss_weight"])} if terrain else {}))
+        self.collector = TrainingCollector(
+            self.runtime, self.network, self.provider,
+            symmetry_enabled=self.symmetry_config.enabled,
+            joint_permutation=self.joint_permutation,
+            mount_quat_xyzw=self.mount_quat_xyzw,
+            transition_observer=self._observe_transition)
+        self.logger = TrainingLogger(
+            log_dir=self.log_dir, cfg=self.cfg, env_cfg=env.cfg,
+            num_envs=self.num_envs, device=self.device, source_path=__file__)
+        self.learning_metrics.bind_logger(self.logger)
         self.current_learning_iteration = 0
         self.total_control_batches = 0
         self.total_env_samples = 0
@@ -277,11 +279,11 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         if isinstance(num_learning_iterations, bool) or not isinstance(num_learning_iterations, int) or not 1 <= num_learning_iterations <= self.max_iterations:
             raise ValueError("learning iteration count exceeds explicit budget")
         target_iteration = self.current_learning_iteration + num_learning_iterations
-        self.logger.begin_learn(completed_iterations=self.current_learning_iteration,
-                                environment_transitions=self.total_env_samples)
         # init_at_random_ep_len is a generic launch argument. Fixed T1 reset
         # and episode lengths are deliberately retained by this task.
         try:
+            self.logger.begin_learn(completed_iterations=self.current_learning_iteration,
+                                    environment_transitions=self.total_env_samples)
             for _ in range(num_learning_iterations):
                 self.learning_metrics.begin_iteration()
                 torch.cuda.reset_peak_memory_stats(self.device)
@@ -340,10 +342,15 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
             self._write_summary()
         except BaseException as error:
             self.phase = "faulted"
-            if not self.runtime._faulted:
-                self.runtime._save_fault(error, phase="v2_learn")
-            self._write_json("failure.json", {"error": repr(error), "traceback": traceback.format_exc(),
-                                             "resumable": False})
+            try:
+                if not self.runtime._faulted:
+                    self.runtime._save_fault(error, phase="v2_learn")
+                self._write_json("failure.json", {"error": repr(error), "traceback": traceback.format_exc(),
+                                                 "resumable": False})
+            except BaseException as evidence_error:
+                if hasattr(error, "add_note"):
+                    error.add_note(f"Failed to record training failure: {evidence_error!r}")
+            self._close_after_error(error)
             raise
 
     def save(self, path, infos=None):
@@ -400,3 +407,18 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
 
     def close(self):
         self._close_official_environment()
+
+    def _close_after_error(self, error, *, env=None):
+        """Release owned resources without masking a construction/learn error."""
+        if hasattr(self, "_official_close"):
+            closers = [self.close]
+        else:
+            # Construction may fail before the normal env.close hook exists.
+            resources = (getattr(self, "runtime", None), getattr(self, "logger", None), env)
+            closers = [resource.close for resource in resources if resource is not None]
+        for close in closers:
+            try:
+                close()
+            except BaseException as close_error:
+                if hasattr(error, "add_note"):
+                    error.add_note(f"Training cleanup failed: {close_error!r}")

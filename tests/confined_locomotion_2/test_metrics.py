@@ -227,6 +227,7 @@ def test_official_logger_shares_episode_state_and_restores_old_and_new_checkpoin
         metrics = cls(2, "cpu")
         metrics.bind_logger(logger)
         try:
+            logger.begin_learn(completed_iterations=0, environment_transitions=0)
             envelope = torch.tensor([[.59, .69, .59, .89, -.89, 0.]] * 2)
             output, label = SimpleNamespace(envelope=envelope), SimpleNamespace(values=envelope)
             metrics.begin_iteration()

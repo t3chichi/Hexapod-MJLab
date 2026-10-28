@@ -240,6 +240,69 @@ def test_close_failure_does_not_report_environment_closed():
     assert "declared close fixture" in runner.close_error
 
 
+def test_runner_failures_release_resources_without_masking_original_error():
+    from types import SimpleNamespace
+    from unittest.mock import Mock, patch
+    from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import ConfinedLocomotionRunner
+    from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.runner import TripodRunner
+
+    for cls in (ConfinedLocomotionRunner, TripodRunner):
+        # Construction can fail after hooks/writer allocation or much earlier.
+        original = RuntimeError("construction fixture")
+        env = SimpleNamespace(close=Mock())
+        runtime = SimpleNamespace(close=Mock(side_effect=OSError("cleanup fixture")))
+        logger = SimpleNamespace(close=Mock())
+        def fail_init(self, *args, **kwargs):
+            self.runtime, self.logger = runtime, logger
+            raise original
+        with patch.object(cls, "_initialize", fail_init):
+            try:
+                cls(env, {})
+            except RuntimeError as error:
+                assert error is original
+            else:
+                raise AssertionError("construction failure swallowed")
+        assert runtime.close.call_count == logger.close.call_count == env.close.call_count == 1
+
+        # Exercise the real hooked close path: every resource gets a close
+        # attempt even when the first one fails, and repeat close is harmless.
+        runner = object.__new__(cls)
+        runner.closed, runner.close_error, runner.phase = False, None, "faulted"
+        runner.runtime, runner.logger = runtime, logger
+        runner._official_close, runner._write_summary = Mock(), Mock()
+        runtime.close.reset_mock()
+        logger.close.reset_mock()
+        runner._close_after_error(original)
+        assert runner.closed and runner.close_error is not None
+        assert runtime.close.call_count == logger.close.call_count == runner._official_close.call_count == 1
+        runner.close()
+        assert runner._official_close.call_count == 1
+
+        # A writer initialization or rollout failure must also close the normal
+        # hooked environment, even if saving diagnostic evidence fails.
+        for during_logging in (True, False):
+            original = KeyboardInterrupt("training fixture")
+            runner = object.__new__(cls)
+            runner.phase, runner.closed, runner.max_iterations = "fresh", False, 1
+            runner.current_learning_iteration = runner.total_env_samples = 0
+            runner.device = "cuda:0"
+            runner.logger = SimpleNamespace(begin_learn=Mock(side_effect=original if during_logging else None))
+            runner.learning_metrics = SimpleNamespace(begin_iteration=Mock())
+            runner.collector = SimpleNamespace(collect=Mock(side_effect=original))
+            runner.runtime = SimpleNamespace(_faulted=False, _save_fault=Mock(side_effect=OSError("evidence fixture")))
+            runner._official_close = Mock()
+            runner.close = Mock(side_effect=OSError("close fixture"))
+            with patch("torch.cuda.reset_peak_memory_stats"):
+                try:
+                    runner.learn(1)
+                except KeyboardInterrupt as error:
+                    assert error is original
+                else:
+                    raise AssertionError("training failure swallowed")
+            assert runner.phase == "faulted" and runner.close.call_count == 1
+            assert runner.collector.collect.call_count == (0 if during_logging else 1)
+
+
 def test_execution_modes_reach_both_task_recipes_and_reject_invalid_values():
     from hexapod_mjlab.tasks.confined_locomotion_2.rl.terrain_entry import build_terrain_train_config
     assert confined_locomotion_rl_cfg().execution_mode == "low_memory"

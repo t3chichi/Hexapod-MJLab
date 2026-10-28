@@ -10,7 +10,7 @@
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含169项CPU检查，其中一个入口执行7个地形边界子用例。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
+该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含170项CPU检查，其中一个入口执行7个地形边界子用例；包括Logger初始化时序与Runner异常资源清理。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
 
 `test_scan_batching.py` 和 `test_history_batching.py` 覆盖采集批量化的行顺序、故障与随机流边界、窗口写入原子性及快照所有权。真实同场景参考对照可运行：
 

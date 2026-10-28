@@ -45,7 +45,6 @@ class TrainingLogger(Logger):
             is_distributed=False, gpu_world_size=1, gpu_global_rank=0,
         )
         self.git_status_repos.append(str(source_path))
-        self.init_logging_writer()
 
     def bind_episode_tensors(self, episode_return, episode_length):
         """Reuse existing checkpointed storage, including each task's dtype."""
@@ -76,6 +75,10 @@ class TrainingLogger(Logger):
         self.ep_extras.clear()
 
     def begin_learn(self, *, completed_iterations, environment_transitions):
+        # Match OnPolicyRunner: official launch registers additional source
+        # repositories after runner construction and before learn().
+        if self.writer is None:
+            self.init_logging_writer()
         self.start_iteration = completed_iterations
         self.tot_timesteps = environment_transitions
         self.tot_time = 0.0

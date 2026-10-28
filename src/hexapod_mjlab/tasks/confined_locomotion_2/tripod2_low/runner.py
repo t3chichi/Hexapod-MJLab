@@ -138,6 +138,13 @@ class LegacyMetrics:
 
 class TripodRunner(ConfinedLocomotionRunner):
     def __init__(self, env, train_cfg, log_dir=None, device="cuda:0", **kwargs):
+        try:
+            self._initialize(env, train_cfg, log_dir, device, **kwargs)
+        except BaseException as error:
+            self._close_after_error(error, env=env)
+            raise
+
+    def _initialize(self, env, train_cfg, log_dir, device, **kwargs):
         ppo, lidar = validate_recipe(train_cfg)
         if kwargs or log_dir is None:
             raise ValueError("explicit local log_dir and supported runner arguments required")
@@ -180,26 +187,21 @@ class TripodRunner(ConfinedLocomotionRunner):
             "precision": "FP32, TF32 off, cuDNN RNN IEEE, no AMP",
             "observability": {"save_interval": self.save_interval},
         }
-        try:
-            action = env.unwrapped.action_manager.get_term("residual_pd")
-            self.joint_permutation = JointPermutation.from_joint_names(tuple(action._target_names))
-            self.mount_quat_xyzw = self.runtime.pipeline._mount_q[0].detach().clone()
-            self.trainer = LegacyPPOTrainer(network=self.network, distribution_provider=self.provider,
-                device=self.device, config=ppo, execution_mode=train_cfg["execution_mode"],
-                symmetry_enabled=True, joint_permutation=self.joint_permutation,
-                mount_quat_xyzw=self.mount_quat_xyzw, seed=self.seed)
-            self.learning_metrics = LegacyMetrics(self.num_envs, self.device)
-            self.collector = TrainingCollector(self.runtime, self.network, self.provider,
-                symmetry_enabled=True, joint_permutation=self.joint_permutation,
-                mount_quat_xyzw=self.mount_quat_xyzw, transition_observer=self._observe_transition)
-            self.logger = TrainingLogger(
-                log_dir=self.log_dir, cfg=self.cfg, env_cfg=env.cfg,
-                num_envs=self.num_envs, device=self.device, source_path=__file__)
-            self.learning_metrics.bind_logger(self.logger)
-            self.writer = self.logger.writer
-        except BaseException:
-            self.runtime.close()
-            raise
+        action = env.unwrapped.action_manager.get_term("residual_pd")
+        self.joint_permutation = JointPermutation.from_joint_names(tuple(action._target_names))
+        self.mount_quat_xyzw = self.runtime.pipeline._mount_q[0].detach().clone()
+        self.trainer = LegacyPPOTrainer(network=self.network, distribution_provider=self.provider,
+            device=self.device, config=ppo, execution_mode=train_cfg["execution_mode"],
+            symmetry_enabled=True, joint_permutation=self.joint_permutation,
+            mount_quat_xyzw=self.mount_quat_xyzw, seed=self.seed)
+        self.learning_metrics = LegacyMetrics(self.num_envs, self.device)
+        self.collector = TrainingCollector(self.runtime, self.network, self.provider,
+            symmetry_enabled=True, joint_permutation=self.joint_permutation,
+            mount_quat_xyzw=self.mount_quat_xyzw, transition_observer=self._observe_transition)
+        self.logger = TrainingLogger(
+            log_dir=self.log_dir, cfg=self.cfg, env_cfg=env.cfg,
+            num_envs=self.num_envs, device=self.device, source_path=__file__)
+        self.learning_metrics.bind_logger(self.logger)
         self.current_learning_iteration = self.total_control_batches = self.total_env_samples = 0
         self._active_buffer = None
         self.phase, self.records = "fresh", []
@@ -221,9 +223,9 @@ class TripodRunner(ConfinedLocomotionRunner):
         if not init_at_random_ep_len:
             raise ValueError("reference training requires randomized initial episode lengths")
         target = self.current_learning_iteration + num_learning_iterations
-        self.logger.begin_learn(completed_iterations=self.current_learning_iteration,
-                                environment_transitions=self.total_env_samples)
         try:
+            self.logger.begin_learn(completed_iterations=self.current_learning_iteration,
+                                    environment_transitions=self.total_env_samples)
             for _ in range(num_learning_iterations):
                 self.learning_metrics.begin_iteration()
                 torch.cuda.reset_peak_memory_stats(self.device)
@@ -267,8 +269,13 @@ class TripodRunner(ConfinedLocomotionRunner):
             self._write_summary()
         except BaseException as error:
             self.phase = "faulted"
-            if not self.runtime._faulted:
-                self.runtime._save_fault(error, phase="legacy_learn")
+            try:
+                if not self.runtime._faulted:
+                    self.runtime._save_fault(error, phase="legacy_learn")
+            except BaseException as evidence_error:
+                if hasattr(error, "add_note"):
+                    error.add_note(f"Failed to record training failure: {evidence_error!r}")
+            self._close_after_error(error)
             raise
 
     def save(self, path, infos=None):
