@@ -92,6 +92,13 @@ def main():
         checks["both_histories_restored"] = torch.equal(saved_hidden, runner.collector.hidden) and torch.equal(saved_mirror, runner.collector.mirror_hidden)
         boundary_copy = runner.save(out / "restored_boundary.pt")
         initial_payload = torch.load(runner.final_checkpoint, map_location="cpu", weights_only=False)
+        provenance = initial_payload["code_provenance"]
+        recorded_recipe = json.loads((out / "training/run_recipe.json").read_text())
+        checks["code_provenance_persisted"] = (
+            provenance == recorded_recipe["code_provenance"] == runner.code_provenance
+            and provenance["status"] in ("clean", "dirty")
+            and len(provenance["commit"]) == 40
+            and len(provenance["content_sha256"]) == 64)
         restored_payload = torch.load(boundary_copy, map_location="cpu", weights_only=False)
         boundary_diff = differences(initial_payload, restored_payload)
         checks["restore_boundary_bit_exact"] = not boundary_diff

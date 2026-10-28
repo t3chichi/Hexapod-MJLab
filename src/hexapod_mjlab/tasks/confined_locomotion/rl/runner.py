@@ -61,6 +61,7 @@ from ..runtime import TrainingRuntime, TrainingRuntimeFrozenError
 from ..collector import TrainingCollector, model_state_fingerprint
 from ..ground import GroundGridCfg, VALIDITY_GEOMETRY_ONLY_FLAT_TRAINING
 from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET, ObservationPerturbationCfg
+from hexapod_mjlab.common.provenance import capture_code_provenance
 
 _GROUND_GRID_FIELDS = {
   "x_coords", "y_coords", "validity_mode", "parallel_tol", "body_xyz_semantics"
@@ -647,11 +648,13 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
     #: checkpoint._require_stable_save_boundary; load accepts fresh/ready.
     self._lifecycle_phase: str = "fresh"
 
+    self.code_provenance = capture_code_provenance(__file__)
     self.recipe = {
       "schema": RUNNER_RECORD_SCHEMA,
       "mode": "formal_training" if formal else "engineering",
       "task": TASK_ID,
       "runner": self.runner_identity,
+      "code_provenance": self.code_provenance,
       "created": _now_iso(),
       "implemented_classvar": ConfinedLocomotionRlCfg.IMPLEMENTED,
       "capabilities": {

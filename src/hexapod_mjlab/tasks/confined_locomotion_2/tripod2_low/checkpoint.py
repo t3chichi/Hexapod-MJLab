@@ -80,6 +80,7 @@ def save_full_checkpoint(runner, path, *, infos=None):
     payload = {
         "schema": SCHEMA, "task": TASK_ID, "kind": "full", "resumable": True,
         "identity": identity(runner), "infos": infos,
+        "code_provenance": getattr(runner, "code_provenance", None),
         **{name: getattr(runner, name).state_dict() for name in
            ("network", "provider", "trainer", "runtime", "collector", "learning_metrics")},
         "physics": physics, "physics_manifest": manifest,

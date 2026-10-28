@@ -57,7 +57,10 @@ def main():
         from hexapod_mjlab.common.checkpoint import model_physics_identity
         from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.checkpoint import _model_tensors, read_checkpoint
         nominal = model_physics_identity(second.runtime.env.sim.mj_model)
-        saved_model = read_checkpoint(checkpoint)["model"]
+        saved = read_checkpoint(checkpoint)
+        assert saved["code_provenance"] == json.loads((root / "first/run_recipe.json").read_text())["code_provenance"]
+        assert saved["code_provenance"]["commit"]
+        saved_model = saved["model"]
         with torch.no_grad():
             for value in _model_tensors(second.runtime.env).values():
                 value.mul_(.5)  # Different live DR state, same nominal model.
@@ -74,6 +77,7 @@ def main():
         torch.testing.assert_close(actual.reward, expected_reward, atol=1e-6, rtol=1e-5)
         print(json.dumps({"status": "passed", "finite_updates": 1,
                           "randomized_model_restored": True,
+                          "code_provenance_persisted": True,
                           "strict_next_transition": True, "artifacts": str(root),
                           "learning_effect_verified": False}))
     finally:

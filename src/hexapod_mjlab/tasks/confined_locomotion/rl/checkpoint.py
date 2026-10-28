@@ -667,6 +667,7 @@ def _save_full_checkpoint(runner, path, *, infos: dict | None = None) -> Path:
     "task": TASK_ID,
     "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
     "identity": _comparable_identity(runner),
+    "code_provenance": getattr(runner, "code_provenance", None),
     "infos": dict(infos) if infos else None,
     "physics": {
       "manifest": manifest,
@@ -834,8 +835,8 @@ def _save_full_checkpoint(runner, path, *, infos: dict | None = None) -> Path:
 
 
 #: Fields that determine whether the saved training state is compatible.
-#: Device, dependency versions, Torch precision and source hashes are recorded
-#: metadata only; they do not gate resume.
+#: Device, dependency versions, precision and code provenance are metadata,
+#: not resume gates. Legacy source hashes are ignored.
 _IDENTITY_COMPARE_KEYS = (
   "schema",
   "kind",
@@ -1734,7 +1735,7 @@ def _apply_full_checkpoint(runner, payload: dict, report: dict) -> None:
 def load_full_checkpoint(
   runner, path, *, load_cfg=None, strict=True, map_location=None
 ) -> dict:
-  """Full same-GPU resume of a stable-boundary checkpoint onto ``runner``."""
+  """Strict stable-boundary restore onto the current CUDA runner."""
   if load_cfg not in (None, {}):
     raise CheckpointError(
       f"load(load_cfg={load_cfg!r}) refused: this runner has no actor-only or "
@@ -1755,9 +1756,8 @@ def load_full_checkpoint(
       and requested.index != device.index
     ):
       raise CheckpointError(
-        f"map_location={map_location!r} refused: full resume is same-CUDA-device "
-        "only (cross-device resume is not supported and never claimed; the "
-        "weights-only mode has its own explicit rule)"
+        f"map_location={map_location!r} must name the current runner's CUDA "
+        "device; saved device metadata is not a compatibility gate"
       )
   phase = getattr(runner, "_lifecycle_phase", None)
   if phase not in ("fresh", "ready"):

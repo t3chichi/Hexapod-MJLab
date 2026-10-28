@@ -128,7 +128,7 @@ def compare_model_physics(current, saved) -> None:
 
 
 def compiled_model_identity(env, *, restored_model_fields=()) -> dict:
-  """Structure digest of the ACTUAL compiled model (order/gear/options)."""
+  """Physical/structural identity; the binary digest is diagnostic metadata."""
   import mujoco
 
   mm = env.sim.mj_model

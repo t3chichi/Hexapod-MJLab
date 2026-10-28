@@ -16,6 +16,7 @@ from mjlab.utils.torch import configure_torch_backends
 
 from hexapod_mjlab.rl.confined_locomotion.distribution import derive_action_generator_seed
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
+from hexapod_mjlab.common.provenance import capture_code_provenance
 from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
 from ..collector import TrainingCollector
 from ..rl.reporting import (
@@ -192,8 +193,10 @@ class TripodRunner(ConfinedLocomotionRunner):
         self.final_checkpoint = self.last_periodic_checkpoint = None
         self._official_close = env.unwrapped.close
         env.unwrapped.close = self._close_official_environment
+        self.code_provenance = capture_code_provenance(__file__)
         self._write_json("run_recipe.json", {"task": TASK_ID, "seed": self.seed,
-            "num_envs": self.num_envs, **self.recipe_identity, "gpu_validation_passed": False})
+            "num_envs": self.num_envs, **self.recipe_identity,
+            "code_provenance": self.code_provenance, "gpu_validation_passed": False})
 
     def learn(self, num_learning_iterations, init_at_random_ep_len=True):
         if (self.phase not in ("fresh", "ready") or self.closed or

@@ -77,7 +77,7 @@ def identity(runner, *, restored_model_fields=()):
 
 
 #: Fields that determine whether the saved training state is compatible.
-#: Device/Torch metadata and source hashes are recorded but do not gate resume.
+#: Device/Torch/code metadata do not gate resume; legacy source hashes are ignored.
 _IDENTITY_COMPARE_KEYS = ("architecture", "seed", "num_envs", "scan_identity")
 _MODEL_COMPARE_KEYS = ("dims", "joint_names", "actuator_names", "actuator_gear", "q_ref", "options")
 
@@ -175,6 +175,7 @@ def save_full_checkpoint(runner, path, *, infos=None):
     payload = {
         "schema": SCHEMA, "task": runner.task_id, "kind": "full", "resumable": True,
         "identity": identity(runner), "infos": infos,
+        "code_provenance": getattr(runner, "code_provenance", None),
         "network": runner.network.state_dict(), "provider": runner.provider.state_dict(),
         "trainer": runner.trainer.state_dict(), "runtime": runner.runtime.state_dict(),
         "collector": runner.collector.state_dict(),

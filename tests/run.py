@@ -28,6 +28,7 @@ class Check:
 CPU = (
     Check("verification_runner", "tests/test_runner.py"),
     Check("checkpoint_physics", "tests/test_checkpoint_physics.py"),
+    Check("code_provenance", "tests/test_provenance.py"),
     Check(
         "confined_partial_reset_cpu",
         "tests/confined_locomotion/test_runtime.py",

@@ -57,6 +57,7 @@ class CheckpointTests(unittest.TestCase):
                                       collector=State(), learning_metrics=State(), task_id=cp.TASK_ID,
                                       phase="ready", _active_buffer=None, current_learning_iteration=1,
                                       total_control_batches=24, total_env_samples=48, device=torch.device("cpu"))
+        self.runner.code_provenance = {"status": "dirty", "commit": "fixture", "content_sha256": "code-a"}
         identity = {
             "architecture": cp.architecture_identity(),
             "seed": 1,
@@ -95,12 +96,15 @@ class CheckpointTests(unittest.TestCase):
     def test_round_trip_restores_dr_and_actuator(self):
         path = self.save()
         saved = cp.read_checkpoint(path)
+        self.assertEqual(saved["code_provenance"], self.runner.code_provenance)
+        self.runner.code_provenance = {"status": "clean", "commit": "other-code"}
         self.assertEqual(saved["runtime"]["stage_controller"]["stage"], 1)
         self.assertEqual(saved["action"]["sea_hidden_state"].shape, (2, 36, 8))
         self.runner.runtime.env.sim.model.body_mass.zero_()
         self.runner.runtime.env.sim.model.pair_friction.zero_()
         self.runner.runtime.env.action_manager.get_term("residual_pd").sea_cell_state.zero_()
         self.assertEqual(cp.load_full_checkpoint(self.runner, path), {"finished": 1})
+        self.assertEqual(self.runner.code_provenance["commit"], "other-code")
         self.assertTrue(bool(self.runner.runtime.env.sim.model.body_mass.eq(1).all()))
         self.assertTrue(bool(self.runner.runtime.env.sim.model.pair_friction.eq(1).all()))
         self.assertTrue(bool(self.runner.runtime.env.action_manager.get_term("residual_pd").sea_cell_state.eq(1).all()))

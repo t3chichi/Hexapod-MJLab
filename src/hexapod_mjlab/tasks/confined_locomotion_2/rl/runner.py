@@ -25,6 +25,7 @@ from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNet
 from hexapod_mjlab.rl.confined_locomotion_2.auxiliary import HeightReconstructionAuxiliary
 from hexapod_mjlab.rl.confined_locomotion_2.ppo import TemporalPPOConfig, TemporalPPOTrainer
 from hexapod_mjlab.common.perturbations import ObservationPerturbationCfg
+from hexapod_mjlab.common.provenance import capture_code_provenance
 
 from ..collector import TrainingCollector
 from ..flat_env_cfg import TASK_ID
@@ -250,8 +251,10 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         self.last_periodic_checkpoint = None
         self._official_close = env.unwrapped.close
         env.unwrapped.close = self._close_official_environment
+        self.code_provenance = capture_code_provenance(__file__)
         self._write_json("run_recipe.json", {"task": self.task_id, "seed": self.seed,
                          "num_envs": self.num_envs, **self.recipe_identity,
+                         "code_provenance": self.code_provenance,
                          "learning_effect_ready": False})
 
     def _write_json(self, name, data):
