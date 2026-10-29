@@ -60,14 +60,14 @@ python -B scripts/experiments/confined_locomotion_2/train_tripod2_low.py \
 
 续训使用同入口加`--resume-checkpoint /absolute/path/to/checkpoint.pt`；保持seed、env数、采样、模型/地形配方一致；源码、依赖、设备、执行模式和保存间隔只作记录。`--iterations`表示本次追加更新预算。默认4096env仅是配方规模，必须先在目标GPU验证双GRU点云路径的实际显存需求，不自动缩放batch或修改PPO。
 
-有限确定性均值策略回放，无学习、无隐式reset；翻倒即停止：
+原生窗口均值策略回放，无学习、无隐式reset；翻倒后暂停，显式重置后继续：
 
 ```bash
 python -B scripts/experiments/confined_locomotion_2/play_tripod2_low.py \
   --checkpoint /absolute/path/to/checkpoint.pt --command .5 0 0 --steps 500
 ```
 
-此入口生成回放诊断，不是旧任务的交互式Play界面。稀疏采样checkpoint需要保持其选集文件路径和内容。
+默认打开暂停的MuJoCo原生窗口，与Flat/Terrain共用渲染器和交互循环。Space运行/暂停、F8单步、Enter重置、F12退出；↑/↓调前进、←/→调侧移、Home/End调转向、Delete清零、F9/F10切换环境。Tripod指令限幅为vx±2.5、vy±1、yaw±1.2。使用`--no-viewer --steps 500`做有限无界面推理，`--start-running`直接开始。诊断输出由`--output-dir`（别名`--output`）指定，省略时保留在临时目录；不会写入训练权重。稀疏采样checkpoint需要保持其选集文件路径和内容。
 
 ## 历史checkpoint兼容
 

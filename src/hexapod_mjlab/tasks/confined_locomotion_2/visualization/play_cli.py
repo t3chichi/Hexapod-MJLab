@@ -417,11 +417,9 @@ def run_play(session, viewer, *, steps, start_running=False, switch_acquisition=
 
 def main(*, owner_type=PlayOwner, viewer_type=None, debug=False):
     args = parse_args(debug=debug)
-    import os
-    import sys
-    if (not args.no_viewer and not args.no_native and sys.platform.startswith("linux")
-            and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))):
-        raise RuntimeError("Native Play requires a desktop display; use --no-viewer or a debug_* entry with --no-native")
+    if not args.no_viewer and not args.no_native:
+        from .native import require_native_display
+        require_native_display()
     import torch
     from mjlab.utils.torch import configure_torch_backends
     configure_torch_backends(allow_tf32=False)
@@ -436,7 +434,7 @@ def main(*, owner_type=PlayOwner, viewer_type=None, debug=False):
             if not args.no_native:
                 from .native import NativePlayViewer
                 owner.native = NativePlayViewer(owner.session.runtime, command=args.command)
-                print("Native Play: Space pause/run, Right step, Enter reset, Q exit; W/S, A/D, J/L command, X zero.", flush=True)
+                print(f"Native Play:\n{NativePlayViewer.KEY_HELP}", flush=True)
             if debug:
                 from .debug import DebugViewer
                 owner.viewer = (viewer_type or DebugViewer)(

@@ -232,7 +232,7 @@ def test_native_buffers_are_independent_and_rebind_checks_actual_model():
         return SimpleNamespace(num_envs=1, env=SimpleNamespace(sim=sim, cfg=SimpleNamespace(viewer=ViewerConfig())),
                                control_time_s=lambda: .02)
     source = runtime(model)
-    handle = SimpleNamespace(lock=nullcontext, is_running=lambda: True, cam=SimpleNamespace(),
+    handle = SimpleNamespace(lock=nullcontext, is_running=lambda: True, cam=SimpleNamespace(), m=None,
                              set_texts=Mock(), sync=Mock(), close=Mock())
     with patch('mujoco.viewer.launch_passive', return_value=handle):
         viewer = NativePlayViewer(source)

@@ -7,13 +7,22 @@ without its independent obs/policy/env.step loop or mouse-force feedback.
 from copy import copy
 import hashlib
 import threading
+import time
 
+import glfw
 import mujoco
 import numpy as np
 
 from mjlab.viewer.model_sync import disable_model_sameframe_shortcuts, sync_model_fields, VIEWER_MODEL_FIELDS
 from hexapod_mjlab.common.checkpoint import model_physics_identity
 from hexapod_mjlab.common.visualization import PendingControls
+
+
+def require_native_display():
+    import os
+    import sys
+    if sys.platform.startswith("linux") and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        raise RuntimeError("Native Play requires a desktop display; use --no-viewer or a debug_* entry with --no-native")
 
 
 def display_model_identity(model):
@@ -30,12 +39,26 @@ def display_model_identity(model):
 class NativePlayViewer:
     """Persistent CPU display buffers, detached from rebuildable GPU sessions."""
 
-    def __init__(self, runtime, *, command=(0, 0, 0)):
+    KEY_HELP = (
+        "Space pause/run | F8 step | Enter reset | F12 exit\n"
+        "Up/Down vx | Left/Right vy | Home/End yaw | Delete zero\n"
+        "F9/F10 previous/next env"
+    )
+    # Leave MuJoCo's rendering shortcuts intact. Its Python key callback is
+    # invoked after native key handling and cannot consume the event.
+    _COMMAND_KEYS = {
+        glfw.KEY_UP: (0, .1), glfw.KEY_DOWN: (0, -.1),
+        glfw.KEY_LEFT: (1, .1), glfw.KEY_RIGHT: (1, -.1),
+        glfw.KEY_HOME: (2, .1), glfw.KEY_END: (2, -.1),
+    }
+
+    def __init__(self, runtime, *, command=(0, 0, 0), command_limits=(1.5, 1., 1.)):
         import mujoco.viewer
 
         self.pending = PendingControls()
         self._command_lock = threading.Lock()
         self._command = tuple(command)
+        self.command_limits = tuple(command_limits)
         self.selected_env_row = 0
         self.runtime = None
         self.handle = None
@@ -82,19 +105,20 @@ class NativePlayViewer:
 
     def _on_key(self, key):
         # MuJoCo invokes this on its GUI thread. Only enqueue owner-loop intents.
-        action = {32: self.pending.submit_pause_toggle, 262: self.pending.submit_step,
-                  257: self.pending.submit_reset, 81: self.pending.submit_exit,
-                  88: self.pending.submit_zero_command}.get(key)
+        action = {glfw.KEY_SPACE: self.pending.submit_pause_toggle,
+                  glfw.KEY_F8: self.pending.submit_step,
+                  glfw.KEY_ENTER: self.pending.submit_reset,
+                  glfw.KEY_F12: self.pending.submit_exit,
+                  glfw.KEY_DELETE: self.pending.submit_zero_command}.get(key)
         if action is not None:
             action()
-        elif key in (44, 46):
-            self.pending.submit_env_row(self.selected_env_row + (-1 if key == 44 else 1))
-        elif key in (87, 83, 65, 68, 74, 76):
-            axis, delta = {87: (0, .1), 83: (0, -.1), 65: (1, .1),
-                           68: (1, -.1), 74: (2, .1), 76: (2, -.1)}[key]
+        elif key in (glfw.KEY_F9, glfw.KEY_F10):
+            self.pending.submit_env_row(self.selected_env_row + (-1 if key == glfw.KEY_F9 else 1))
+        elif key in self._COMMAND_KEYS:
+            axis, delta = self._COMMAND_KEYS[key]
             with self._command_lock:
                 values = list(self._command)
-                limit = (1.5, 1., 1.)[axis]
+                limit = self.command_limits[axis]
                 values[axis] = float(np.clip(values[axis] + delta, -limit, limit))
                 self._command = tuple(values)
                 self.pending.submit_command(*self._command)
@@ -139,8 +163,7 @@ class NativePlayViewer:
             self.handle.set_texts((
                 mujoco.mjtFontScale.mjFONTSCALE_100, mujoco.mjtGridPos.mjGRID_TOPLEFT,
                 "Play\nEnv\nCommand\nKeys",
-                f"{state}\n{row}\n{np.round(self._command, 2)}\n"
-                "Space pause | Right step | Enter reset | Q exit\nW/S forward | A/D lateral | J/L yaw | X zero"))
+                f"{state}\n{row}\n{np.round(self._command, 2)}\n" + self.KEY_HELP))
             self._status = status
 
     def close(self):
@@ -148,3 +171,10 @@ class NativePlayViewer:
         handle, self.handle = self.handle, None
         if handle is not None:
             handle.close()
+            # close() only requests exit. Let MuJoCo's daemon render thread
+            # release its model before Python's atexit handler terminates GLFW.
+            deadline = time.monotonic() + 5.
+            while handle.m is not None:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("MuJoCo viewer did not finish closing within 5 seconds")
+                time.sleep(.01)
