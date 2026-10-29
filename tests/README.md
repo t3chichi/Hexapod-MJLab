@@ -52,7 +52,7 @@ python tests/run.py --profile confined_gpu --list
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **173** 项 CPU 检查（其中一个入口执行7个地形边界子用例），覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化、指标和Runner异常清理。
+该入口逐个调用 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前包含 **182** 项 CPU 检查（其中一个入口执行7个地形边界子用例），覆盖固定通道、采集、时序重放、PPO 更新、高度辅助、Terrain Geometry、checkpoint、Play、可视化、指标和Runner异常清理。
 
 真实 GPU、checkpoint、Play 与打包检查位于同一目录：
 
@@ -66,7 +66,7 @@ python -B tests/confined_locomotion_2/run_checks.py
 
 详细命令、固定配方和新输出目录要求见 [v2 测试说明](confined_locomotion_2/README.md)。GPU 检查并非全部能在无 checkpoint、无 wheel 的环境中直接运行，不要求全部塞进一个默认 profile。
 
-Tripod 独立 CPU 入口为 `python -B tests/tripod2_low/run_checks.py`（34项）；`python -B tests/tripod2_low/check_gpu.py --run` 只做2环境1轮更新，检查DR模型状态、执行器与下一transition恢复，不代表学习收敛。完整恢复的历史文件政策见[保存规则](../docs/tasks/confined_locomotion_2/training/监控与保存.md)。
+Tripod CPU入口为 `python -B tests/tripod2_low/run_checks.py`（29项）；`python -B tests/tripod2_low/check_gpu.py --run` 只做2环境1轮更新，检查DR模型状态、执行器与下一transition恢复，不代表学习收敛。Tripod与Flat/Terrain共用`TemporalPPOTrainer`语义；旧checkpoint缺少`temporal_ppo/v2` / `ppo_semantics`身份时不能完整续训，但可在匹配sampling下weights-only Play。任务配方和原生/无界面Play入口见[Tripod说明](../docs/tasks/confined_locomotion_2/tripod2_low.md)。完整恢复政策见[保存规则](../docs/tasks/confined_locomotion_2/training/监控与保存.md)。
 
 ## 固定输入与历史数据
 

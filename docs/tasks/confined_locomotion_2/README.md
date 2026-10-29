@@ -1,6 +1,6 @@
 # confined_locomotion_2
 
-`confined_locomotion_2`包含三个注册任务：Flat Baseline平地行走基线、通过高度重建辅助监督学习地形记忆的Terrain Memory，以及作为旧方案迁移对照的Tripod2 Low。Flat/Terrain共享双GRU、Runtime、rollout和Temporal PPO；Tripod2 Low保留LSTM执行器、Legacy PPO和独立运行语义。三者通过独立配置、注册身份及Play入口区分。
+`confined_locomotion_2`包含三个注册任务：Flat Baseline平地行走基线、通过高度重建辅助监督学习地形记忆的Terrain Memory，以及作为旧方案迁移对照的Tripod2 Low。三个v2任务共用 `TemporalPPOTrainer` 和 `TemporalPPOConfig`，并保留各自网络/辅助头、Runtime、注册身份和Play入口；Tripod另保留LSTM执行器及独立Runtime/Runner。
 
 当前支持真实地形采集、动作前高度标签、时序重放、高度辅助联合更新、完整checkpoint及任务独立可视化。已有小规模运行验证，尚未完成长期学习效果或RTX5090容量验证。
 
@@ -18,11 +18,11 @@
 |---|---|---|---|
 | Flat Baseline | `El-4090-Confined-Locomotion-Flat_2` | [`config/flat_baseline_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/flat_baseline_config.py) | `train.py` / `play_flat.py`（原生MuJoCo） / `debug_flat.py`（网页调试） |
 | Terrain Memory | `El-4090-Confined-Locomotion-Terrain-Memory_2` | [`config/terrain_memory_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/terrain_memory_config.py) | `train_terrain_memory.py` / `play_terrain_memory.py`（原生MuJoCo） / `debug_terrain_memory.py`（网页调试） |
-| Tripod2 Low | `El-4090-Confined-Locomotion-Flat-Tripod2-Low_2` | [`tripod2_low/env.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/env.py) / [`tripod2_low/runner.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/runner.py) | `train_tripod2_low.py` / `play_tripod2_low.py` |
+| Tripod2 Low | `El-4090-Confined-Locomotion-Flat-Tripod2-Low_2` | [`tripod_env_cfg.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod_env_cfg.py) / [`runtime_tripod.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/runtime_tripod.py) / [`config/tripod2_low_config.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/config/tripod2_low_config.py) | `train_tripod2_low.py` / `play_tripod2_low.py`（原生MuJoCo） |
 
 脚本统一位于 `scripts/experiments/confined_locomotion_2/`。三个任务均由包内 `__init__.py`集中注册，训练需显式提供seed、环境数和轮数；Terrain额外要求正的高度损失权重。注册默认配置不直接授权训练。
 
-Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjlab/common/flat_env.py)；任务 `flat_env_cfg.py`只保留Task ID和既有任务接口。Terrain/Tripod复用该工厂并各自覆盖地形、执行器或MDP。`config/`仅放各注册任务的配方配置；`components/`放任务家族共享或按需组合的环境与感知组件，其中地形实现与查询分别位于 [`components/terrain_geometry.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/terrain_geometry.py) 和 [`components/terrain_query.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/terrain_query.py)，LiDAR扫描、通道、稀疏射线和采样实现位于 [`components/lidar/`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/lidar/)。MDP、Runtime及可视化仍位于任务包内；网络与PPO位于 `rl/confined_locomotion_2/`。本次仅整理模块目录，不改变训练数值或既有验证结果。不复制整套环境或训练实现，不提供旧 `play.py`、`rl_cfg.py`的转发层。原 `confined_locomotion`任务仍独立存在，共享地形查询入口未启用时继续使用原平面。
+Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjlab/common/flat_env.py)；任务 `flat_env_cfg.py`只保留Task ID和既有任务接口。Terrain/Tripod复用该工厂并各自覆盖地形、执行器或MDP。`config/`仅放各注册任务的配方配置；`components/`放任务家族共享或按需组合的环境与感知组件，其中地形实现与查询分别位于 [`components/terrain_geometry.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/terrain_geometry.py) 和 [`components/terrain_query.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/terrain_query.py)，LiDAR扫描、通道、稀疏射线和采样实现位于 [`components/lidar/`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/lidar/)。Tripod的执行器和MDP分别位于 [`components/tripod_actuator.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/tripod_actuator.py) 与 [`components/tripod_mdp.py`](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/components/tripod_mdp.py)；其独立Runtime/Runner、checkpoint与入口分别位于任务根目录和 `rl/`。三个v2任务的PPO实现位于 `rl/confined_locomotion_2/`，动作分布位于 [`distribution.py`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/distribution.py)。目录迁移本身不改变网络、奖励、动作、LSTM、DR、课程或Runtime数值。不复制整套环境或训练实现，也不提供旧路径转发层。原 `confined_locomotion`任务仍独立存在，共享地形查询入口未启用时继续使用原平面。
 
 ## 网络与训练
 
@@ -35,7 +35,7 @@ Flat 环境的唯一实现位于 [`common/flat_env.py`](../../../src/hexapod_mjl
 | Actor / Critic | 对称输入 `[时间状态187, 本体63, 指令3, detach(包络6)]` 共259维；分别为512→256→128的MLP，输出18 / 1 |
 | 高度头 | 仅Terrain Memory：时间状态187维→`Linear(187,187)`→11×17；只用于辅助损失 |
 
-每轮采集24个控制步，5 epochs×4 minibatches，共20次Adam更新。完整rollout优势统一归一化；原始/镜像保留独立GRU历史，episode边界清零，跨rollout保留时间状态。Bootstrap使用隐藏状态副本，不推进在线历史。具体固定PPO数值由 [`TemporalPPOConfig`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py)维护。Flat/Terrain 的动作分布沿用独立高斯的 `log_std` 参数化，初始 `std=1.0`（`log_std=0`）；原 v1 Flat 默认仍为 `std=0.5`，Tripod 保留直接优化 `std=1.0` 的 Legacy 配方。此变更仅针对新训练起点；通过当前完整恢复检查的 Checkpoint 加载其已保存的动作分布参数，不会重新初始化为 1.0。缺少物理签名的历史文件只适用后文说明的 weights-only 边界。
+每轮采集24个控制步，完整24步BPTT，5 epochs×4 minibatches，共20次Adam更新。三个v2任务共用 [`TemporalPPOTrainer` / `TemporalPPOConfig`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py)。直接优化初值为1的策略标准差；KL使用解析计算，不加旧的epsilon稳定项。每个rollout只shuffle一次，并在5个epoch间复用该顺序；KL与熵只在原始样本上计算，镜像样本继续参与策略、价值、包络及均值对称损失。GAE使用每步pre-reset的next_value；termination不bootstrap，truncation bootstrap。镜像损失保留，Terrain高度辅助保留；sparse、`hit_only_10m`、near×6/far×10为新训练默认。原 v1 Flat仍保留自己的 `std=0.5` 配方。新旧优化语义身份由trainer schema和Recipe中必需的`ppo_semantics`标识，缺少身份的旧文件不可完整续训；同sampling条件下仍可weights-only Play，不迁移Adam，也不宣称旧训练与当前配方等价。
 
 Flat v2、Terrain和Tripod使用官方 RSL-RL Logger 负责writer、episode统计与默认终端输出。官方 `Train/mean_reward` 和 `Train/mean_episode_length` 是最近最多100个完成episode的滚动均值；既有 `Episode/mean_return` 与 `Episode/mean_length_steps` 仍统计本轮完成的episode。TensorBoard官方迭代索引从0起，JSONL与checkpoint继续使用累计完成轮数；详见[监控与保存](training/监控与保存.md)。
 
@@ -67,13 +67,13 @@ Masked MSE先在每个控制步样本内对有效格求均值，再对当前mini
 src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_hit10/near_x6_far_x10.npz
 ```
 
-`hit_only_10m`仅让P6 gap有效、真实命中且雷达原点原始距离≤10 m的远端射线参与FPS；near规则和物理量程不变。候选不足时保留invalid零槽，不复制点。`all_endpoints`仍是Flat入口默认的旧采样身份，包含无回波量程端点；它与hit10不互用checkpoint。日常命令显式指定hit10，避免依赖默认值。
+`hit_only_10m`仅让P6 gap有效、真实命中且雷达原点原始距离≤10 m的远端射线参与FPS；near规则和物理量程不变。候选不足时保留invalid零槽，不复制点。Flat v2、Terrain和Tripod新训练默认使用sparse、`hit_only_10m`及上述包内选集。`full`与`all_endpoints`保留为显式选项；PPO身份兼容的 `full/all_endpoints` checkpoint续训时必须传入原扫描配置，不能静默转换为新默认。
 
 FPS按米制BASE XYZ进行，首点为最大范数点，并列取pool原顺序，保持源射线身份。更完整的采样设计见[扫描设计](sparse_rays/设计与验收.md)，实验命令见[实验工具](../../../scripts/experiments/confined_locomotion_2/README.md)。
 
 ## 执行与显存设置
 
-两个训练入口接受 `--execution-mode low_memory|speed`，默认 `low_memory`。它对点GRU激活做反向重计算，`speed`保留激活；FP32、样本、损失及20次更新顺序相同。当前采集编码块最多128行，点GRU重放块最多1024份独立扫描；1024是面向32 GB RTX5090的首轮候选，实际块大小受本轮扫描数限制，不是PPO minibatch大小。
+三个训练入口接受正整数 `--point-replay-chunk`，默认1024，控制点GRU编码/重计算块大小；RTX 4050可按工程需要设为256或128。该值不改变24步BPTT、PPO minibatches或网络结构，且写入Recipe/Checkpoint执行元数据，不作为完整恢复硬门。`--execution-mode low_memory|speed`默认 `low_memory`，对点GRU激活做反向重计算；`speed`保留激活。FP32、样本、损失及20次更新顺序不变。
 
 固定点云打包、观测缩放、目标/镜像标签在rollout内复用；GRU特征及预测仍随每次Adam更新重算。有限性检查在各优化器阶段合批，日志延后读取；逐次KL学习率调度保留。没有引入混合精度或自动OOM降级。性能测量与未采用方案见[实验记录](../../../scripts/experiments/confined_locomotion_2/records/20261026_terrain_memory_and_performance.md)，不将本机容量外推到5090。
 
@@ -87,11 +87,11 @@ FPS按米制BASE XYZ进行，首点为最大范数点，并列取pool原顺序�
 | 同步与指标 | [`ppo.py`](../../../src/hexapod_mjlab/rl/confined_locomotion_2/ppo.py) 保留分阶段有限性归约、更新后批量搬运诊断标量；不会跨Adam更新缓存训练特征 |
 | 保存与日志 | Flat/Terrain保留累计周期保存、周期/最终文件硬链接复用和已有指标摘要；提取到公共reporting模块未改变这些计算 |
 
-Tripod复用同一Collector、网络和重放路径，但保留Legacy PPO；其最终文件仍独立保存，不声称采用Flat/Terrain的硬链接复用。v1继续保留独立的无梯度点云特征缓存。优化分支未采用的RL CUDA Graph、密集分组和fused Adam试验没有因重构进入正式训练实现；MJLab既有的仿真图机制保持原样。以上确认实现保留，不代表重新测得相同吞吐：物理签名增加模型读取与哈希工作，代码溯源在Runner启动时采集，整轮墙钟性能需在固定条件下另测。
+Tripod复用统一PPO trainer、网络重放和Collector相关路径，但保留独立Runtime/Runner；其最终文件仍独立保存，不声称采用Flat/Terrain的硬链接复用。v1继续保留独立的无梯度点云特征缓存。优化分支未采用的RL CUDA Graph、密集分组和fused Adam试验没有因重构进入正式训练实现；MJLab既有的仿真图机制保持原样。以上确认实现保留，不代表重新测得相同吞吐：物理签名增加模型读取与哈希工作，代码溯源在Runner启动时采集，整轮墙钟性能需在固定条件下另测。
 
 ## 可视化与模型边界
 
-Flat和Terrain各有原生Play与网页Debug脚本。`play_flat.py` / `play_terrain_memory.py`默认打开暂停状态的MuJoCo passive窗口，Space运行/暂停、Right单步、Enter重置、Q退出；W/S、A/D、J/L调节速度指令，X清零。原有 `--command` 和 `--no-viewer --steps` 有限推理入口保留，Play不提供网页端口参数。
+Flat和Terrain各有原生Play与网页Debug脚本。`play_flat.py` / `play_terrain_memory.py`默认打开暂停状态的MuJoCo passive窗口，Space运行/暂停、F8单步、Enter重置、F12退出；↑/↓调前进、←/→调侧移、Home/End调转向，Delete清零，F9/F10切换前一个/后一个环境。原有 `--command` 和 `--no-viewer --steps` 有限推理入口保留，Play不提供网页端口参数。
 
 `debug_flat.py` / `debug_terrain_memory.py`用于网页调试，默认同时打开原生窗口与事件驱动的Viser网页；`--port`指定网页端口，`--no-native`适用于远程只开网页，`--no-viewer`关闭全部界面。网页保留现有图层、点源、扫描切换、指令和网格预览能力，并增加刷新操作。运行时网页展示最近快照，不持续传输mesh；暂停、单步、刷新、重置和指令预览触发新快照。图层开关、点选和网格预览仅在CPU快照上重绘，不推进物理或GRU。扫描重建时使用独立持久CPU展示模型，身份校验通过后复用展示窗口。Native每个控制步读取Runtime动作后的姿态与速度，不经过完整网页Debug捕获。以上描述功能边界，不代表流畅度已验收或已消除卡顿。
 
@@ -99,9 +99,13 @@ Terrain网页显示真实地形，可开关高度预测/真值、当前及候选
 
 Play只读权重，实际监督范围读取checkpoint。其扫描override仅用于同sampling、同固定catalog内的权重评估；不能作为完整续训或跨任务兼容机制。
 
+Tripod也使用同一原生查看器和交互循环，保留自己的LegacyRuntime、LSTM执行器、warmup及翻倒暂停规则；`--no-viewer --steps N`保留有限诊断。其指令范围、重置及weights-only边界见[Tripod说明](tripod2_low.md)。
+
 完整checkpoint比较架构、编译模型结构与物理签名、训练配方、seed、环境数、扫描身份和状态张量。缺少本轮新增物理签名的旧文件拒绝完整恢复，符合条件时仍可用于weights-only Play。Recipe与完整文件持久化Git代码来源，不用源码位置、commit或设备元数据门控恢复；跨GPU完整迁移未在本轮验证。细则见[监控与保存](training/监控与保存.md)。
 
 ## 检查与历史记录
+
+2026-10-29统一PPO后的有限回归：共享CPU组182项、Tripod专项29项通过；三个任务各以2环境完成1轮/20次Adam更新、保存恢复及下一transition数值比对。旧PPO文件在应用状态前拒绝完整恢复，新旧三个任务的权重各完成2步Play，隔离wheel资源检查通过。恢复边界及同一rollout优化重演逐位一致，后续自然仿真轨迹未逐位一致；未开展新配方长训、学习效果或跨GPU验收。
 
 当前CPU/GPU检查入口见[测试说明](../../../tests/confined_locomotion_2/README.md)。地形几何、标签对齐、联合更新及性能阶段结论统一放在[实验记录](../../../scripts/experiments/confined_locomotion_2/records/20261026_terrain_memory_and_performance.md)；历史原始日志和 checkpoint 已在 2026-10-27 清理中删除，不能恢复或逐帧复验，复现需重新运行当前检查。
 

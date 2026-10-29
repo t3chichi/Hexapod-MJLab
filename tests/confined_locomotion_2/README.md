@@ -2,6 +2,8 @@
 
 本页列出可复用的测试入口。所有命令从仓库根目录、`hp_mjlab` 环境运行。测试证据输出到新目录；检查会按各自用途创建仿真环境、推进有限步数，部分检查会执行 PPO 更新并改变临时模型参数。它们不是正式学习验收。
 
+Flat v2、Terrain Memory和Tripod共用`TemporalPPOTrainer` / `TemporalPPOConfig`，trainer schema为`temporal_ppo/v2`，Recipe必须带`ppo_semantics`。身份语义包含直接优化std、解析KL（无旧epsilon）、原始样本KL/熵、单次shuffle跨5 epoch复用，以及pre-reset next_value的GAE边界（termination不bootstrap、truncation bootstrap）。完整24步BPTT、镜像损失和Terrain高度辅助保持。Tripod继续使用独立Runtime/Runner与LSTM。历史checkpoint缺少PPO语义身份时拒绝完整续训，不迁移Adam；原sampling下的weights-only Play仍可用。Tripod检查入口见[测试总览](../README.md#flat_2-与-terrain-memory)和[任务说明](../../docs/tasks/confined_locomotion_2/tripod2_low.md)。
+
 2026-10-26独立干净克隆的安装、资源、CPU及有限GPU检查见[部署检查摘要](evidence/20261026_clean_checkout.json)。该检查复用了开发机已有依赖，不代表5090或全新网络求解环境已验收。
 
 ## CPU 检查
@@ -10,7 +12,7 @@
 python -B tests/confined_locomotion_2/run_checks.py
 ```
 
-该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含173项CPU检查，其中一个入口执行7个地形边界子用例；包括Logger初始化时序与Runner异常资源清理。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
+该入口逐个调用目录内 `test_*.py` 的测试函数，不依赖 pytest 或 GPU。当前代码包含182项CPU检查，其中一个入口执行7个地形边界子用例；包括Logger初始化时序与Runner异常资源清理。检查通过仅说明对应接口和数值约束成立，不说明策略学会行走或地形记忆。
 
 `test_scan_batching.py` 和 `test_history_batching.py` 覆盖采集批量化的行顺序、故障与随机流边界、窗口写入原子性及快照所有权。真实同场景参考对照可运行：
 

@@ -27,9 +27,13 @@ python -B scripts/experiments/confined_locomotion_2/sparse_rays/select_channels.
 
 - Flat Baseline：`scripts/experiments/confined_locomotion_2/train.py`
 - Terrain Memory：`scripts/experiments/confined_locomotion_2/train_terrain_memory.py`
-- Tripod2 Low迁移对照：`scripts/experiments/confined_locomotion_2/train_tripod2_low.py`；独立Legacy配方及Play见[任务说明](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/tripod2_low/README.md)
+- Tripod2 Low迁移对照：`scripts/experiments/confined_locomotion_2/train_tripod2_low.py`；共享Temporal PPO配方、独立Runtime/Runner及Play见[任务说明](../../../docs/tasks/confined_locomotion_2/tripod2_low.md)
 
-Flat/Terrain都要求显式 seed、num-envs 和 iterations；Terrain Memory 还要求 `--height-loss-weight`。Tripod的默认预算和运行语义按其独立说明执行，不套用Flat/Terrain性能测量。正式运行的任务身份、resume 参数和只读 Play 入口以[快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)为准。性能实验的临时脚本、工作树副本或个人日志目录不是正式入口，也不作为克隆仓库的依赖。
+三个任务均要求显式 seed、num-envs 和 iterations；Terrain Memory 还要求 `--height-loss-weight`。Tripod保留独立Runtime/Runner但共用Temporal PPO更新语义；训练预算、恢复身份和Play边界见其任务说明。正式运行入口以[快速开始](../../../src/hexapod_mjlab/tasks/confined_locomotion_2/快速开始.md)为准。性能实验的临时脚本、工作树副本或个人日志目录不是正式入口，也不作为克隆仓库的依赖。
+
+Flat v2、Terrain和Tripod新训练默认使用sparse、`hit_only_10m`及包内固定选集 `assets/fixed_channels/v1_hit10/near_x6_far_x10.npz`。`full/all_endpoints`仍可显式选择；与当前PPO身份兼容的checkpoint续训要显式传回对应扫描参数。`--point-replay-chunk`为正整数，默认1024，控制点GRU编码/重计算分块；4050可按需设为256或128，不改变24步BPTT、PPO minibatches或网络。Recipe/Checkpoint记录执行参数，但此项不是完整恢复硬门。Tripod Play读取checkpoint扫描配置；Flat/Terrain Play仍需显式指定匹配的扫描参数。
+
+统一trainer schema为`temporal_ppo/v2`，Recipe记录必需`ppo_semantics`。策略直接优化初值1的std；KL使用解析计算、不含旧epsilon，KL与熵只对原始样本计算；每个rollout仅shuffle一次并在5个epoch复用。GAE按每步pre-reset next_value计算，termination不bootstrap、truncation bootstrap。完整24步BPTT、镜像损失、Terrain高度辅助保留。旧checkpoint缺少语义身份时拒绝完整续训，不迁移Adam；仍可在符合任务、架构和sampling时作weights-only Play。
 
 ## Play 与网页 Debug
 
@@ -38,7 +42,7 @@ Flat/Terrain都要求显式 seed、num-envs 和 iterations；Terrain Memory 还�
 - Flat：`play_flat.py`
 - Terrain Memory：`play_terrain_memory.py`
 
-窗口启动时暂停；Space运行/暂停，Right单步，Enter重置，Q退出。W/S调前进，A/D调侧移，J/L调转向，X清零指令。两个入口保留 `--command` 初始指令及 `--no-viewer --steps N` 有限无界面推理；它们没有 `--port` 参数。
+窗口启动时暂停；Space运行/暂停，F8单步，Enter重置，F12退出。↑/↓调前进，←/→调侧移，Home/End调转向，Delete清零指令；F9/F10切换前一个/后一个环境。两个入口保留 `--command` 初始指令及 `--no-viewer --steps N` 有限无界面推理；它们没有 `--port` 参数。
 
 需要网页时使用独立Debug入口：`debug_flat.py` 或 `debug_terrain_memory.py`。默认同时启动原生窗口和事件驱动的Viser网页，`--port`设置网页端口；`--no-native`只开网页，便于远程查看；`--no-viewer`关闭所有界面。网页保留原图层、点源查看、扫描切换、指令和网格功能，并提供刷新按钮。网页在运行时冻结最近快照，不持续传输mesh；暂停、单步、刷新、重置和指令预览会触发快照。图层开关、点选和网格预览只重绘CPU快照，不推进仿真或GRU。扫描重建期间使用独立持久CPU展示模型，身份检查通过后复用展示窗口。原生路径每步读取Runtime动作后的姿态与速度，不执行完整Debug捕获。功能描述不构成流畅度或无卡顿验收。
 
@@ -59,5 +63,7 @@ python -B scripts/experiments/confined_locomotion_2/benchmark_collection.py \
 当前 RTX 4050 结果与测量边界整理在[2026-10-26 地形记忆与性能记录](records/20261026_terrain_memory_and_performance.md)。这些有限工程运行不构成 5090 容量、长期稳定性或学习效果结论。
 
 已验证的两批采集优化在目录重构后的迁移范围、回归结果与512环境有限采集记录见[迁移验收](records/20261027_optimization_migration.md)。
+
+独立性能工作树已退役，原始实验产物按用户授权删除；保留的负结果、测量边界和删除范围见[工作树退役记录](records/20261029_worktree_retirement.md)。
 
 上述records保留当时的源码身份、恢复政策和性能数据，不表示当前loader仍接受那些历史文件。当前优化保留情况见[任务说明](../../../docs/tasks/confined_locomotion_2/README.md#执行与显存设置)，完整恢复与物理签名政策见[监控与保存](../../../docs/tasks/confined_locomotion_2/training/监控与保存.md)。
