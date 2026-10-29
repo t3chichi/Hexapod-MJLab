@@ -446,6 +446,11 @@ def test_execution_mode_controls_only_recomputation_and_cross_mode_restore():
             assert seen[-1] is recompute
             state = trainer.state_dict()
             assert state["execution_mode"] == mode
+            assert state["point_replay_chunk"] == 1024
+            state["point_replay_chunk"] = 128
+            trainer.load_state_dict(state)
+            assert trainer.point_replay_chunk == 1024
+            del state["point_replay_chunk"]  # Historical metadata remains loadable.
             trainer.load_state_dict(state)
             state["execution_mode"] = "speed" if recompute else "low_memory"
             trainer.load_state_dict(state)
@@ -459,6 +464,37 @@ def test_execution_mode_controls_only_recomputation_and_cross_mode_restore():
                 raise AssertionError("invalid saved execution mode accepted")
     finally:
         ppo.replay_sequence = original
+
+
+def test_point_replay_chunk_preserves_recurrent_outputs_and_parameter_gradients():
+    from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
+    from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import (
+        prepare_sequence_replay, replay_sequence,
+    )
+    torch.manual_seed(91)
+    net = ConfinedLocomotionNetwork(mlp_activation=nn.ELU(), init_fn=None, envelope_mode="raw")
+    steps = _buffer(torch.device("cpu"), terminal_at=8).steps
+    for step in steps:
+        # Ragged point sequences exercise packing and actual point-GRU grads.
+        step.near_points[:, :3].normal_()
+        step.near_valid[:, :3] = True
+        step.far_points[:, :2].normal_()
+        step.far_valid[:, :2] = True
+    def run(chunk):
+        net.zero_grad(set_to_none=True)
+        plan = prepare_sequence_replay(steps, network=net, point_replay_chunk=chunk)
+        assert plan.point_replay_chunk == chunk
+        assert len(plan.point_sequences) == (24 + chunk - 1) // chunk
+        outputs = replay_sequence(net, plan, checkpoint_points=True)
+        values = torch.stack([out.action_mean for out in outputs])
+        values.square().mean().backward()
+        return values.detach(), {name: p.grad.clone() for name, p in net.named_parameters() if p.grad is not None}
+    reference, gradients = run(1024)
+    actual, chunked_gradients = run(3)
+    torch.testing.assert_close(actual, reference, atol=2e-6, rtol=2e-5)
+    assert gradients.keys() == chunked_gradients.keys()
+    for name in gradients:
+        torch.testing.assert_close(chunked_gradients[name], gradients[name], atol=2e-6, rtol=2e-5)
 
 
 def test_batched_finite_checks_keep_optimizer_failure_boundaries():

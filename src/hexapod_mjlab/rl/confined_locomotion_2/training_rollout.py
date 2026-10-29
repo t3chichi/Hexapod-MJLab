@@ -226,7 +226,13 @@ class SequenceRolloutBuffer:
 
 _POINT_FIELDS = ("near_points", "near_valid", "far_points", "far_valid",
                  "near_angle_keys", "far_angle_keys")
-_FRAME_REPLAY_CHUNK = 1024
+DEFAULT_POINT_REPLAY_CHUNK = 1024
+
+
+def validate_point_replay_chunk(value):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("point_replay_chunk must be a positive integer")
+    return value
 
 
 @dataclass(frozen=True)
@@ -281,13 +287,16 @@ class PreparedSequenceReplay:
     temporal_layout: TemporalReplayLayout
     point_sequences: tuple[Any, ...] | None = None
     scaled_observations: tuple[torch.Tensor, torch.Tensor] | None = None
+    point_replay_chunk: int = DEFAULT_POINT_REPLAY_CHUNK
 
 
 def prepare_sequence_replay(steps: list[SequenceStep], *, network=None, mirrored=False,
-                            joint_permutation=None, mount_quat_xyzw=None) -> PreparedSequenceReplay:
+                            joint_permutation=None, mount_quat_xyzw=None,
+                            point_replay_chunk=DEFAULT_POINT_REPLAY_CHUNK) -> PreparedSequenceReplay:
     """Validate snapshots and prepare unique scans once, without network features."""
     from .symmetry import mirror_prepared
 
+    validate_point_replay_chunk(point_replay_chunk)
     if not steps:
         raise RolloutError("sequence replay requires at least one step")
     inputs = []
@@ -344,9 +353,9 @@ def prepare_sequence_replay(steps: list[SequenceStep], *, network=None, mirrored
     sequences = None
     if network is not None and hasattr(network, "prepare_point_sequence"):
         sequences = []
-        for start in range(0, len(point_inputs[0]), _FRAME_REPLAY_CHUNK):
+        for start in range(0, len(point_inputs[0]), point_replay_chunk):
             near, nv, far, fv, nk, fk = (
-                None if x is None else x[start:start + _FRAME_REPLAY_CHUNK]
+                None if x is None else x[start:start + point_replay_chunk]
                 for x in point_inputs)
             sequences.append(network.prepare_point_sequence(
                 near, nv, far, fv, near_angle_keys=nk, far_angle_keys=fk))
@@ -354,16 +363,20 @@ def prepare_sequence_replay(steps: list[SequenceStep], *, network=None, mirrored
     scaled = (network.prepare_sequence_observations([p.observation for p in inputs])
               if network is not None and hasattr(network, "prepare_sequence_observations") else None)
     return PreparedSequenceReplay(steps, inputs, tuple(point_inputs), row_indices, mirrored,
-                                  _temporal_layout(steps), sequences, scaled)
+                                  _temporal_layout(steps), sequences, scaled, point_replay_chunk)
 
 
 def replay_sequence(network, steps: list[SequenceStep] | PreparedSequenceReplay, *, mirrored=False,
                     joint_permutation=None, mount_quat_xyzw=None,
-                    checkpoint_points=False) -> list[Any]:
-    """Recompute differentiable features; retain the complete temporal gradient."""
+                    checkpoint_points=False, point_replay_chunk=DEFAULT_POINT_REPLAY_CHUNK) -> list[Any]:
+    """Recompute differentiable features; retain the complete temporal gradient.
+
+    A prepared plan owns its packing/chunk boundaries. The chunk argument is
+    used when constructing a plan from raw steps.
+    """
     plan = steps if isinstance(steps, PreparedSequenceReplay) else prepare_sequence_replay(
         steps, network=network, mirrored=mirrored, joint_permutation=joint_permutation,
-        mount_quat_xyzw=mount_quat_xyzw)
+        mount_quat_xyzw=mount_quat_xyzw, point_replay_chunk=point_replay_chunk)
     steps = plan.steps
     h = steps[0].mirror_hidden_before if plan.mirrored else steps[0].hidden_before
     if h is None:
@@ -374,13 +387,14 @@ def replay_sequence(network, steps: list[SequenceStep] | PreparedSequenceReplay,
         from torch.utils.checkpoint import checkpoint
 
         features = []
-        for index, start in enumerate(range(0, len(plan.point_inputs[0]), _FRAME_REPLAY_CHUNK)):
+        chunk = plan.point_replay_chunk
+        for index, start in enumerate(range(0, len(plan.point_inputs[0]), chunk)):
             if plan.point_sequences is not None:
                 encode = network.encode_point_sequence
                 args, kwargs = (plan.point_sequences[index],), {}
             else:
                 near, nv, far, fv, nk, fk = (
-                    None if x is None else x[start:start + _FRAME_REPLAY_CHUNK]
+                    None if x is None else x[start:start + chunk]
                     for x in plan.point_inputs)
                 encode = network.encode_points
                 args = near, nv, far, fv

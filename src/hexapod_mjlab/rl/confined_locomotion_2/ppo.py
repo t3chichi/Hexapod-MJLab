@@ -21,6 +21,7 @@ from .auxiliary import AuxiliaryResult, HeightReconstructionAuxiliary, resolve_a
 from .training_rollout import (
     PreparedSequenceReplay, prepare_sequence_replay, replay_sequence,
     SequenceRolloutBuffer, SequenceStep, ROLLOUT_STEPS,
+    DEFAULT_POINT_REPLAY_CHUNK, validate_point_replay_chunk,
 )
 
 
@@ -81,6 +82,7 @@ class TemporalPPOTrainer:
         symmetry_enabled: bool = False, joint_permutation: JointPermutation | None = None,
         mount_quat_xyzw: torch.Tensor | None = None, allow_cpu: bool = True,
         seed: int = 0, execution_mode: str = "low_memory",
+        point_replay_chunk: int = DEFAULT_POINT_REPLAY_CHUNK,
         auxiliary: Callable[[Any, Any], AuxiliaryResult] | None = None,
     ) -> None:
         if not isinstance(network, nn.Module) or not isinstance(distribution_provider, nn.Module):
@@ -95,6 +97,7 @@ class TemporalPPOTrainer:
         if execution_mode not in ("low_memory", "speed"):
             raise ValueError("execution_mode must be low_memory or speed")
         self.execution_mode = execution_mode
+        self.point_replay_chunk = validate_point_replay_chunk(point_replay_chunk)
         self.network = network
         self.distribution_provider = distribution_provider
         self.config = config or TemporalPPOConfig()
@@ -137,6 +140,7 @@ class TemporalPPOTrainer:
             "config": asdict(self.config),
             "symmetry_enabled": self.symmetry_enabled,
             "execution_mode": self.execution_mode,
+            "point_replay_chunk": self.point_replay_chunk,
             "seed": self.seed,
             "shuffle_generator_state": self.shuffle_generator.get_state().cpu(),
         }
@@ -154,6 +158,10 @@ class TemporalPPOTrainer:
         saved_mode = state.get("execution_mode")
         if saved_mode is not None and saved_mode not in ("low_memory", "speed"):
             raise ValueError(f"saved execution mode is invalid: {saved_mode!r}")
+        if "point_replay_chunk" in state:
+            validate_point_replay_chunk(state["point_replay_chunk"])
+        # Retain this run's execution budget, including for historical states
+        # without this metadata; chunk size is not a training-state identity.
         self.optimizer.load_state_dict(state["optimizer"])
         self.updates = int(state["updates"])
         self.optimizer_step_count = int(state["optimizer_step_count"])
@@ -178,7 +186,8 @@ class TemporalPPOTrainer:
         return replay_sequence(
             self.network, steps, mirrored=mirrored,
             joint_permutation=self.joint_permutation, mount_quat_xyzw=self.mount_quat_xyzw,
-            checkpoint_points=self.execution_mode == "low_memory")
+            checkpoint_points=self.execution_mode == "low_memory",
+            point_replay_chunk=self.point_replay_chunk)
 
     def update(self, buffer: SequenceRolloutBuffer) -> dict[str, float | int]:
         if self.faulted:
@@ -195,10 +204,12 @@ class TemporalPPOTrainer:
             raise ValueError("buffer and trainer devices differ")
         if self.symmetry_enabled and any(step.prepared is None or step.mirror_hidden_before is None for step in buffer.steps):
             raise ValueError("symmetry requires prepared inputs and shadow hidden state at every step")
-        replay_inputs = prepare_sequence_replay(buffer.steps, network=self.network)
+        replay_inputs = prepare_sequence_replay(buffer.steps, network=self.network,
+                                               point_replay_chunk=self.point_replay_chunk)
         mirror_inputs = prepare_sequence_replay(
             buffer.steps, network=self.network, mirrored=True, joint_permutation=self.joint_permutation,
-            mount_quat_xyzw=self.mount_quat_xyzw) if self.symmetry_enabled else None
+            mount_quat_xyzw=self.mount_quat_xyzw,
+            point_replay_chunk=self.point_replay_chunk) if self.symmetry_enabled else None
         height_targets = (self.auxiliary.prepare_targets(buffer.steps, mirrored=self.symmetry_enabled)
                           if isinstance(self.auxiliary, HeightReconstructionAuxiliary) else None)
         advantages, returns = buffer.compute_gae()
