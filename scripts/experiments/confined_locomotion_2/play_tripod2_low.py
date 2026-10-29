@@ -34,7 +34,7 @@ def main():
         parser.error("--output-dir must be a new directory")
     from hexapod_mjlab.tasks.confined_locomotion_2.visualization.native import NativePlayViewer, require_native_display
     from hexapod_mjlab.tasks.confined_locomotion_2.visualization.play_cli import run_play
-    from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.play import TripodPlaySession
+    from hexapod_mjlab.tasks.confined_locomotion_2.play_tripod import TripodPlaySession
     if not args.no_viewer:
         require_native_display()
     # Keep generated diagnostics available after exit.

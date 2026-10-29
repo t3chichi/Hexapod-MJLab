@@ -24,11 +24,13 @@ from .history import (
 )
 from .integration import PreparedControlInputs, prepare_control_inputs
 from .network import ConfinedLocomotionNetwork, NetworkOutput
+from .distribution import DirectStdNormalProvider
 from .ppo import TemporalPPOConfig, TemporalPPOTrainer, derive_shuffle_generator_seed
 from .training_rollout import SequenceRolloutBuffer
 
 __all__ = [
     "ConfinedLocomotionNetwork",
+    "DirectStdNormalProvider",
     "ContractError",
     "EMPTY_SCAN_ID",
     "EnvelopeLabel",

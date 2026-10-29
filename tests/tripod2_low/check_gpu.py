@@ -25,8 +25,9 @@ def main():
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.rl.vecenv_wrapper import RslRlVecEnvWrapper
     from dataclasses import asdict
-    from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.env import make_env_cfg
-    from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.runner import TripodRunner, TripodRlCfg
+    from hexapod_mjlab.tasks.confined_locomotion_2.tripod_env_cfg import make_env_cfg
+    from hexapod_mjlab.tasks.confined_locomotion_2.rl.tripod_runner import TripodRunner
+    from hexapod_mjlab.tasks.confined_locomotion_2.config.tripod2_low_config import TripodRlCfg
     device = f"cuda:{args.gpu}"
     root = Path(tempfile.mkdtemp(prefix="tripod-gpu-check-"))
     cfg = asdict(TripodRlCfg(seed=1, max_iterations=1, formal_num_envs=2, engineering_validation=True))
@@ -55,7 +56,7 @@ def main():
     second = create(root / "restored")
     try:
         from hexapod_mjlab.common.checkpoint import model_physics_identity
-        from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.checkpoint import _model_tensors, read_checkpoint
+        from hexapod_mjlab.tasks.confined_locomotion_2.rl.tripod_checkpoint import _model_tensors, read_checkpoint
         nominal = model_physics_identity(second.runtime.env.sim.mj_model)
         saved = read_checkpoint(checkpoint)
         assert saved["code_provenance"] == json.loads((root / "first/run_recipe.json").read_text())["code_provenance"]

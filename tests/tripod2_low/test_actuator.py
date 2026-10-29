@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.actuator import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.tripod_actuator import (
     ACTUATOR_PATH, LegacyLSTMAction, LegacyLSTMActionCfg,
 )
 

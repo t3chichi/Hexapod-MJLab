@@ -7,7 +7,7 @@ import torch
 from torch import nn
 
 from hexapod_mjlab.rl.confined_locomotion.contracts import EnvelopeLabel, OnlineObservation
-from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider
+from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
 from hexapod_mjlab.rl.confined_locomotion.losses import ppo_policy_loss
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
 from hexapod_mjlab.rl.confined_locomotion_2.integration import PreparedControlInputs
@@ -93,7 +93,7 @@ def _buffer(device: torch.device, *, terminal_at: int | None = None) -> Sequence
 def test_replay_keeps_temporal_gradient_and_clears_hidden_after_done():
     device = torch.device("cpu")
     net = TinyTemporalNet()
-    provider = IndependentDiagonalNormalProvider(device=device, generator_seed=5)
+    provider = DirectStdNormalProvider(device=device, generator_seed=5)
     trainer = TemporalPPOTrainer(network=net, distribution_provider=provider, device=device)
     buf = _buffer(device, terminal_at=8)
     # A gradient from the final output must pass through earlier frames in the same episode.
@@ -112,7 +112,7 @@ def test_replay_keeps_temporal_gradient_and_clears_hidden_after_done():
 def test_mirror_replay_uses_separate_initial_state_and_mirrors_full_observation_sequence():
     device = torch.device("cpu")
     net = TinyTemporalNet()
-    provider = IndependentDiagonalNormalProvider(device=device, generator_seed=7)
+    provider = DirectStdNormalProvider(device=device, generator_seed=7)
     names = tuple(f"{leg}_{kind}" for leg in ("RF", "LF", "RM", "LM", "RB", "LB")
                   for kind in ("HAA", "HFE", "KFE"))
     perm = JointPermutation.from_joint_names(names)
@@ -189,7 +189,7 @@ def test_ppo_loss_matches_reference_formula_and_empty_auxiliary_is_parameter_fre
 def test_temporal_ppo_update_runs_exact_recipe_steps_and_consumes_buffer():
     device = torch.device("cpu")
     net = TinyTemporalNet()
-    provider = IndependentDiagonalNormalProvider(device=device, generator_seed=9)
+    provider = DirectStdNormalProvider(device=device, generator_seed=9)
     trainer = TemporalPPOTrainer(network=net, distribution_provider=provider, device=device)
     buf = _buffer(device)
     calls = []
@@ -201,7 +201,7 @@ def test_temporal_ppo_update_runs_exact_recipe_steps_and_consumes_buffer():
     handle.remove()
     assert calls == [(24, 18)] * 20
     assert torch.equal(provider.generator_state(), action_rng)
-    assert provider.log_std.grad is not None and torch.isfinite(provider.log_std.grad).all()
+    assert provider.std.grad is not None and torch.isfinite(provider.std.grad).all()
     assert buf.consumed
     assert trainer.update_count == 1
     assert trainer.optimizer_step_count == 20
@@ -216,7 +216,7 @@ def test_shuffle_generator_is_named_private_and_checkpointed():
     torch.manual_seed(123)
     first = TemporalPPOTrainer(
         network=TinyTemporalNet(),
-        distribution_provider=IndependentDiagonalNormalProvider(device=device, generator_seed=1),
+        distribution_provider=DirectStdNormalProvider(device=device, generator_seed=1),
         device=device, seed=42,
     )
     assert torch.equal(torch.rand(1), expected_global)
@@ -224,7 +224,7 @@ def test_shuffle_generator_is_named_private_and_checkpointed():
     next_a = torch.randperm(20, generator=first.shuffle_generator)
     second = TemporalPPOTrainer(
         network=TinyTemporalNet(),
-        distribution_provider=IndependentDiagonalNormalProvider(device=device, generator_seed=2),
+        distribution_provider=DirectStdNormalProvider(device=device, generator_seed=2),
         device=device, seed=42,
     )
     second.load_state_dict(state)
@@ -441,7 +441,7 @@ def test_execution_mode_controls_only_recomputation_and_cross_mode_restore():
         for mode, recompute in (("low_memory", True), ("speed", False)):
             trainer = TemporalPPOTrainer(
                 network=TinyTemporalNet(), device="cpu", execution_mode=mode,
-                distribution_provider=IndependentDiagonalNormalProvider(device="cpu", generator_seed=5))
+                distribution_provider=DirectStdNormalProvider(device="cpu", generator_seed=5))
             trainer._replay([])
             assert seen[-1] is recompute
             state = trainer.state_dict()
@@ -508,7 +508,7 @@ def test_batched_finite_checks_keep_optimizer_failure_boundaries():
         net = TinyTemporalNet()
         trainer = TemporalPPOTrainer(
             network=net, device='cpu',
-            distribution_provider=IndependentDiagonalNormalProvider(device='cpu', generator_seed=5))
+            distribution_provider=DirectStdNormalProvider(device='cpu', generator_seed=5))
         if fault == 'gradient':
             net.gain.register_hook(lambda grad: torch.full_like(grad, float('nan')))
         elif fault == 'clipped_gradient':

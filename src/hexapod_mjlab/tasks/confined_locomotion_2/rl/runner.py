@@ -17,13 +17,14 @@ from mjlab.rl.runner import MjlabOnPolicyRunner
 from mjlab.utils.torch import configure_torch_backends
 
 from hexapod_mjlab.rl.confined_locomotion.distribution import (
-    IndependentDiagonalNormalProvider, derive_action_generator_seed,
+    derive_action_generator_seed,
 )
+from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
 from hexapod_mjlab.rl.confined_locomotion.ppo import MirrorTrainingConfig
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
 from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork, TerrainMemoryNetwork
 from hexapod_mjlab.rl.confined_locomotion_2.auxiliary import HeightReconstructionAuxiliary
-from hexapod_mjlab.rl.confined_locomotion_2.ppo import TemporalPPOConfig, TemporalPPOTrainer
+from hexapod_mjlab.rl.confined_locomotion_2.ppo import TemporalPPOConfig, TemporalPPOTrainer, ppo_semantics
 from hexapod_mjlab.common.perturbations import ObservationPerturbationCfg
 from hexapod_mjlab.common.provenance import capture_code_provenance
 from hexapod_mjlab.common.training_logger import TrainingLogger
@@ -68,6 +69,15 @@ def environment_semantics(env):
     }
 
 
+def print_execution_settings(runtime, *, execution_mode, point_replay_chunk):
+    pipeline = runtime.pipeline
+    print(f"[Training] scan={pipeline.cfg.raycast_mode}, far_sampling={pipeline.cfg.far_sampling}, "
+          f"rays/env={pipeline.num_raw_rays}", flush=True)
+    print(f"[Training] selection={pipeline.cfg.sparse_selection_path or 'none (full scan)'}", flush=True)
+    print(f"[Training] execution_mode={execution_mode}, point_replay_chunk={point_replay_chunk} "
+          "(scan batch cap; 24-step BPTT unchanged)", flush=True)
+
+
 def resolve_recipe(cfg):
     if not isinstance(cfg, dict):
         raise ValueError("runner requires an explicit recipe dictionary")
@@ -95,6 +105,10 @@ def resolve_recipe(cfg):
     execution_mode = cfg.get("execution_mode", "low_memory")
     if execution_mode not in ("low_memory", "speed"):
         raise ValueError("execution_mode must be low_memory or speed")
+    from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import (
+        DEFAULT_POINT_REPLAY_CHUNK, validate_point_replay_chunk,
+    )
+    point_replay_chunk = validate_point_replay_chunk(cfg.get("point_replay_chunk", DEFAULT_POINT_REPLAY_CHUNK))
     ppo = cfg.get("ppo_config", {})
     ppo = ppo if isinstance(ppo, TemporalPPOConfig) else TemporalPPOConfig(**ppo)
     symmetry = cfg.get("symmetry", {})
@@ -102,7 +116,8 @@ def resolve_recipe(cfg):
     perturbations = cfg.get("observation_perturbations")
     if perturbations is not None and not isinstance(perturbations, ObservationPerturbationCfg):
         perturbations = ObservationPerturbationCfg.from_dict(perturbations)
-    lidar_cfg = cfg.get("lidar_config", {"raycast_mode": "full", "sparse_selection_path": None})
+    from ..components.lidar.scanner import training_lidar_defaults
+    lidar_cfg = cfg.get("lidar_config", training_lidar_defaults())
     if isinstance(lidar_cfg, ConfinedLidarCfg):
         pass
     elif isinstance(lidar_cfg, dict):
@@ -128,7 +143,8 @@ def resolve_recipe(cfg):
     return {"seed": seed, "budget": budget, "formal": formal,
             "engineering": engineering, "ppo": ppo, "symmetry": symmetry,
             "perturbations": perturbations, "lidar_cfg": lidar_cfg,
-            "save_interval": interval, "execution_mode": execution_mode, **terrain_recipe}
+            "save_interval": interval, "execution_mode": execution_mode,
+            "point_replay_chunk": point_replay_chunk, **terrain_recipe}
 
 
 class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
@@ -176,19 +192,19 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         self.network = network_cls(
             mlp_activation=nn.ELU(), init_fn=None, envelope_mode="raw",
             ground_samples=None).to(self.device)
-        # v2 Flat/Terrain startup recipe: std=1.0, still log_std-parameterized.
-        self.provider = IndependentDiagonalNormalProvider(
-            device=self.device, generator_seed=derive_action_generator_seed(self.seed),
-            initial_std=1.0)
+        self.provider = DirectStdNormalProvider(
+            device=self.device, generator_seed=derive_action_generator_seed(self.seed))
         self.symmetry_config = resolved["symmetry"]
         distribution_identity = {
-            **self.provider.distribution_identity(), "parameterization": "log_std",
+            **self.provider.distribution_identity(),
         }
         self.recipe_identity = {
             "architecture": architecture_identity(resolved["lidar_cfg"].far_sampling, terrain_memory=terrain),
             "distribution": distribution_identity,
             "ppo": asdict(resolved["ppo"]), "symmetry": asdict(self.symmetry_config),
+            "ppo_semantics": ppo_semantics(),
             "execution_mode": resolved["execution_mode"],
+            "point_replay_chunk": resolved["point_replay_chunk"],
             "perturbations": None if resolved["perturbations"] is None else resolved["perturbations"].identity(),
             "precision": "FP32, TF32 off, cuDNN RNN IEEE, no AMP",
             "observability": {"schema": "learning_metrics/v1", "save_interval": self.save_interval},
@@ -231,10 +247,13 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
         self.trainer = TemporalPPOTrainer(
             network=self.network, distribution_provider=self.provider,
             device=self.device, config=resolved["ppo"], execution_mode=resolved["execution_mode"],
+            point_replay_chunk=resolved["point_replay_chunk"],
             symmetry_enabled=self.symmetry_config.enabled,
             joint_permutation=self.joint_permutation,
             mount_quat_xyzw=self.mount_quat_xyzw, seed=self.seed,
             **({"auxiliary": HeightReconstructionAuxiliary(resolved["height_loss_weight"])} if terrain else {}))
+        print_execution_settings(self.runtime, execution_mode=self.trainer.execution_mode,
+                                 point_replay_chunk=self.trainer.point_replay_chunk)
         self.collector = TrainingCollector(
             self.runtime, self.network, self.provider,
             symmetry_enabled=self.symmetry_config.enabled,
@@ -322,7 +341,7 @@ class ConfinedLocomotionRunner(MjlabOnPolicyRunner):
                     completed_iteration=self.current_learning_iteration,
                     target_iteration=target_iteration, scalars=scalars,
                     learning_rate=self.trainer.optimizer.param_groups[0]["lr"],
-                    action_std=self.provider.log_std.exp())
+                    action_std=self.provider.std)
                 with (self.log_dir / "learning_metrics.jsonl").open("a") as stream:
                     stream.write(json.dumps({"iteration": self.current_learning_iteration, **scalars},
                                             ensure_ascii=False, allow_nan=False) + "\n")

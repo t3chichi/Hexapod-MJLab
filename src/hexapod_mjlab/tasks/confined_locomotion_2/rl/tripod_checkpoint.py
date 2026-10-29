@@ -11,7 +11,7 @@ import uuid
 import numpy as np
 import torch
 
-from ..rl import checkpoint as base
+from . import checkpoint as base
 
 SCHEMA = "confined_locomotion_flat_tripod2_low.full/v1"
 TASK_ID = "El-4090-Confined-Locomotion-Flat-Tripod2-Low_2"
@@ -204,6 +204,7 @@ def load_full_checkpoint(runner, path):
                               expected_task_id=runner.task_id)
     base.compare_identity(identity(runner), payload["identity"],
                           extra_keys=("warmup_control_steps",))
+    base.validate_ppo_state_identity(payload["trainer"])
     env = runner.runtime.env
     action, action_state = _action_tensors(env)
     physics, _ = base._physics_arrays(env)

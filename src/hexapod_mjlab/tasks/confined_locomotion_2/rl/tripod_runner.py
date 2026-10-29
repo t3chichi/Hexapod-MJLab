@@ -1,5 +1,5 @@
 """Independent recipe/runner; the policy and scan implementation are shared."""
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 import hashlib
 import json
 from pathlib import Path
@@ -10,42 +10,31 @@ import numpy as np
 import torch
 from torch import nn
 
-from mjlab.rl import RslRlBaseRunnerCfg
 from mjlab.utils.torch import configure_torch_backends
 
 from hexapod_mjlab.rl.confined_locomotion.distribution import derive_action_generator_seed
+from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
+from hexapod_mjlab.rl.confined_locomotion_2.ppo import (
+    TemporalPPOConfig, TemporalPPOTrainer, ppo_semantics,
+)
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
 from hexapod_mjlab.common.provenance import capture_code_provenance
 from hexapod_mjlab.common.training_logger import TrainingLogger
 from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
 from ..collector import TrainingCollector
-from ..rl.reporting import optimizer_scalar_summary
-from ..rl.runner import ConfinedLocomotionRunner, environment_semantics
+from .reporting import optimizer_scalar_summary
+from .runner import ConfinedLocomotionRunner, environment_semantics, print_execution_settings
 from ..components.lidar.scanner import ConfinedLidarCfg
-from .actuator import ACTUATOR_PATH
-from .legacy import reward_scales
-from .checkpoint import architecture_identity, load_full_checkpoint, save_full_checkpoint
-from .env import TASK_ID
-from .ppo import LegacyNormalProvider, LegacyPPOConfig, LegacyPPOTrainer
-from .runtime import LegacyRuntime
+from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import (
+    DEFAULT_POINT_REPLAY_CHUNK, validate_point_replay_chunk,
+)
+from ..components.tripod_actuator import ACTUATOR_PATH
+from ..components.tripod_mdp import reward_scales
+from .tripod_checkpoint import architecture_identity, load_full_checkpoint, save_full_checkpoint
+from ..tripod_env_cfg import TASK_ID
 
-
-@dataclass
-class TripodRlCfg(RslRlBaseRunnerCfg):
-    seed: int = 1
-    class_name: str = "TripodRunner"
-    experiment_name: str = "confined_locomotion_flat_tripod2_low"
-    max_iterations: int = 0  # Registration does not launch training.
-    num_steps_per_env: int = 24
-    clip_actions: float | None = None
-    save_interval: int = 50
-    logger: str = "tensorboard"
-    upload_model: bool = False
-    formal_num_envs: int | None = None
-    engineering_validation: bool = False
-    execution_mode: str = "low_memory"
-    ppo_config: LegacyPPOConfig = field(default_factory=LegacyPPOConfig)
-    lidar_config: dict = field(default_factory=lambda: {"raycast_mode": "full", "far_sampling": "all_endpoints"})
+from ..runtime_tripod import LegacyRuntime
+from ..config.tripod2_low_config import TripodRlCfg
 
 
 def validate_recipe(cfg):
@@ -62,9 +51,10 @@ def validate_recipe(cfg):
         raise ValueError("tripod runner records local tensorboard artifacts")
     if cfg.get("execution_mode") not in ("low_memory", "speed"):
         raise ValueError("invalid execution mode")
+    validate_point_replay_chunk(cfg.get("point_replay_chunk", DEFAULT_POINT_REPLAY_CHUNK))
     ppo = cfg.get("ppo_config", {})
-    ppo = ppo if isinstance(ppo, LegacyPPOConfig) else LegacyPPOConfig(**ppo)
-    if ppo != LegacyPPOConfig():
+    ppo = ppo if isinstance(ppo, TemporalPPOConfig) else TemporalPPOConfig(**ppo)
+    if ppo != TemporalPPOConfig():
         raise ValueError("tripod2-low uses the audited reference PPO recipe")
     if cfg.get("engineering_validation", False) and (cfg["formal_num_envs"] > 2 or cfg["max_iterations"] != 1):
         raise ValueError("engineering validation is limited to two envs and one update")
@@ -169,12 +159,14 @@ class TripodRunner(ConfinedLocomotionRunner):
         torch.manual_seed(self.seed)
         self.network = ConfinedLocomotionNetwork(mlp_activation=nn.ELU(), init_fn=None,
                                                 envelope_mode="raw", ground_samples=None).to(self.device)
-        self.provider = LegacyNormalProvider(device=self.device, generator_seed=derive_action_generator_seed(self.seed))
+        self.provider = DirectStdNormalProvider(device=self.device, generator_seed=derive_action_generator_seed(self.seed))
         self.runtime = LegacyRuntime(env, seed=self.seed, output_dir=self.log_dir / "runtime", lidar_cfg=lidar)
         self.recipe_identity = {
             "architecture": architecture_identity(lidar.far_sampling), "ppo": asdict(ppo),
+            "ppo_semantics": ppo_semantics(),
             "symmetry": {"enabled": True, "mean_loss_coeff": .6},
             "execution_mode": train_cfg["execution_mode"], "scan_identity": self.runtime.scan_identity,
+            "point_replay_chunk": train_cfg.get("point_replay_chunk", DEFAULT_POINT_REPLAY_CHUNK),
             "lidar_config": asdict(lidar),
             "distribution": self.provider.distribution_identity(),
             "actuator_sha256": hashlib.sha256(ACTUATOR_PATH.read_bytes()).hexdigest(),
@@ -190,10 +182,13 @@ class TripodRunner(ConfinedLocomotionRunner):
         action = env.unwrapped.action_manager.get_term("residual_pd")
         self.joint_permutation = JointPermutation.from_joint_names(tuple(action._target_names))
         self.mount_quat_xyzw = self.runtime.pipeline._mount_q[0].detach().clone()
-        self.trainer = LegacyPPOTrainer(network=self.network, distribution_provider=self.provider,
+        self.trainer = TemporalPPOTrainer(network=self.network, distribution_provider=self.provider,
             device=self.device, config=ppo, execution_mode=train_cfg["execution_mode"],
+            point_replay_chunk=self.recipe_identity["point_replay_chunk"],
             symmetry_enabled=True, joint_permutation=self.joint_permutation,
             mount_quat_xyzw=self.mount_quat_xyzw, seed=self.seed)
+        print_execution_settings(self.runtime, execution_mode=self.trainer.execution_mode,
+                                 point_replay_chunk=self.trainer.point_replay_chunk)
         self.learning_metrics = LegacyMetrics(self.num_envs, self.device)
         self.collector = TrainingCollector(self.runtime, self.network, self.provider,
             symmetry_enabled=True, joint_permutation=self.joint_permutation,

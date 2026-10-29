@@ -9,6 +9,7 @@ from hexapod_mjlab.tasks.confined_locomotion_2.config.flat_baseline_config impor
 from hexapod_mjlab.tasks.confined_locomotion_2.flat_env_cfg import TASK_ID
 from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import resolve_recipe
 from hexapod_mjlab.tasks.confined_locomotion_2.rl.entry import build_formal_train_config
+from hexapod_mjlab.rl.confined_locomotion_2.ppo import ppo_semantics
 
 
 def _checkpoint_identity():
@@ -29,6 +30,7 @@ def _checkpoint_identity():
         },
         "recipe": {
             "ppo": {"learning_rate": 0.001},
+            "ppo_semantics": ppo_semantics(),
             "symmetry": {"enabled": True},
             "perturbations": {"mode": "all"},
             "env_semantics": {
@@ -44,12 +46,14 @@ def _checkpoint_identity():
 def test_v2_initial_exploration_std_is_one_without_changing_v1_default():
     from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider
     v1 = IndependentDiagonalNormalProvider(generator_seed=1)
-    v2 = IndependentDiagonalNormalProvider(generator_seed=1, initial_std=1.0)
+    from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
+    v2 = DirectStdNormalProvider(generator_seed=1)
     assert torch.equal(v1.log_std.detach(), torch.full((18,), torch.log(torch.tensor(0.5)).item()))
-    assert torch.equal(v2.log_std.detach(), torch.zeros(18))
+    assert torch.equal(v2.std.detach(), torch.ones(18))
+    assert not hasattr(v2, "log_std")
     assert v1.distribution_identity()["initial_std"] == 0.5
     assert v2.distribution_identity()["initial_std"] == 1.0
-    assert v2.distribution_identity()["log_std_init"] == 0.0
+    assert v2.distribution_identity()["parameterization"] == "direct_std"
 
 
 def test_identity_compares_optional_semantics_without_legacy_breakage():
@@ -90,7 +94,7 @@ def test_identity_compares_optional_semantics_without_legacy_breakage():
         raise AssertionError("actuator identity change accepted")
 
     with_distribution = copy.deepcopy(current)
-    with_distribution["recipe"]["distribution"] = {"initial_std": 1.0, "parameterization": "log_std"}
+    with_distribution["recipe"]["distribution"] = {"initial_std": 1.0, "parameterization": "direct_std"}
     compare_identity(with_distribution, copy.deepcopy(with_distribution))
     changed_distribution = copy.deepcopy(with_distribution)
     changed_distribution["recipe"]["distribution"]["initial_std"] = 0.5
@@ -121,9 +125,11 @@ def test_full_resume_rejects_unknown_or_changed_physics_before_any_apply():
     runner = SimpleNamespace(phase="fresh", _active_buffer=None, task_id=TASK_ID,
                              runtime=SimpleNamespace(lidar_cfg=SimpleNamespace(far_sampling="all_endpoints")),
                              network=Mock())
-    for legacy in (False, True):
+    for case in ("mass", "missing_physics", "missing_ppo_semantics"):
         saved = copy.deepcopy(current)
-        if legacy:
+        if case == "missing_ppo_semantics":
+            saved["recipe"].pop("ppo_semantics")
+        elif case == "missing_physics":
             saved["compiled_model"].pop("physics")
         else:
             saved["compiled_model"]["physics"]["fields"]["body_mass"] = "other mass"
@@ -132,7 +138,7 @@ def test_full_resume_rejects_unknown_or_changed_physics_before_any_apply():
             try:
                 cp.load_full_checkpoint(runner, "unused.pt")
             except ValueError as error:
-                assert "physical model" in str(error)
+                assert ("training recipe" if case == "missing_ppo_semantics" else "physical model") in str(error)
             else:
                 raise AssertionError("incompatible physics accepted")
         assert runner.phase == "fresh"
@@ -244,7 +250,7 @@ def test_runner_failures_release_resources_without_masking_original_error():
     from types import SimpleNamespace
     from unittest.mock import Mock, patch
     from hexapod_mjlab.tasks.confined_locomotion_2.rl.runner import ConfinedLocomotionRunner
-    from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.runner import TripodRunner
+    from hexapod_mjlab.tasks.confined_locomotion_2.rl.tripod_runner import TripodRunner
 
     for cls in (ConfinedLocomotionRunner, TripodRunner):
         # Construction can fail after hooks/writer allocation or much earlier.
@@ -307,12 +313,14 @@ def test_execution_modes_reach_both_task_recipes_and_reject_invalid_values():
     from hexapod_mjlab.tasks.confined_locomotion_2.rl.terrain_entry import build_terrain_train_config
     assert confined_locomotion_rl_cfg().execution_mode == "low_memory"
     for mode in ("low_memory", "speed"):
-        flat = build_formal_train_config(seed=9, num_envs=2, max_iterations=1, execution_mode=mode)
+        flat = build_formal_train_config(seed=9, num_envs=2, max_iterations=1, execution_mode=mode,
+                                         point_replay_chunk=128)
         terrain = build_terrain_train_config(seed=9, num_envs=2, max_iterations=1,
-                                            height_loss_weight=1., execution_mode=mode)
+                                            height_loss_weight=1., execution_mode=mode, point_replay_chunk=128)
         for cfg in (flat, terrain):
             resolved = resolve_recipe(asdict(cfg.agent))
             assert resolved["execution_mode"] == mode
+            assert resolved["point_replay_chunk"] == 128
             assert resolved["ppo"].epochs == 5 and resolved["ppo"].minibatches == 4
     for mode in ("auto", "fast", None, True):
         try:
@@ -321,3 +329,10 @@ def test_execution_modes_reach_both_task_recipes_and_reject_invalid_values():
             pass
         else:
             raise AssertionError("invalid execution mode accepted")
+    for chunk in (0, -1, True, 1.5):
+        try:
+            build_formal_train_config(seed=9, num_envs=2, max_iterations=1, point_replay_chunk=chunk)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid point replay chunk accepted")

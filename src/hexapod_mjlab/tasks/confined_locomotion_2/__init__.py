@@ -1,8 +1,8 @@
 """Shared confined-locomotion package with one v2-family registration entry.
 
 Flat Baseline, Terrain Memory and Tripod2 Low have independent real
-configurations; all three are registered here and share the recurrent/legacy
-implementations where their recipes explicitly say so.
+configurations; all three are registered here and use the shared temporal PPO
+implementation while retaining task-owned environment and runtime semantics.
 """
 
 from mjlab.tasks.registry import register_mjlab_task
@@ -15,9 +15,10 @@ from .config.flat_baseline_config import (
 from .flat_env_cfg import TASK_ID, make_flat_env_cfg, make_training_env_cfg
 from .play import PlaySession, make_play_env_cfg
 from .rl.runner import ConfinedLocomotionRunner
-from .tripod2_low.env import TASK_ID as TRIPOD_TASK_ID
-from .tripod2_low.env import make_env_cfg as make_tripod_env_cfg
-from .tripod2_low.runner import TripodRlCfg, TripodRunner
+from .tripod_env_cfg import TASK_ID as TRIPOD_TASK_ID
+from .tripod_env_cfg import make_env_cfg as make_tripod_env_cfg
+from .config.tripod2_low_config import TripodRlCfg
+from .rl.tripod_runner import TripodRunner
 
 register_mjlab_task(
     task_id=TASK_ID,

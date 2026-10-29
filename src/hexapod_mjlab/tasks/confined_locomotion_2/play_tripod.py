@@ -7,11 +7,11 @@ import torch
 from torch import nn
 
 from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
-from ..components.lidar.scanner import ConfinedLidarCfg
-from ..play import PlayStep
-from .checkpoint import read_checkpoint
-from .env import make_env_cfg
-from .runtime import LegacyRuntime
+from .components.lidar.scanner import ConfinedLidarCfg
+from .play import PlayStep
+from .rl.tripod_checkpoint import read_checkpoint
+from .tripod_env_cfg import make_env_cfg
+from .runtime_tripod import LegacyRuntime
 
 
 class TripodPlaySession:

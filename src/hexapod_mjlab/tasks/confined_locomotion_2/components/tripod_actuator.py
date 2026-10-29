@@ -16,7 +16,7 @@ import torch
 
 from hexapod_mjlab.common.mdp.actions import ResidualPDAction, ResidualPDActionCfg
 
-ACTUATOR_PATH = Path(__file__).parent / "assets" / "anydrive_v3_lstm.pt"
+ACTUATOR_PATH = Path(__file__).parents[1] / "assets" / "actuators" / "anydrive_v3_lstm.pt"
 
 
 @dataclass(kw_only=True)

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -38,6 +39,7 @@ from .sampling import (
 
 __all__ = [
     "ConfinedLidarCfg",
+    "training_lidar_defaults",
     "ConfinedScanPipeline",
     "PlaneValidationError",
     "ScanCoverageError",
@@ -50,6 +52,17 @@ __all__ = [
     "uniform_angular_sample_indices",
     "farthest_point_sampling_masked",
 ]
+
+
+def training_lidar_defaults():
+    """Published sparse hit-only recipe for new training, independent of cwd.
+
+    The low-level scanner keeps its historical full/all-endpoint defaults for
+    explicit fixtures and old checkpoint playback.
+    """
+    selection = Path(__file__).resolve().parents[2] / "assets/fixed_channels/v1_hit10/near_x6_far_x10.npz"
+    return {"raycast_mode": "sparse", "far_sampling": "hit_only_10m",
+            "sparse_selection_path": str(selection)}
 
 
 class ScanCoverageError(RuntimeError):

@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import torch
 
 from hexapod_mjlab.rl.confined_locomotion.contracts import OnlineObservation, EnvelopeLabel
-from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider
+from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
 from hexapod_mjlab.rl.confined_locomotion_2.integration import PreparedControlInputs
 from hexapod_mjlab.tasks.confined_locomotion_2.collector import TrainingCollector
@@ -68,7 +68,7 @@ class CountingRuntime:
 def test_bootstrap_is_a_fork_and_both_live_histories_advance_only_once():
     runtime = CountingRuntime()
     collector = TrainingCollector(
-        runtime, CountingNetwork(), IndependentDiagonalNormalProvider(generator_seed=3),
+        runtime, CountingNetwork(), DirectStdNormalProvider(generator_seed=3),
         symmetry_enabled=True, joint_permutation=JointPermutation.from_joint_names(JOINT_NAMES),
         mount_quat_xyzw=torch.tensor([0., 0., 0., 1.]))
     buffer = collector.collect()

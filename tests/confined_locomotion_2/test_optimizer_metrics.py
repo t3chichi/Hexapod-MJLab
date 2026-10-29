@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import torch
 from torch import nn
 
-from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider
+from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
 from hexapod_mjlab.rl.confined_locomotion_2.ppo import TemporalPPOTrainer
 
 _training_spec = importlib.util.spec_from_file_location(
@@ -44,7 +44,7 @@ class InstrumentedNet(TinyTemporalNet):
 
 def _trainer(seed: int) -> tuple[TemporalPPOTrainer, InstrumentedNet]:
     net = InstrumentedNet()
-    provider = IndependentDiagonalNormalProvider(device="cpu", generator_seed=seed)
+    provider = DirectStdNormalProvider(device="cpu", generator_seed=seed)
     trainer = TemporalPPOTrainer(network=net, distribution_provider=provider, device="cpu", seed=17)
     return trainer, net
 

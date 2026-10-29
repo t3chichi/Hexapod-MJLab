@@ -21,6 +21,8 @@ from hexapod_mjlab.common.checkpoint import (
     write_persistent_fields as _write_persistent_fields,
 )
 
+from hexapod_mjlab.rl.confined_locomotion_2.ppo import validate_ppo_state_identity
+
 SCHEMA = "confined_locomotion_2.full/v1"
 TASK_ID = "El-4090-Confined-Locomotion-Flat_2"
 TERRAIN_TASK_ID = "El-4090-Confined-Locomotion-Terrain-Memory_2"
@@ -84,7 +86,7 @@ _MODEL_COMPARE_KEYS = ("dims", "joint_names", "actuator_names", "actuator_gear",
 #: Required for every v2/tripod checkpoint. Optional semantic fields are
 #: compared only when the saved file carries them, so legacy files remain
 #: readable while new files gain stricter action/reward/termination checks.
-_REQUIRED_RECIPE_KEYS = ("ppo", "symmetry")
+_REQUIRED_RECIPE_KEYS = ("ppo", "ppo_semantics", "symmetry")
 _OPTIONAL_RECIPE_KEYS = (
     "perturbations",
     "height_grid",
@@ -119,7 +121,13 @@ def _compare_recipe(current, saved):
             continue  # legacy files did not record this semantic field
         if key not in current:
             raise ValueError(f"checkpoint identity is missing training recipe field {key!r}")
-        if current[key] != saved[key]:
+        current_value, saved_value = current[key], saved[key]
+        if key == "lidar_config" and isinstance(current_value, dict) and isinstance(saved_value, dict):
+            # The separately compared scan identity binds selection contents.
+            # An asset's checkout path is not part of the sensing semantics.
+            current_value = {k: v for k, v in current_value.items() if k != "sparse_selection_path"}
+            saved_value = {k: v for k, v in saved_value.items() if k != "sparse_selection_path"}
+        if current_value != saved_value:
             raise ValueError(f"full resume identity differs on the training recipe.{key}")
 
 
@@ -246,6 +254,7 @@ def load_full_checkpoint(runner, path):
         path, expected_far_sampling=runner.runtime.lidar_cfg.far_sampling, expected_task_id=runner.task_id
     )
     compare_identity(identity(runner), payload["identity"])
+    validate_ppo_state_identity(payload["trainer"])
     env = runner.runtime.env
     physics, _ = _physics_arrays(env)
     _validate_tensors(payload["physics"], physics, "physics")

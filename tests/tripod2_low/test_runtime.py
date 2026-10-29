@@ -8,8 +8,8 @@ from hexapod_mjlab.common.transition import TransitionContext
 from hexapod_mjlab.rl.confined_locomotion.contracts import OnlineObservation
 from hexapod_mjlab.rl.confined_locomotion_2.integration import PreparedControlInputs
 from hexapod_mjlab.tasks.confined_locomotion_2.runtime import TrainingRuntime
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.runtime import LegacyRuntime, LegacyContext
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.legacy import (
+from hexapod_mjlab.tasks.confined_locomotion_2.runtime_tripod import LegacyRuntime, LegacyContext
+from hexapod_mjlab.tasks.confined_locomotion_2.components.tripod_mdp import (
     LegacyCommands, LegacyRewardState, LegacyStageController)
 
 

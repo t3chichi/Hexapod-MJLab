@@ -6,22 +6,25 @@ import uuid
 
 from mjlab.scripts.train import TrainConfig, launch_training
 
-from ..rl.launch import (
+from .launch import (
     LaunchResult,
     build_lidar_config,
     find_single_run_and_final_checkpoint,
     require_gpu_id,
 )
-from .checkpoint import read_checkpoint
-from .env import TASK_ID, make_env_cfg
-from .runner import TripodRlCfg, validate_recipe
+from .tripod_checkpoint import read_checkpoint
+from ..tripod_env_cfg import TASK_ID, make_env_cfg
+from .tripod_runner import validate_recipe
+from ..config.tripod2_low_config import TripodRlCfg
+from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import DEFAULT_POINT_REPLAY_CHUNK
 
 
 def build_train_config(*, seed, num_envs, max_iterations, gpu=0,
                        log_root="logs/confined_locomotion_2", save_interval=50,
                        execution_mode="low_memory", engineering_validation=False,
-                       resume_checkpoint=None, raycast_mode="full",
-                       sparse_selection_path=None, far_sampling="all_endpoints"):
+                       resume_checkpoint=None, raycast_mode="sparse",
+                       sparse_selection_path=None, far_sampling="hit_only_10m",
+                       point_replay_chunk=DEFAULT_POINT_REPLAY_CHUNK):
     require_gpu_id(gpu)
     if not isinstance(engineering_validation, bool):
         raise TypeError("engineering_validation must be bool")
@@ -29,6 +32,7 @@ def build_train_config(*, seed, num_envs, max_iterations, gpu=0,
                            far_sampling=far_sampling)
     agent = TripodRlCfg(seed=seed, formal_num_envs=num_envs, max_iterations=max_iterations,
                        save_interval=save_interval, execution_mode=execution_mode,
+                       point_replay_chunk=point_replay_chunk,
                        engineering_validation=engineering_validation, lidar_config=asdict(lidar),
                        run_name="tripod_" + uuid.uuid4().hex)
     validate_recipe(asdict(agent))

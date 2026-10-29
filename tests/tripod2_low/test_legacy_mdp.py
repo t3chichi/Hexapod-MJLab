@@ -2,7 +2,7 @@
 
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.legacy import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.tripod_mdp import (
     LegacyCommands, LegacyRewardState, LegacyStageController,
     compute_legacy_rewards, reward_scales, weight_rewards,
 )

@@ -8,6 +8,7 @@ from mjlab.scripts.train import TrainConfig, launch_training
 
 from ..config.terrain_memory_config import TASK_ID, make_training_env_cfg, terrain_memory_formal_rl_cfg
 from .checkpoint import read_checkpoint
+from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import DEFAULT_POINT_REPLAY_CHUNK
 from .launch import (
     LaunchResult,
     build_lidar_config,
@@ -20,8 +21,9 @@ from .launch import (
 def build_terrain_train_config(*, seed, num_envs, max_iterations, height_loss_weight,
                                log_root="logs/confined_locomotion_2", gpu_ids=(0,),
                                engineering_validation=False, resume_checkpoint=None,
-                               raycast_mode="full", sparse_selection_path=None,
-                               far_sampling="hit_only_10m", save_interval=50, execution_mode="low_memory"):
+                               raycast_mode="sparse", sparse_selection_path=None,
+                               far_sampling="hit_only_10m", save_interval=50, execution_mode="low_memory",
+                               point_replay_chunk=DEFAULT_POINT_REPLAY_CHUNK):
     require_single_gpu(gpu_ids)
     if not isinstance(engineering_validation,bool):
         raise TypeError("engineering_validation must be bool")
@@ -32,6 +34,7 @@ def build_terrain_train_config(*, seed, num_envs, max_iterations, height_loss_we
     agent.engineering_enabled=engineering_validation
     agent.save_interval=save_interval
     agent.execution_mode=execution_mode
+    agent.point_replay_chunk=point_replay_chunk
     lidar=build_lidar_config(raycast_mode=raycast_mode,sparse_selection_path=sparse_selection_path,
                           far_sampling=far_sampling)
     agent.lidar_config=asdict(lidar)

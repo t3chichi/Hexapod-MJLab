@@ -11,6 +11,8 @@ from mjlab.rl import RslRlBaseRunnerCfg
 
 from hexapod_mjlab.rl.confined_locomotion.ppo import MirrorTrainingConfig
 from hexapod_mjlab.rl.confined_locomotion_2.ppo import TemporalPPOConfig
+from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import DEFAULT_POINT_REPLAY_CHUNK
+from ..components.lidar.scanner import training_lidar_defaults
 from hexapod_mjlab.common.perturbations import (
     ALL_THREE_PRESET, ObservationPerturbationCfg,
 )
@@ -25,6 +27,7 @@ class ConfinedLocomotionRlCfg(RslRlBaseRunnerCfg):
     clip_actions: float | None = None
     save_interval: int = 50
     execution_mode: str = "low_memory"
+    point_replay_chunk: int = DEFAULT_POINT_REPLAY_CHUNK
     logger: str = "tensorboard"
     upload_model: bool = False
     engineering_enabled: bool = False
@@ -32,9 +35,7 @@ class ConfinedLocomotionRlCfg(RslRlBaseRunnerCfg):
     formal_num_envs: int | None = None
     # Kept as a plain mapping so the official mjlab config serializer can
     # pass it through to the guarded runner without knowing task-local types.
-    lidar_config: dict = field(default_factory=lambda: {
-        "raycast_mode": "full", "sparse_selection_path": None,
-    })
+    lidar_config: dict = field(default_factory=training_lidar_defaults)
     observation_perturbations: ObservationPerturbationCfg | None = None
     ppo_config: TemporalPPOConfig = field(default_factory=TemporalPPOConfig)
     symmetry: MirrorTrainingConfig = field(default_factory=MirrorTrainingConfig)

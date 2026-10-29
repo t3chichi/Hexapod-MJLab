@@ -219,7 +219,7 @@ def test_load_state_rejects_wrong_shape_or_nonfinite_values():
 
 def test_official_logger_shares_episode_state_and_restores_old_and_new_checkpoints(tmp_path):
     from hexapod_mjlab.common.training_logger import TrainingLogger
-    from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.runner import LegacyMetrics
+    from hexapod_mjlab.tasks.confined_locomotion_2.rl.tripod_runner import LegacyMetrics
 
     for cls in (LearningMetrics, LegacyMetrics):
         logger = TrainingLogger(log_dir=tmp_path / cls.__name__, cfg={"num_steps_per_env": 24},

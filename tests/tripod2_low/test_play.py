@@ -8,7 +8,7 @@ import torch
 import glfw
 
 from hexapod_mjlab.common.visualization import PendingControls
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.play import TripodPlaySession
+from hexapod_mjlab.tasks.confined_locomotion_2.play_tripod import TripodPlaySession
 from hexapod_mjlab.tasks.confined_locomotion_2.visualization.native import NativePlayViewer
 
 

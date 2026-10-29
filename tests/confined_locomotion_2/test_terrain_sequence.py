@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import torch
 
 from hexapod_mjlab.rl.confined_locomotion.contracts import EnvelopeLabel, OnlineObservation
-from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider
+from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
 from hexapod_mjlab.rl.confined_locomotion_2.symmetry import mirror_height_targets
 from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import (
     RolloutError,
@@ -207,7 +207,7 @@ class _HeightRuntime:
 def test_collector_transfers_optional_height_label():
     for with_height in (False, True):
         runtime = _HeightRuntime(with_height)
-        collector = TrainingCollector(runtime, _CollectorNetwork(), IndependentDiagonalNormalProvider(generator_seed=7))
+        collector = TrainingCollector(runtime, _CollectorNetwork(), DirectStdNormalProvider(generator_seed=7))
         buffer = collector.collect()
         if with_height:
             assert all(step.height_label is not None for step in buffer.steps)
@@ -219,7 +219,7 @@ def test_collector_transfers_optional_height_label():
 
 def test_cpu_sequence_replay_rejects_height_label_from_another_step():
     runtime = _HeightRuntime(with_height=True)
-    collector = TrainingCollector(runtime, _CollectorNetwork(), IndependentDiagonalNormalProvider(generator_seed=11))
+    collector = TrainingCollector(runtime, _CollectorNetwork(), DirectStdNormalProvider(generator_seed=11))
     buffer = collector.collect()
     network = _CollectorNetwork()
 

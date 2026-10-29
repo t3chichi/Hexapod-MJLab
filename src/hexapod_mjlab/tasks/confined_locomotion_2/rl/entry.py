@@ -10,6 +10,7 @@ from mjlab.scripts.train import TrainConfig, launch_training
 from ..config.flat_baseline_config import confined_locomotion_formal_rl_cfg
 from ..flat_env_cfg import TASK_ID
 from .checkpoint import read_checkpoint
+from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import DEFAULT_POINT_REPLAY_CHUNK
 from .launch import (
     LaunchResult,
     build_lidar_config,
@@ -22,13 +23,15 @@ from .launch import (
 def build_formal_train_config(*, seed, num_envs, max_iterations,
                               log_root="logs/confined_locomotion_2", gpu_ids=(0,),
                               engineering_validation=False, resume_checkpoint=None,
-                              raycast_mode="full", sparse_selection_path=None,
-                              far_sampling="all_endpoints", save_interval=50, execution_mode="low_memory"):
+                              raycast_mode="sparse", sparse_selection_path=None,
+                              far_sampling="hit_only_10m", save_interval=50, execution_mode="low_memory",
+                              point_replay_chunk=DEFAULT_POINT_REPLAY_CHUNK):
     require_single_gpu(gpu_ids)
     agent = confined_locomotion_formal_rl_cfg(
         seed=seed, num_envs=num_envs, max_iterations=max_iterations)
     agent.save_interval = save_interval
     agent.execution_mode = execution_mode
+    agent.point_replay_chunk = point_replay_chunk
     # Let the task-local scanner own the mode/path contract, then keep the
     # serializable config as a plain mapping across mjlab's launch boundary.
     lidar_cfg = build_lidar_config(

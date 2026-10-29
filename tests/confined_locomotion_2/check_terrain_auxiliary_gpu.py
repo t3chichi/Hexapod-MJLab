@@ -40,7 +40,7 @@ def main():
         from hexapod_mjlab.rl.confined_locomotion_2.network import TerrainMemoryNetwork
         from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import replay_sequence
         from hexapod_mjlab.rl.confined_locomotion_2.auxiliary import HeightReconstructionAuxiliary
-        from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider
+        from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
         from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation, mirror_action_distribution, mirror_envelope_values, mirror_mean_mse
         from hexapod_mjlab.rl.confined_locomotion.losses import normalize_rollout_advantage, ppo_policy_loss, value_clipped_loss, envelope_sum_loss
         torch.backends.cuda.matmul.fp32_precision='ieee';torch.backends.cudnn.fp32_precision='ieee';torch.backends.cudnn.rnn.fp32_precision='ieee'
@@ -51,7 +51,7 @@ def main():
         selection=ROOT/'src/hexapod_mjlab/tasks/confined_locomotion_2/assets/fixed_channels/v1_hit10/near_x6_far_x10.npz'
         runtime=TrainingRuntime(wrapper,seed=20261025,output_dir=args.output/'runtime',mode='training',height_grid=HeightGridCfg((-1.2,1.2),(-.9,.9)),lidar_cfg=ConfinedLidarCfg(raycast_mode='sparse',sparse_selection_path=str(selection),far_sampling='hit_only_10m'),perturbation_cfg=ALL_THREE_PRESET)
         network=TerrainMemoryNetwork(mlp_activation=torch.nn.ELU(),init_fn=None,envelope_mode='raw').to(device)
-        provider=IndependentDiagonalNormalProvider(device=device,generator_seed=20261025)
+        provider=DirectStdNormalProvider(device=device,generator_seed=20261025)
         permutation=JointPermutation.from_joint_names(JOINT_NAMES);mount=runtime.pipeline.mount_q[0].clone()
         collector=TrainingCollector(runtime,network,provider,symmetry_enabled=True,joint_permutation=permutation,mount_quat_xyzw=mount)
         buffer=collector.collect();steps=buffer.steps

@@ -94,7 +94,8 @@ def main():
         from hexapod_mjlab.tasks.confined_locomotion_2.collector import TrainingCollector
         from hexapod_mjlab.tasks.confined_locomotion_2.components.terrain_query import HeightGridCfg
         from hexapod_mjlab.common.perturbations import ALL_THREE_PRESET
-        from hexapod_mjlab.rl.confined_locomotion.distribution import IndependentDiagonalNormalProvider, derive_action_generator_seed
+        from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
+        from hexapod_mjlab.rl.confined_locomotion.distribution import derive_action_generator_seed
         from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation
         from hexapod_mjlab.rl.confined_locomotion_2.network import ConfinedLocomotionNetwork
         from hexapod_mjlab.rl.confined_locomotion_2.symmetry import mirror_height_targets
@@ -126,7 +127,7 @@ def main():
             runtime.env.scene.env_origins[1, 2] = .18
             runtime.reset(torch.tensor([1], device=device))
         network = ConfinedLocomotionNetwork(mlp_activation=torch.nn.ELU(), init_fn=None, envelope_mode="raw").to(device)
-        provider = IndependentDiagonalNormalProvider(device=device, generator_seed=derive_action_generator_seed(seed))
+        provider = DirectStdNormalProvider(device=device, generator_seed=derive_action_generator_seed(seed))
         weights_before, distribution_before = fingerprint(network), fingerprint(provider)
         permutation = JointPermutation.from_joint_names(JOINT_NAMES)
         mount = runtime.pipeline.mount_q[0].clone()

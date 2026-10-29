@@ -10,11 +10,11 @@ from hexapod_mjlab.common.reset import reset_env_preserving_unselected_physics
 from hexapod_mjlab.common.transition import TransitionContext, require_finite
 from hexapod_mjlab.common.robot import FOOT_BODIES
 from hexapod_mjlab.rl.confined_locomotion_2.history import ScanWindow
-from ..runtime import TrainingRuntime, TrainingTransition
-from ..observation import ControlInputCache, clone_prepared
-from ..components.lidar.scanner import ConfinedLidarCfg, ConfinedScanPipeline
-from .env import TASK_ID, owners
-from .legacy import DT, FOOT_ORDER, REWARD_WEIGHTS, compute_legacy_rewards
+from .runtime import TrainingRuntime, TrainingTransition
+from .observation import ControlInputCache, clone_prepared
+from .components.lidar.scanner import ConfinedLidarCfg, ConfinedScanPipeline
+from .tripod_env_cfg import TASK_ID, owners
+from .components.tripod_mdp import DT, FOOT_ORDER, REWARD_WEIGHTS, compute_legacy_rewards
 
 
 def _move(value, device):

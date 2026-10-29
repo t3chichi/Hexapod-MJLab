@@ -18,8 +18,8 @@ import torch
 
 from mjlab.scene import Scene
 from hexapod_mjlab.common.robot import JOINT_NAMES, ROBOT_XML
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.actuator import ACTUATOR_PATH
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.env import (
+from hexapod_mjlab.tasks.confined_locomotion_2.components.tripod_actuator import ACTUATOR_PATH
+from hexapod_mjlab.tasks.confined_locomotion_2.tripod_env_cfg import (
     collision_min_z, make_env_cfg, randomize_model, reset_height,
 )
 

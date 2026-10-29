@@ -12,8 +12,8 @@ from mjlab.sensor import ContactMatch, ContactSensorCfg
 
 from hexapod_mjlab.common.flat_env import make_flat_env_cfg
 from hexapod_mjlab.common.robot import JOINT_NAMES, ROBOT_XML, get_robot_spec
-from .actuator import LegacyLSTMActionCfg
-from .legacy import (LegacyCommands, LegacyResetDRState, LegacyRewardState,
+from .components.tripod_actuator import LegacyLSTMActionCfg
+from .components.tripod_mdp import (LegacyCommands, LegacyResetDRState, LegacyRewardState,
                      LegacyStageController, REWARD_WEIGHTS)
 
 TASK_ID = "El-4090-Confined-Locomotion-Flat-Tripod2-Low_2"

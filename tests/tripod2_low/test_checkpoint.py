@@ -10,7 +10,9 @@ from unittest.mock import patch
 
 import torch
 
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low import checkpoint as cp
+from hexapod_mjlab.tasks.confined_locomotion_2.rl import tripod_checkpoint as cp
+
+from hexapod_mjlab.rl.confined_locomotion_2.ppo import ppo_semantics
 
 STRICT_REQUIRE_STABLE = cp.require_stable
 
@@ -53,7 +55,7 @@ class CheckpointTests(unittest.TestCase):
         provider = State()
         provider.generator_state = lambda: torch.get_rng_state()
         provider.load_generator_state = lambda state: None
-        self.runner = SimpleNamespace(runtime=runtime, network=State(), provider=provider, trainer=State(),
+        self.runner = SimpleNamespace(runtime=runtime, network=State(), provider=provider, trainer=State(schema="confined_locomotion_2.temporal_ppo/v2", semantics=ppo_semantics()),
                                       collector=State(), learning_metrics=State(), task_id=cp.TASK_ID,
                                       phase="ready", _active_buffer=None, current_learning_iteration=1,
                                       total_control_batches=24, total_env_samples=48, device=torch.device("cpu"))
@@ -64,7 +66,7 @@ class CheckpointTests(unittest.TestCase):
             "num_envs": 2,
             "scan_identity": {"scan": "fixture"},
             "recipe": {
-                "ppo": {}, "symmetry": {}, "perturbations": None,
+                "ppo": {}, "ppo_semantics": ppo_semantics(), "symmetry": {}, "perturbations": None,
                 "actuator_sha256": "asset-a",
                 "env_semantics": {
                     "action": {"stiffness": 1.0},
@@ -118,9 +120,19 @@ class CheckpointTests(unittest.TestCase):
         saved["dependencies"] = {"torch": "9.9.9"}
         saved["device"] = "cuda:1"
         saved["recipe"]["execution_mode"] = "speed"
+        saved["recipe"]["point_replay_chunk"] = 128
+        current = copy.deepcopy(self.identity)
+        current["recipe"]["lidar_config"] = {
+            "raycast_mode": "sparse", "far_sampling": "hit_only_10m", "sparse_selection_path": "/new/selection.npz"}
+        saved["recipe"]["lidar_config"] = {
+            **current["recipe"]["lidar_config"], "sparse_selection_path": "/old/selection.npz"}
         cp.base.compare_identity(
-            self.identity, saved, extra_keys=("warmup_control_steps",)
+            current, saved, extra_keys=("warmup_control_steps",)
         )
+        changed = copy.deepcopy(saved)
+        changed["scan_identity"] = {"scan": "different selection content"}
+        with self.assertRaisesRegex(ValueError, "scan_identity"):
+            cp.base.compare_identity(current, changed, extra_keys=("warmup_control_steps",))
         saved["recipe"]["ppo"] = {"lr": 0.1}
         with self.assertRaisesRegex(ValueError, "training recipe"):
             cp.base.compare_identity(
@@ -144,6 +156,9 @@ class CheckpointTests(unittest.TestCase):
             (lambda state: state.pop("random"), "incomplete"),
             (lambda state: state["identity"].update(warmup_control_steps=2), "warmup_control_steps"),
             (lambda state: state["identity"]["recipe"].update(ppo={"lr": 0.1}), "training recipe"),
+            (lambda state: state["identity"]["recipe"].pop("ppo_semantics"), "training recipe"),
+            (lambda state: state["trainer"].update(schema="confined_locomotion_2.temporal_ppo/v1"), "incompatible temporal PPO"),
+            (lambda state: state["trainer"].pop("semantics"), "incompatible temporal PPO"),
             (lambda state: state["identity"]["recipe"].update(actuator_sha256="asset-b"), "actuator_sha256"),
             (lambda state: state["identity"]["compiled_model"].pop("physics"), "physical model identity"),
             (lambda state: state["identity"]["compiled_model"]["physics"]["fields"].update(body_mass="changed nominal"), "physical model differs"),
@@ -193,8 +208,8 @@ class CheckpointTests(unittest.TestCase):
 
     def real_runtime(self, *, populated):
         """Use the real CPU state owners/load path without constructing a simulator."""
-        from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.runtime import LegacyRuntime
-        from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.legacy import (
+        from hexapod_mjlab.tasks.confined_locomotion_2.runtime_tripod import LegacyRuntime
+        from hexapod_mjlab.tasks.confined_locomotion_2.components.tripod_mdp import (
             LegacyCommands, LegacyRewardState, LegacyStageController, LegacyResetDRState)
         from hexapod_mjlab.tasks.confined_locomotion_2.observation import ControlInputCache
         from hexapod_mjlab.rl.confined_locomotion_2.history import ScanWindow

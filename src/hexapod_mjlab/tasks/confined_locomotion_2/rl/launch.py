@@ -12,7 +12,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..components.lidar.scanner import ConfinedLidarCfg
+from ..components.lidar.scanner import ConfinedLidarCfg, training_lidar_defaults
 from .runner import resolve_recipe
 
 if TYPE_CHECKING:
@@ -49,6 +49,8 @@ def require_gpu_id(gpu) -> int:
 
 
 def build_lidar_config(*, raycast_mode, sparse_selection_path, far_sampling) -> ConfinedLidarCfg:
+    if raycast_mode == "sparse" and sparse_selection_path is None:
+        sparse_selection_path = training_lidar_defaults()["sparse_selection_path"]
     return ConfinedLidarCfg(
         raycast_mode=raycast_mode,
         sparse_selection_path=sparse_selection_path,

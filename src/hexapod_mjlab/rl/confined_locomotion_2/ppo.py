@@ -34,6 +34,24 @@ def _require_finite_tensors(tensors, message):
         raise FloatingPointError(message)
 
 
+def ppo_semantics():
+    """Algorithm identity, separate from numeric hyperparameters and execution budgets."""
+    return {
+        "schema": "confined_locomotion_2.unified_ppo/v1",
+        "gae": "pre_reset_next_value; no_bootstrap_on_termination",
+        "minibatch_order": "one_shuffle_per_update",
+        "adaptive_kl": "analytic_original_samples_only",
+        "entropy": "original_samples_only",
+    }
+
+
+def validate_ppo_state_identity(state):
+    """Reject other optimizer semantics before a full loader applies any state."""
+    if (not isinstance(state, dict) or state.get("schema") != "confined_locomotion_2.temporal_ppo/v2"
+            or state.get("semantics") != ppo_semantics()):
+        raise ValueError("incompatible temporal PPO state")
+
+
 @dataclass(frozen=True)
 class TemporalPPOConfig:
     rollout_steps: int = 24
@@ -74,7 +92,7 @@ class TemporalPPOTrainer:
     """One Adam, sequence replay, and full-rollout normalized advantages.
 
     ``network`` follows the v2 explicit-hidden forward contract. ``distribution_provider``
-    is the shared independent diagonal Normal provider from the original implementation.
+    uses the shared direct-std independent diagonal Normal action contract.
     """
     def __init__(
         self, *, network: nn.Module, distribution_provider: nn.Module,
@@ -133,7 +151,8 @@ class TemporalPPOTrainer:
 
     def state_dict(self) -> dict[str, Any]:
         return {
-            "schema": "confined_locomotion_2.temporal_ppo/v1",
+            "schema": "confined_locomotion_2.temporal_ppo/v2",
+            "semantics": ppo_semantics(),
             "optimizer": self.optimizer.state_dict(),
             "updates": self.updates,
             "optimizer_step_count": self.optimizer_step_count,
@@ -146,8 +165,7 @@ class TemporalPPOTrainer:
         }
 
     def load_state_dict(self, state: dict[str, Any]) -> None:
-        if not isinstance(state, dict) or state.get("schema") != "confined_locomotion_2.temporal_ppo/v1":
-            raise ValueError("incompatible temporal PPO state")
+        validate_ppo_state_identity(state)
         if state.get("config") != asdict(self.config) or state.get("symmetry_enabled") != self.symmetry_enabled:
             raise ValueError("saved temporal PPO recipe differs from this trainer")
         if int(state.get("seed", -1)) != self.seed:
@@ -188,6 +206,17 @@ class TemporalPPOTrainer:
             joint_permutation=self.joint_permutation, mount_quat_xyzw=self.mount_quat_xyzw,
             checkpoint_points=self.execution_mode == "low_memory",
             point_replay_chunk=self.point_replay_chunk)
+
+    def _minibatch_indices(self, total):
+        if total % self.config.minibatches:
+            raise ValueError("T*B must divide evenly into minibatches")
+        # Reuse one disjoint partition across epochs, with a named PRNG that
+        # never consumes the behavior action stream.
+        permutation = torch.randperm(total, device=self.device, generator=self.shuffle_generator)
+        chunks = permutation.chunk(self.config.minibatches)
+        for epoch in range(self.config.epochs):
+            for minibatch, selected in enumerate(chunks):
+                yield epoch, minibatch, selected
 
     def update(self, buffer: SequenceRolloutBuffer) -> dict[str, float | int]:
         if self.faulted:
@@ -232,8 +261,6 @@ class TemporalPPOTrainer:
             pushed = mirror_action_distribution(
                 old_means.reshape(total, -1), old_stds.reshape(total, -1),
                 actions, self.joint_permutation)
-            old_m = pushed.mean.reshape_as(old_means)
-            old_s = pushed.std.reshape_as(old_stds)
             mirror_actions = pushed.raw_action
             mirror_et = mirror_envelope_values(et.reshape(total, -1)).reshape_as(et)
         summaries: dict[str, float | int] = {"updates": self.updates, "steps": t_count, "num_envs": batch}
@@ -247,124 +274,113 @@ class TemporalPPOTrainer:
         def record_diagnostic(name: str, value: torch.Tensor) -> None:
             diagnostic_values.setdefault(name, []).append(value.detach().reshape(()))
 
-        for epoch in range(self.config.epochs):
-            permutation = torch.randperm(total, device=self.device, generator=self.shuffle_generator)
-            chunk = total // self.config.minibatches
-            for mb in range(self.config.minibatches):
-                selected = permutation[mb * chunk:(mb + 1) * chunk]
-                loss_mask = torch.zeros(total, dtype=torch.bool, device=self.device)
-                loss_mask[selected] = True
-                loss_mask = loss_mask.reshape(t_count, batch)
-                outputs = self._replay(replay_inputs)
-                mirrored_outputs = self._replay(mirror_inputs) if mirror_inputs is not None else None
-                # Distribution calls operate on independent action events. Flatten only
-                # T and B; retain all sequence replay and minibatch loss masks unchanged.
-                means = torch.stack([o.action_mean for o in outputs])
-                values = torch.stack([o.value.squeeze(-1) for o in outputs])
-                ep = torch.stack([o.envelope for o in outputs])
-                dist = self.distribution_provider(means.reshape(total, -1))
-                lp = dist.log_prob(actions).reshape(t_count, batch)
-                ent = dist.entropy().reshape(t_count, batch)
-                stds = dist.std.reshape_as(means)
-                if not bool(loss_mask.any()):
-                    raise AssertionError("empty disjoint minibatch")
-                mask = loss_mask
-                loss_pi = ppo_policy_loss(lp[mask], old_lp[mask], advantages[mask], clip_epsilon=self.config.clip_epsilon)
-                loss_v = value_clipped_loss(values[mask], old_values[mask], returns[mask])
-                loss_h = ent[mask].mean()
-                loss_e = envelope_sum_loss(ep[mask], et[mask], ev[mask])
-                ratios = torch.exp((lp[mask] - old_lp[mask]).detach())
-                ratio_clip_fraction = ((ratios < 1.0 - self.config.clip_epsilon) |
-                                       (ratios > 1.0 + self.config.clip_epsilon)).to(lp.dtype).mean()
-                kl = kl_divergence_old_new(
-                    old_means[mask], old_stds[mask], means[mask].detach(), stds[mask].detach()
-                ).mean()
-                if mirrored_outputs is not None:
-                    mmean = torch.stack([o.action_mean for o in mirrored_outputs])
-                    mvalue = torch.stack([o.value.squeeze(-1) for o in mirrored_outputs])
-                    menv = torch.stack([o.envelope for o in mirrored_outputs])
-                    mdist = self.distribution_provider(mmean.reshape(total, -1))
-                    mlp = mdist.log_prob(mirror_actions).reshape(t_count, batch)
-                    ment = mdist.entropy().reshape(t_count, batch)
-                    # The event log probability is invariant under the same joint permutation.
-                    mpi = ppo_policy_loss(mlp[mask], old_lp[mask], advantages[mask], clip_epsilon=self.config.clip_epsilon)
-                    mvl = value_clipped_loss(mvalue[mask], old_values[mask], returns[mask])
-                    mel = envelope_sum_loss(menv[mask], mirror_et[mask], ev[mask])
-                    loss_pi = 0.5 * (loss_pi + mpi)
-                    loss_v = 0.5 * (loss_v + mvl)
-                    loss_e = 0.5 * (loss_e + mel)
-                    loss_h = 0.5 * (loss_h + ment[mask].mean())
-                    loss_sym = mirror_mean_mse(mmean[mask], means[mask], self.joint_permutation)
-                    new_mirror_std = mdist.std.reshape_as(mmean)[mask].detach()
-                    kl_m = kl_divergence_old_new(
-                        old_m[mask], old_s[mask], mmean[mask].detach(), new_mirror_std
-                    ).mean()
-                    kl = 0.5 * (kl + kl_m)
-                else:
-                    loss_sym = means.new_zeros(())
-                # Plugin sees deployable output features and a small batch view; empty default has no head.
-                auxiliary_result = self.auxiliary(outputs, {
-                    "loss_mask": mask, "advantages": advantages, "returns": returns,
-                    "steps": buffer.steps, "mirrored_outputs": mirrored_outputs,
-                    "height_targets": height_targets,
-                })
-                if not isinstance(auxiliary_result, AuxiliaryResult) or auxiliary_result.loss.ndim != 0:
-                    raise TypeError("auxiliary plugin must return AuxiliaryResult with scalar loss")
-                total_loss = (loss_pi + self.config.value_coeff * loss_v - self.config.entropy_coeff * loss_h
-                              + self.config.envelope_coeff * loss_e
-                              + self.config.symmetry_mean_coeff * loss_sym + auxiliary_result.loss)
-                if not bool(torch.isfinite(total_loss)):
-                    raise FloatingPointError("non-finite PPO loss")
-                self.optimizer.zero_grad(set_to_none=True)
-                total_loss.backward()
-                params = [p for g in self.optimizer.param_groups for p in g["params"] if p.grad is not None]
-                _require_finite_tensors((p.grad for p in params), "non-finite PPO gradient")
-                frame_grad_norm = torch.stack([p.grad.detach().norm(2) for p in params
-                                               if id(p) in frame_parameter_ids]).norm(2) if any(
-                    id(p) in frame_parameter_ids for p in params
-                ) else total_loss.new_zeros(())
-                temporal_grad_norm = torch.stack([p.grad.detach().norm(2) for p in params
-                                                  if id(p) in temporal_parameter_ids]).norm(2) if any(
-                    id(p) in temporal_parameter_ids for p in params
-                ) else total_loss.new_zeros(())
-                grad_norm = torch.nn.utils.clip_grad_norm_(params, self.config.max_grad_norm)
-                _require_finite_tensors([grad_norm, *(p.grad for p in params)],
-                                        "non-finite PPO gradient after clipping")
-                lr = adjust_learning_rate(float(kl.detach().item()), self.optimizer.param_groups[0]["lr"], desired_kl=self.config.desired_kl, lr_min=self.config.lr_min, lr_max=self.config.lr_max)
-                for group in self.optimizer.param_groups:
-                    group["lr"] = lr
-                self.optimizer.step()
-                self.optimizer_step_count += 1
-                _require_finite_tensors(params, "non-finite PPO parameter after optimizer step")
-                _require_finite_tensors(
-                    (value for state in self.optimizer.state.values() for value in state.values()
-                     if isinstance(value, torch.Tensor)), "non-finite Adam state after optimizer step")
-                diagnostic_items = {
-                    "entropy": loss_h,
-                    "symmetry_loss": loss_sym,
-                    "auxiliary_loss": auxiliary_result.loss,
-                    "actor_std_mean": stds[mask].mean(),
-                    "actor_std_min": stds[mask].min(),
-                    "actor_std_max": stds[mask].max(),
-                    "ratio_clip_fraction": ratio_clip_fraction,
-                    "preclip_grad_norm": grad_norm,
-                    "frame_encoder_preclip_grad_norm": frame_grad_norm,
-                    "temporal_encoder_preclip_grad_norm": temporal_grad_norm,
-                }
-                target_var = returns[mask].var(unbiased=False)
-                ev_valid = target_var > 0
-                safe_target_var = torch.where(ev_valid, target_var, torch.ones_like(target_var))
-                explained_variance = 1.0 - (returns[mask] - values[mask]).var(unbiased=False) / safe_target_var
-                diagnostic_items["value_explained_variance_valid"] = ev_valid.to(total_loss.dtype)
-                diagnostic_items["value_explained_variance"] = explained_variance
-                for name, value in diagnostic_items.items():
-                    record_diagnostic(name, value)
-                for name, value in auxiliary_result.metrics.items():
-                    record_diagnostic(name, torch.as_tensor(value, device=self.device))
-                for name, value in (("loss", total_loss), ("policy", loss_pi), ("value", loss_v),
-                                    ("envelope", loss_e), ("kl", kl)):
-                    record_diagnostic(name, value)
-                summaries[f"epoch_{epoch}_minibatch_{mb}_lr"] = float(lr)
+        for epoch, mb, selected in self._minibatch_indices(total):
+            loss_mask = torch.zeros(total, dtype=torch.bool, device=self.device)
+            loss_mask[selected] = True
+            loss_mask = loss_mask.reshape(t_count, batch)
+            outputs = self._replay(replay_inputs)
+            mirrored_outputs = self._replay(mirror_inputs) if mirror_inputs is not None else None
+            # Distribution calls operate on independent action events. Flatten only
+            # T and B; retain all sequence replay and minibatch loss masks unchanged.
+            means = torch.stack([o.action_mean for o in outputs])
+            values = torch.stack([o.value.squeeze(-1) for o in outputs])
+            ep = torch.stack([o.envelope for o in outputs])
+            dist = self.distribution_provider(means.reshape(total, -1))
+            lp = dist.log_prob(actions).reshape(t_count, batch)
+            ent = dist.entropy().reshape(t_count, batch)
+            stds = dist.std.reshape_as(means)
+            if not bool(loss_mask.any()):
+                raise AssertionError("empty disjoint minibatch")
+            mask = loss_mask
+            loss_pi = ppo_policy_loss(lp[mask], old_lp[mask], advantages[mask], clip_epsilon=self.config.clip_epsilon)
+            loss_v = value_clipped_loss(values[mask], old_values[mask], returns[mask])
+            loss_h = ent[mask].mean()
+            loss_e = envelope_sum_loss(ep[mask], et[mask], ev[mask])
+            ratios = torch.exp((lp[mask] - old_lp[mask]).detach())
+            ratio_clip_fraction = ((ratios < 1.0 - self.config.clip_epsilon) |
+                                   (ratios > 1.0 + self.config.clip_epsilon)).to(lp.dtype).mean()
+            kl = kl_divergence_old_new(
+                old_means[mask], old_stds[mask], means[mask].detach(), stds[mask].detach()
+            ).mean()
+            if mirrored_outputs is not None:
+                mmean = torch.stack([o.action_mean for o in mirrored_outputs])
+                mvalue = torch.stack([o.value.squeeze(-1) for o in mirrored_outputs])
+                menv = torch.stack([o.envelope for o in mirrored_outputs])
+                mdist = self.distribution_provider(mmean.reshape(total, -1))
+                mlp = mdist.log_prob(mirror_actions).reshape(t_count, batch)
+                # The event log probability is invariant under the same joint permutation.
+                mpi = ppo_policy_loss(mlp[mask], old_lp[mask], advantages[mask], clip_epsilon=self.config.clip_epsilon)
+                mvl = value_clipped_loss(mvalue[mask], old_values[mask], returns[mask])
+                mel = envelope_sum_loss(menv[mask], mirror_et[mask], ev[mask])
+                loss_pi = 0.5 * (loss_pi + mpi)
+                loss_v = 0.5 * (loss_v + mvl)
+                loss_e = 0.5 * (loss_e + mel)
+                loss_sym = mirror_mean_mse(mmean[mask], means[mask], self.joint_permutation)
+            else:
+                loss_sym = means.new_zeros(())
+            # Plugin sees deployable output features and a small batch view; empty default has no head.
+            auxiliary_result = self.auxiliary(outputs, {
+                "loss_mask": mask, "advantages": advantages, "returns": returns,
+                "steps": buffer.steps, "mirrored_outputs": mirrored_outputs,
+                "height_targets": height_targets,
+            })
+            if not isinstance(auxiliary_result, AuxiliaryResult) or auxiliary_result.loss.ndim != 0:
+                raise TypeError("auxiliary plugin must return AuxiliaryResult with scalar loss")
+            total_loss = (loss_pi + self.config.value_coeff * loss_v - self.config.entropy_coeff * loss_h
+                          + self.config.envelope_coeff * loss_e
+                          + self.config.symmetry_mean_coeff * loss_sym + auxiliary_result.loss)
+            if not bool(torch.isfinite(total_loss)):
+                raise FloatingPointError("non-finite PPO loss")
+            self.optimizer.zero_grad(set_to_none=True)
+            total_loss.backward()
+            params = [p for g in self.optimizer.param_groups for p in g["params"] if p.grad is not None]
+            _require_finite_tensors((p.grad for p in params), "non-finite PPO gradient")
+            frame_grad_norm = torch.stack([p.grad.detach().norm(2) for p in params
+                                           if id(p) in frame_parameter_ids]).norm(2) if any(
+                id(p) in frame_parameter_ids for p in params
+            ) else total_loss.new_zeros(())
+            temporal_grad_norm = torch.stack([p.grad.detach().norm(2) for p in params
+                                              if id(p) in temporal_parameter_ids]).norm(2) if any(
+                id(p) in temporal_parameter_ids for p in params
+            ) else total_loss.new_zeros(())
+            grad_norm = torch.nn.utils.clip_grad_norm_(params, self.config.max_grad_norm)
+            _require_finite_tensors([grad_norm, *(p.grad for p in params)],
+                                    "non-finite PPO gradient after clipping")
+            lr = adjust_learning_rate(float(kl.detach().item()), self.optimizer.param_groups[0]["lr"], desired_kl=self.config.desired_kl, lr_min=self.config.lr_min, lr_max=self.config.lr_max)
+            for group in self.optimizer.param_groups:
+                group["lr"] = lr
+            self.optimizer.step()
+            self.optimizer_step_count += 1
+            _require_finite_tensors(params, "non-finite PPO parameter after optimizer step")
+            _require_finite_tensors(
+                (value for state in self.optimizer.state.values() for value in state.values()
+                 if isinstance(value, torch.Tensor)), "non-finite Adam state after optimizer step")
+            diagnostic_items = {
+                "entropy": loss_h,
+                "symmetry_loss": loss_sym,
+                "auxiliary_loss": auxiliary_result.loss,
+                "actor_std_mean": stds[mask].mean(),
+                "actor_std_min": stds[mask].min(),
+                "actor_std_max": stds[mask].max(),
+                "ratio_clip_fraction": ratio_clip_fraction,
+                "preclip_grad_norm": grad_norm,
+                "frame_encoder_preclip_grad_norm": frame_grad_norm,
+                "temporal_encoder_preclip_grad_norm": temporal_grad_norm,
+            }
+            target_var = returns[mask].var(unbiased=False)
+            ev_valid = target_var > 0
+            safe_target_var = torch.where(ev_valid, target_var, torch.ones_like(target_var))
+            explained_variance = 1.0 - (returns[mask] - values[mask]).var(unbiased=False) / safe_target_var
+            diagnostic_items["value_explained_variance_valid"] = ev_valid.to(total_loss.dtype)
+            diagnostic_items["value_explained_variance"] = explained_variance
+            for name, value in diagnostic_items.items():
+                record_diagnostic(name, value)
+            for name, value in auxiliary_result.metrics.items():
+                record_diagnostic(name, torch.as_tensor(value, device=self.device))
+            for name, value in (("loss", total_loss), ("policy", loss_pi), ("value", loss_v),
+                                ("envelope", loss_e), ("kl", kl)):
+                record_diagnostic(name, value)
+            summaries[f"epoch_{epoch}_minibatch_{mb}_lr"] = float(lr)
         diagnostic_names = tuple(diagnostic_values)
         if diagnostic_names:
             # One host transfer for all optimizer diagnostics, independent of parameter
@@ -418,4 +434,4 @@ def derive_shuffle_generator_seed(seed: int) -> int:
     return int.from_bytes(digest[:4], "big")
 
 
-__all__ = ["TemporalPPOConfig", "TemporalPPOTrainer", "derive_shuffle_generator_seed"]
+__all__ = ["TemporalPPOConfig", "TemporalPPOTrainer", "derive_shuffle_generator_seed", "ppo_semantics"]

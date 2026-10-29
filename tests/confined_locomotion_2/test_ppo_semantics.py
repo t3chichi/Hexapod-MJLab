@@ -1,4 +1,4 @@
-"""Numerical tests for migrated legacy optimizer behavior (CPU, no training claim)."""
+"""Numerical tests for the shared three-task optimizer semantics (CPU, no training claim)."""
 from dataclasses import replace
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -9,9 +9,9 @@ from torch import nn
 from hexapod_mjlab.rl.confined_locomotion.contracts import EnvelopeLabel, OnlineObservation
 from hexapod_mjlab.rl.confined_locomotion.symmetry import JointPermutation, mirror_mean_mse
 from hexapod_mjlab.rl.confined_locomotion_2.training_rollout import SequenceRolloutBuffer
-from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low.ppo import (
-    LegacyNormalProvider, LegacyPPOTrainer, legacy_kl,
-)
+from hexapod_mjlab.rl.confined_locomotion_2.distribution import DirectStdNormalProvider
+from hexapod_mjlab.rl.confined_locomotion_2.ppo import TemporalPPOTrainer
+from hexapod_mjlab.rl.confined_locomotion.losses import kl_divergence_old_new
 
 
 @contextmanager
@@ -37,9 +37,9 @@ class TinyNetwork(nn.Module):
 
 
 def _trainer(**kwargs):
-    return LegacyPPOTrainer(
+    return TemporalPPOTrainer(
         network=TinyNetwork(), device="cpu", seed=19,
-        distribution_provider=LegacyNormalProvider(device="cpu", generator_seed=3), **kwargs)
+        distribution_provider=DirectStdNormalProvider(device="cpu", generator_seed=3), **kwargs)
 
 
 def _buffer():
@@ -64,7 +64,7 @@ def _buffer():
 
 
 def test_normal_optimizes_std_directly_and_preserves_raw_distribution_and_rng():
-    provider = LegacyNormalProvider(generator_seed=7)
+    provider = DirectStdNormalProvider(generator_seed=7)
     assert tuple(dict(provider.named_parameters())) == ("std",)
     assert torch.equal(provider.std, torch.ones(18))
     mean = torch.zeros(2, 18)
@@ -86,40 +86,39 @@ def test_normal_optimizes_std_directly_and_preserves_raw_distribution_and_rng():
         provider(mean)
 
 
-def test_timeout_adds_current_value_even_if_termination_is_simultaneous():
+def test_timeout_bootstraps_pre_reset_next_value_and_termination_takes_precedence():
     for terminal in (False, True):
         trainer, buffer = _trainer(), _buffer()
         step = buffer.steps[-1]
         buffer.steps[-1] = replace(step, old_value=torch.tensor([2.]), reward=torch.tensor([3.]),
                                   next_value=torch.tensor([100.]), truncated=torch.tensor([True]),
                                   terminated=torch.tensor([terminal]))
-        advantages, returns = trainer.compute_gae(buffer)
-        torch.testing.assert_close(returns[-1], torch.tensor([3. + .99 * 2.]))
-        torch.testing.assert_close(advantages[-1], torch.tensor([3. + .99 * 2. - 2.]))
+        advantages, returns = buffer.compute_gae()
+        expected = 3. if terminal else 3. + .99 * 100.
+        torch.testing.assert_close(returns[-1], torch.tensor([expected]))
+        torch.testing.assert_close(advantages[-1], torch.tensor([expected - 2.]))
 
 
-def test_gae_reads_next_action_time_values_and_last_bootstrap():
+def test_gae_reads_each_transition_next_value():
     trainer, buffer = _trainer(), _buffer()
-    adv, ret = trainer.compute_gae(buffer)
-    # Explicit old storage recurrence, intentionally different from the supplied
-    # next_value=123 at interior transitions.
+    adv, ret = buffer.compute_gae()
+    # Every transition carries its own pre-reset next value, including interiors.
     carry = 0.
     expected = []
     for t in reversed(range(24)):
-        next_value = .5 * (t + 1) if t < 23 else 123.
+        next_value = 123.
         carry = float(t == 23) + .99 * next_value - .5 * t + .99 * .95 * carry
         expected.append(carry)
     torch.testing.assert_close(adv[:, 0], torch.tensor(list(reversed(expected))))
     torch.testing.assert_close(ret, adv + torch.arange(24)[:, None] * .5)
 
 
-def test_legacy_kl_includes_epsilon_and_adapts_lr_before_optimizer_step():
+def test_analytic_kl_zero_at_equality_and_lr_is_adapted_before_optimizer_step():
     zeros, ones = torch.zeros(2, 18), torch.ones(2, 18)
-    expected = torch.log(torch.tensor(1. + 1e-5)) * 18
-    torch.testing.assert_close(legacy_kl(zeros, ones, zeros, ones), expected.expand(2))
+    torch.testing.assert_close(kl_divergence_old_new(zeros, ones, zeros, ones), torch.zeros(2))
     trainer, buffer = _trainer(), _buffer()
     # Force old and current means to match at the first minibatch to expose
-    # the epsilon-induced positive KL and its immediate learning-rate increase.
+    # an exact zero KL, which leaves the first learning rate unchanged.
     trainer.network.gain.data.zero_()
     lr_at_step = []
     original_step = trainer.optimizer.step
@@ -129,7 +128,7 @@ def test_legacy_kl_includes_epsilon_and_adapts_lr_before_optimizer_step():
     trainer.optimizer.step = step
     rng = trainer.distribution_provider.generator_state()
     metrics = trainer.update(buffer)
-    assert lr_at_step[0] == .0015
+    assert lr_at_step[0] == .001
     assert metrics["epoch_0_minibatch_0_lr"] == lr_at_step[0]
     assert len(lr_at_step) == trainer.optimizer_step_count == 20
     assert buffer.consumed and trainer.update_count == 1
@@ -167,7 +166,7 @@ def test_mirror_loss_gradient_only_enters_mirrored_prediction():
 
 
 def test_mirrored_observations_do_not_enter_adaptive_kl():
-    from hexapod_mjlab.tasks.confined_locomotion_2.tripod2_low import ppo
+    from hexapod_mjlab.rl.confined_locomotion_2 import ppo
     names = tuple(f"{leg}_{kind}" for leg in ("RF", "LF", "RM", "LM", "RB", "LB")
                   for kind in ("HAA", "HFE", "KFE"))
     trainer = _trainer(symmetry_enabled=True,
@@ -180,8 +179,8 @@ def test_mirrored_observations_do_not_enter_adaptive_kl():
     ppo.prepare_sequence_replay = lambda steps, **kwargs: kwargs.get("mirrored", False)
     def replay(mirrored):
         # Deliberately asymmetric outputs: averaging original and mirrored KL
-        # would decrease the initial lr, whereas the old original-only rule
-        # increases it. Both paths retain a network gradient.
+        # would decrease the initial lr; the original-only rule leaves it
+        # unchanged. Both paths retain a network gradient.
         value = trainer.network.bias[:1].reshape(1, 1)
         mean = trainer.network.bias.reshape(1, 18) + (3. if mirrored else 0.)
         envelope = trainer.network.bias[:6].reshape(1, 6)
@@ -191,7 +190,7 @@ def test_mirrored_observations_do_not_enter_adaptive_kl():
         metrics = trainer.update(buffer)
     finally:
         ppo.prepare_sequence_replay = original_prepare
-    assert metrics["epoch_0_minibatch_0_lr"] == .0015
+    assert metrics["epoch_0_minibatch_0_lr"] == .001
     assert metrics["epoch_0_minibatch_0_kl"] < .005
     assert metrics["epoch_0_minibatch_0_symmetry_loss"] == 9.
     assert trainer.network.bias.grad.abs().sum() > 0
